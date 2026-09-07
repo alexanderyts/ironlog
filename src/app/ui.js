@@ -427,10 +427,10 @@ function openSettings(){
     <div style="height:18px"></div>
     <div class="eyebrow" style="margin-bottom:10px">Cloud backup</div>
     ${cloudSection()}
-    <div style="height:18px"></div>
+    ${CFG.DEMO?'':`<div style="height:18px"></div>
     <div class="eyebrow" style="margin-bottom:10px">Your data</div>
     <button class="btn ghost block" id="btnExport" style="margin-bottom:10px">⬇ Export a backup file</button>
-    <label class="btn ghost block" style="margin-bottom:10px">⬆ Import a backup<input type="file" id="fileImport" accept="application/json" hidden></label>
+    <label class="btn ghost block" style="margin-bottom:10px">⬆ Import a backup<input type="file" id="fileImport" accept="application/json" hidden></label>`}
     <div class="dim" style="font-size:12px;text-align:center;margin-top:18px">Ironlog v${APP_VERSION} · ${state.sessions.length} sessions · ${state.routines.length} routines</div>`);
   $('#segUnit').addEventListener('click',e=>{const b=e.target.closest('[data-u]');if(!b)return;const nu=b.dataset.u;if(nu===U())return;
     showConfirm('Switch to '+nu+'?','Every logged weight will be converted so your history and PRs stay accurate.','Convert to '+nu,()=>{convertUnits(U(),nu);openSettings();render();toast('Converted to '+nu);},'primary');});
@@ -438,9 +438,9 @@ function openSettings(){
   const bwStep=U()==='kg'?1:2.5;
   $('#sheetBody').querySelectorAll('[data-bw]').forEach(b=>b.addEventListener('click',()=>{state.settings.bodyweight=Math.max(0,bw()+(+b.dataset.bw)*bwStep);S.saveSettingsCloud();$('#bwVal').textContent=bw()?bw()+' '+U():'Set';}));
   $('#bwVal').addEventListener('click',()=>openNumberSheet('Your bodyweight ('+U()+')',bw()||'',v=>{state.settings.bodyweight=Math.max(0,v);S.saveSettingsCloud();openSettings();}));
-  $('#btnExport').addEventListener('click',exportData);
-  $('#fileImport').addEventListener('change',importData);
   const on=(sel,fn)=>{const el=$(sel);if(el)el.addEventListener('click',fn);};
+  on('#btnExport',exportData);
+  const fi=$('#fileImport');if(fi)fi.addEventListener('change',importData);
   on('#btnResetDemo',()=>showConfirm('Reset the demo?','Reloads the original sample data and discards your changes.','Reset',()=>S.resetDemo()));
   on('#btnDbxOn',()=>S.connectDropbox());
   on('#btnDbxOff',()=>showConfirm('Disconnect Dropbox?','Your data stays on this phone; it just stops syncing.','Disconnect',()=>{S.disconnectDropbox();openSettings();render();}));
