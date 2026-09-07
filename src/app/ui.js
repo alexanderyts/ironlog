@@ -41,6 +41,7 @@ function closeSheet(){$('#sheet').classList.remove('on');$('#scrim').classList.r
 function applyTheme(){const t=state.settings.theme;if(t==='system')document.documentElement.removeAttribute('data-theme');else document.documentElement.setAttribute('data-theme',t);}
 function updateCloud(){
   const el=$('#cloudStatus'),t=$('#cloudText');if(!el)return;
+  if(CFG.DEMO){el.className='cloud';t.textContent='Demo · sample data';return;}
   if(state.cloudError&&state.cloudName!=='none'){el.className='cloud err';t.textContent='Sync problem';return;}
   if(state.cloudName==='artifact'||state.cloudName==='dropbox'){
     const pending=state.dirty.size||state.syncing;
@@ -268,8 +269,8 @@ function viewLibrary(){
     <div class="view-title" style="margin:0 2px 14px;font-size:22px">Exercise Library</div>
     <div class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
       <input id="libSearch" placeholder="Describe or name an exercise…" value="${esc(libQuery)}"></div>
-    <div class="chips" style="margin:13px 0 4px;flex-wrap:nowrap;overflow-x:auto;padding-bottom:4px">
-      ${['All',...GROUPS].map(g=>`<button class="chip ${libGroup===g?'on':''}" data-lg="${g}" style="flex-shrink:0">${g}</button>`).join('')}</div>
+    <div class="chips hscroll" style="margin:13px 0 4px">
+      ${['All',...GROUPS].map(g=>`<button class="chip ${libGroup===g?'on':''}" data-lg="${g}">${g}</button>`).join('')}</div>
     <div class="dim" style="font-size:12.5px;margin:8px 2px 10px">${res.length} exercise${res.length!==1?'s':''}</div>
     <div class="card list">${res.length?res.map(e=>libRow(e)).join(''):'<div style="padding:24px;text-align:center" class="dim">No match. Try a simpler word like “press” or “curl”.</div>'}</div>
   </div>`;
@@ -310,9 +311,10 @@ function volumeChart(){
 function prList(){
   const arr=A.personalRecords(state.sessions,bw(),8);
   if(!arr.length)return`<div style="padding:22px;text-align:center" class="dim">Log a few sets and your PRs show up here.</div>`;
+  const setStr=p=>p.bodyweight?(p.w?'Bodyweight +'+p.w+U():'Bodyweight')+' × '+p.r:p.w+U()+' × '+p.r;
   return arr.map(p=>`<div class="ex-row"><div style="flex:1;min-width:0"><div class="ex-name">${esc(p.name)}</div>
-    <div class="ex-sub">Best set ${p.w}${U()} × ${p.r}${p.load!==p.w?' · '+p.load+' with bodyweight':''}</div></div>
-    <div style="text-align:right"><div class="mono" style="font-weight:700;font-size:16px">${p.est}<span class="dim" style="font-size:11px"> ${U()} e1RM</span></div></div></div>`).join('');
+    <div class="ex-sub">Best set ${setStr(p)}</div></div>
+    <div style="text-align:right">${p.compound?`<div class="mono" style="font-weight:700;font-size:16px">${p.est}<span class="dim" style="font-size:11px"> ${U()} e1RM</span></div>`:`<div class="mono dim" style="font-weight:600;font-size:13px">${p.load}${U()}</div>`}</div></div>`).join('');
 }
 function balBar(l,lv,r,rv){
   const total=lv+rv||1,lp=Math.round(lv/total*100);
@@ -360,7 +362,7 @@ function openAddExercise(){
     <div class="card list" id="addSuggest" style="margin-bottom:16px">${sugg.map(s=>`<div class="ex-row" data-quickadd="${s.id}"><div class="ex-ic">${exIcon(EX[s.id].group)}</div><div style="flex:1;min-width:0"><div class="ex-name">${esc(EX[s.id].name)}</div><div class="ex-sub" style="color:var(--accent)">${esc(s.why)}</div></div><div class="ex-add">＋</div></div>`).join('')}</div>`:'';
   openSheet('Add exercise',`${suggHTML}<div class="search" style="margin-bottom:12px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
     <input id="addSearch" placeholder="Search or describe an exercise…"></div>
-    <div class="chips" id="addGroups" style="margin-bottom:12px;flex-wrap:nowrap;overflow-x:auto;padding-bottom:4px">${['All',...GROUPS].map(g=>`<button class="chip ${g==='All'?'on':''}" data-ag="${g}" style="flex-shrink:0">${g}</button>`).join('')}</div>
+    <div class="chips hscroll" id="addGroups" style="margin-bottom:12px">${['All',...GROUPS].map(g=>`<button class="chip ${g==='All'?'on':''}" data-ag="${g}">${g}</button>`).join('')}</div>
     <div class="card list" id="addResults">${SR.searchEx('').map(e=>libRow(e,'data-quickadd="'+e.id+'"')).join('')}</div>`);
   const pick=ev=>{const b=ev.target.closest('[data-quickadd]');if(!b)return;addExerciseToCur(b.dataset.quickadd);closeSheet();};
   const sg=$('#addSuggest');if(sg)sg.addEventListener('click',pick);
@@ -378,6 +380,13 @@ function openNameSheet(title,defaultName,cb){
   const go=()=>{const n=inp.value.trim();if(!n){toast('Give it a name');return;}closeSheet();cb(n);};
   $('#nameOk').addEventListener('click',go);inp.addEventListener('keydown',e=>{if(e.key==='Enter')go();});
 }
+function openNumberSheet(title,value,cb){
+  openSheet(title,`<input class="field mono" id="numInput" inputmode="decimal" placeholder="0" value="${esc(value)}" style="font-size:22px;text-align:center">
+    <div style="height:12px"></div><button class="btn primary block" id="numOk">Save</button>`);
+  const inp=$('#numInput');setTimeout(()=>{inp.focus();inp.select();},300);
+  const go=()=>{const v=parseFloat(inp.value);if(isNaN(v)){toast('Enter a number');return;}closeSheet();cb(v);};
+  $('#numOk').addEventListener('click',go);inp.addEventListener('keydown',e=>{if(e.key==='Enter')go();});
+}
 function saveAsRoutine(s){
   const ids=s.exercises.map(e=>e.id);if(!ids.length)return;
   const guess=[...new Set(ids.map(id=>EX[id]&&EX[id].group).filter(Boolean))].slice(0,2).join(' & ')||'My routine';
@@ -386,6 +395,8 @@ function saveAsRoutine(s){
 function fmtSec(s){return Math.floor(s/60)+':'+String(s%60).padStart(2,'0');}
 function cloudSection(){
   const n=state.cloudName;const last=state.lastSync?new Date(state.lastSync).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}):'';
+  if(CFG.DEMO)return `<div class="card" style="padding:13px 15px;background:var(--surface-2);border:none"><div class="cloud" style="font-size:13px"><span class="dot"></span>This is a demo with sample data. Anything you change stays in this browser only.</div>
+      <button class="btn sm ghost" id="btnResetDemo" style="margin-top:10px">Reset sample data</button></div>`;
   if(n==='artifact')return `<div class="card" style="padding:13px 15px;background:var(--surface-2);border:none"><div class="cloud synced" style="font-size:13px"><span class="dot"></span>Backed up to your Claude account — safe if you lose this phone.</div></div>`;
   if(CFG.BUILD==='site'){
     if(!DBX.isConfigured())return `<div class="card" style="padding:13px 15px;background:var(--surface-2);border:none"><div class="cloud local" style="font-size:13px"><span class="dot"></span>Cloud backup is off. Add your Dropbox app key in <b>config.json</b> and rebuild (see README).</div></div>`;
@@ -401,7 +412,7 @@ function openSettings(){
     <div class="settingrow"><div><div style="font-weight:600">Units</div><div class="dim" style="font-size:13px">Weight display</div></div>
       <div class="seg" id="segUnit"><button data-u="lb" class="${U()==='lb'?'on':''}">lb</button><button data-u="kg" class="${U()==='kg'?'on':''}">kg</button></div></div>
     <div class="settingrow"><div><div style="font-weight:600">Bodyweight</div><div class="dim" style="font-size:13px">Counts pull-ups, dips &amp; push-ups toward volume and PRs</div></div>
-      <div class="stepper"><button data-bw="-1">−</button><span class="val mono" id="bwVal">${bw()?bw()+' '+U():'—'}</span><button data-bw="1">＋</button></div></div>
+      <div class="stepper"><button data-bw="-1">−</button><button class="val mono" id="bwVal" title="Tap to type">${bw()?bw()+' '+U():'Set'}</button><button data-bw="1">＋</button></div></div>
     <div class="settingrow"><div><div style="font-weight:600">Theme</div><div class="dim" style="font-size:13px">Appearance</div></div>
       <div class="seg" id="segTheme"><button data-t="system" class="${st.theme==='system'?'on':''}">Auto</button><button data-t="light" class="${st.theme==='light'?'on':''}">Light</button><button data-t="dark" class="${st.theme==='dark'?'on':''}">Dark</button></div></div>
     <div style="height:18px"></div>
@@ -424,10 +435,13 @@ function openSettings(){
   $('#segUnit').addEventListener('click',e=>{const b=e.target.closest('[data-u]');if(!b)return;const nu=b.dataset.u;if(nu===U())return;
     showConfirm('Switch to '+nu+'?','Every logged weight will be converted so your history and PRs stay accurate.','Convert to '+nu,()=>{convertUnits(U(),nu);openSettings();render();toast('Converted to '+nu);},'primary');});
   $('#segTheme').addEventListener('click',e=>{const b=e.target.closest('[data-t]');if(!b)return;state.settings.theme=b.dataset.t;S.saveSettingsCloud();applyTheme();openSettings();});
-  $('#sheetBody').querySelectorAll('[data-bw]').forEach(b=>b.addEventListener('click',()=>{state.settings.bodyweight=Math.max(0,bw()+(+b.dataset.bw));S.saveSettingsCloud();$('#bwVal').textContent=bw()?bw()+' '+U():'—';}));
+  const bwStep=U()==='kg'?1:2.5;
+  $('#sheetBody').querySelectorAll('[data-bw]').forEach(b=>b.addEventListener('click',()=>{state.settings.bodyweight=Math.max(0,bw()+(+b.dataset.bw)*bwStep);S.saveSettingsCloud();$('#bwVal').textContent=bw()?bw()+' '+U():'Set';}));
+  $('#bwVal').addEventListener('click',()=>openNumberSheet('Your bodyweight ('+U()+')',bw()||'',v=>{state.settings.bodyweight=Math.max(0,v);S.saveSettingsCloud();openSettings();}));
   $('#btnExport').addEventListener('click',exportData);
   $('#fileImport').addEventListener('change',importData);
   const on=(sel,fn)=>{const el=$(sel);if(el)el.addEventListener('click',fn);};
+  on('#btnResetDemo',()=>showConfirm('Reset the demo?','Reloads the original sample data and discards your changes.','Reset',()=>S.resetDemo()));
   on('#btnDbxOn',()=>S.connectDropbox());
   on('#btnDbxOff',()=>showConfirm('Disconnect Dropbox?','Your data stays on this phone; it just stops syncing.','Disconnect',()=>{S.disconnectDropbox();openSettings();render();}));
   on('#btnSyncNow',async()=>{if(state.cloud){toast('Syncing…');await state.cloud.syncNow();openSettings();}});
@@ -568,7 +582,10 @@ function bind(){
   // library
   const ls=$('#libSearch');if(ls)ls.addEventListener('input',()=>{libQuery=ls.value;const pos=ls.selectionStart;render();const n=$('#libSearch');if(n){n.focus();n.setSelectionRange(pos,pos);}});
   v.querySelectorAll('[data-lg]').forEach(b=>b.addEventListener('click',()=>{libGroup=b.dataset.lg;render();}));
-  v.querySelectorAll('[data-open]').forEach(b=>b.addEventListener('click',()=>openSheet(EX[b.dataset.open].name,exerciseDetail(b.dataset.open))));
+  // library rows: the "+" adds straight to today's workout; the rest of the row opens details
+  v.querySelectorAll('[data-open]').forEach(b=>b.addEventListener('click',e=>{
+    if(e.target.closest('.ex-add')){addExerciseToCur(b.dataset.open);return;}
+    openSheet(EX[b.dataset.open].name,exerciseDetail(b.dataset.open));}));
 }
 function bindLog(root){
   root.addEventListener('click',e=>{
@@ -636,6 +653,7 @@ function boot(){
   // re-render on cloud changes, but never yank focus from someone typing a weight
   S.onChange(()=>{updateCloud();const a=document.activeElement;if(a&&a.tagName==='INPUT')return;render();});
   applyTheme();setTab('today');S.initCloud();
+  if(state.justSeeded)setTimeout(()=>toast('Sample data loaded — explore every tab'),600);
 }
 IL.ui={toast,render,setTab,openSettings,boot};
 boot();

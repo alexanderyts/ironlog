@@ -2,6 +2,14 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.6.1 — 2026-09-07
+Shareable demo + fixes from reviewing the app with real-looking data.
+- **Demo build** (`dist/demo.html`): no cloud database (so it can be shared publicly), seeded on first open with ~5 weeks of a progressive push/pull/legs rotation, routines and a bodyweight. Each viewer keeps their own copy; Settings has "Reset sample data".
+- Coaching: "legs undertrained" now needs a real 3:1 skew (2:1 is normal on push/pull/legs); the weekly-volume tip counts secondary-muscle work at half credit (a press trains triceps too) and skips core/calves.
+- PRs: compound lifts first by e1RM; isolation shows best set only (an estimated 1RM for a calf raise is meaningless); bodyweight moves read "Bodyweight × 10".
+- Library: the "+" on a row adds straight to today's workout; chip rows no longer show a scrollbar on desktop.
+- Settings: bodyweight steps by 2.5 lb / 1 kg and the value is tappable to type; calendar month arrows are bigger; sheets are centered at a sane width on large screens.
+
 ## v0.6.0 — 2026-09-07
 Structural overhaul + feature sprint.
 **Structure**

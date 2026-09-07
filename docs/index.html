@@ -90,6 +90,9 @@ h1,h2,h3{margin:0; text-wrap:balance; font-family:"Archivo",system-ui,sans-serif
 .chip{display:inline-flex;align-items:center;gap:6px;height:38px;padding:0 15px;border-radius:20px;border:1.5px solid var(--line);background:var(--surface);font-size:14px;font-weight:600;color:var(--ink-2)}
 .chip.on{background:var(--accent);color:var(--accent-ink);border-color:transparent}
 .chips{display:flex;flex-wrap:wrap;gap:9px}
+.chips.hscroll{flex-wrap:nowrap;overflow-x:auto;padding-bottom:4px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.chips.hscroll::-webkit-scrollbar{display:none}
+.chips.hscroll .chip{flex-shrink:0}
 .pill{display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 9px;border-radius:12px;font-size:11.5px;font-weight:600;background:var(--surface-2);color:var(--ink-2)}
 .pill.good{background:var(--good-soft);color:var(--good)}
 .pill.accent{background:var(--accent-soft);color:var(--accent)}
@@ -160,6 +163,7 @@ h1,h2,h3{margin:0; text-wrap:balance; font-family:"Archivo",system-ui,sans-serif
 /* calendar */
 .cal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
 .cal-head h3{font-size:17px}
+.cal-head .icon-btn{font-size:26px;color:var(--ink);background:var(--surface-2)}
 .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
 .cal-dow{text-align:center;font-size:10.5px;font-weight:700;color:var(--ink-3);padding-bottom:4px}
 .cal-cell{aspect-ratio:1;border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:13.5px;font-weight:600;color:var(--ink-2);position:relative;background:transparent}
@@ -181,7 +185,7 @@ h1,h2,h3{margin:0; text-wrap:balance; font-family:"Archivo",system-ui,sans-serif
 /* sheet / modal */
 .scrim{position:fixed;inset:0;z-index:50;background:rgba(10,14,20,.5);opacity:0;pointer-events:none;transition:opacity .2s}
 .scrim.on{opacity:1;pointer-events:auto}
-.sheet{position:fixed;left:0;right:0;bottom:0;z-index:51;background:var(--surface);border-radius:22px 22px 0 0;transform:translateY(101%);transition:transform .28s cubic-bezier(.32,.72,0,1);max-height:90vh;display:flex;flex-direction:column;box-shadow:0 -10px 40px rgba(0,0,0,.2)}
+.sheet{position:fixed;left:0;right:0;bottom:0;max-width:560px;margin:0 auto;z-index:51;background:var(--surface);border-radius:22px 22px 0 0;transform:translateY(101%);transition:transform .28s cubic-bezier(.32,.72,0,1);max-height:90vh;display:flex;flex-direction:column;box-shadow:0 -10px 40px rgba(0,0,0,.2)}
 .sheet.on{transform:translateY(0)}
 .sheet-grab{width:38px;height:4px;border-radius:2px;background:var(--line);margin:10px auto 4px}
 .sheet-head{display:flex;align-items:center;justify-content:space-between;padding:8px 18px 12px;border-bottom:1px solid var(--line)}
@@ -302,8 +306,8 @@ h1,h2,h3{margin:0; text-wrap:balance; font-family:"Archivo",system-ui,sans-serif
 </div>
 
 <script>
-/* Ironlog v0.6.0 · site build · 2026-09-07T20:34:32.930Z */
-var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",VERSION:"0.6.0",DROPBOX_APP_KEY:""};
+/* Ironlog v0.6.1 · site build · 2026-09-07T20:55:28.467Z */
+var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.6.1",DROPBOX_APP_KEY:""};
 
 /* ===== src/data/exercises.js ===== */
 (function(){'use strict';
@@ -721,15 +725,17 @@ const completed=sessions=>sessions.filter(s=>s.completed!==false&&s.exercises.le
 function analyze(sessions,now){
   now=now||Date.now();const winDays=28,weeks=4;
   const done=completed(sessions).filter(s=>s.date>=now-winDays*DAY);
-  const groupSets={},pat={hpush:0,vpush:0,hpull:0,vpull:0,hinge:0,squat:0,lunge:0,iso:0},regSeen={},patSeen={};
+  const groupSets={},effSets={},pat={hpush:0,vpush:0,hpull:0,vpull:0,hinge:0,squat:0,lunge:0,iso:0},regSeen={},patSeen={};
   let totalSets=0;
   done.forEach(s=>s.exercises.forEach(e=>{const ex=EX[e.id];if(!ex)return;const n=e.sets.filter(isWorking).length;if(!n)return;
     totalSets+=n;groupSets[ex.group]=(groupSets[ex.group]||0)+n;pat[ex.pat]=(pat[ex.pat]||0)+n;
+    // effective volume: a press also trains triceps/shoulders — secondary muscles get half credit
+    ex.muscles.forEach((m,i)=>{effSets[m]=(effSets[m]||0)+(i===0||m===ex.group?n:n*0.5);});
     (regSeen[ex.group]=regSeen[ex.group]||new Set()).add(ex.reg);(patSeen[ex.group]=patSeen[ex.group]||new Set()).add(ex.pat);}));
   const push=pat.hpush+pat.vpush,pull=pat.hpull+pat.vpull;
   let upperSets=0,lowerSets=0;Object.entries(groupSets).forEach(([g,n])=>{LOWER_GROUPS.indexOf(g)>=0?lowerSets+=n:upperSets+=n;});
-  const perWeek={};Object.entries(groupSets).forEach(([g,n])=>perWeek[g]=n/weeks);
-  return {sessions:done.length,totalSets,groupSets,perWeek,push,pull,upperSets,lowerSets,regSeen,patSeen,weeks};
+  const perWeek={};Object.entries(groupSets).forEach(([g,n])=>perWeek[g]=(effSets[g]||n)/weeks);
+  return {sessions:done.length,totalSets,groupSets,effSets,perWeek,push,pull,upperSets,lowerSets,regSeen,patSeen,weeks};
 }
 // How many tracked lifts trend up in estimated 1RM over the last 4 weeks
 function progressionStat(sessions,now,bw){
@@ -750,12 +756,14 @@ function buildTips(a,sessions,now,bw){
     else if(a.pull>=a.push*1.5&&a.pull-a.push>=3)t.push({lv:'warn',x:`You pull far more than you press (<b>${a.pull}</b> vs <b>${a.push}</b>). Add a press to even it out.`});
     else t.push({lv:'good',x:`Push/pull balance looks healthy (<b>${a.push}</b> vs <b>${a.pull}</b> sets).`});
   }
-  if(a.upperSets+a.lowerSets>=8&&a.lowerSets*2<=a.upperSets)t.push({lv:'warn',x:`Legs are undertrained — <b>${a.lowerSets}</b> lower-body sets vs <b>${a.upperSets}</b> upper. Add a squat or hinge day.`});
+  // upper has twice the muscle groups, so ~2:1 is normal (push/pull/legs); flag only a real skew
+  if(a.upperSets+a.lowerSets>=8&&a.lowerSets*3<=a.upperSets)t.push({lv:'warn',x:`Legs are undertrained — <b>${a.lowerSets}</b> lower-body sets vs <b>${a.upperSets}</b> upper. Add a squat or hinge day.`});
   const gaps=[];
   trained.forEach(g=>{const seen=a.regSeen[g]||new Set();(REGIONS[g]||[]).forEach(r=>{if(!seen.has(r)){const ex=exampleFor(g,r);if(ex)gaps.push({lv:'info',prio:gapPrio(g,r),x:`You train ${g.toLowerCase()} but skip <b>${regLabel(g,r)}</b>. Try <b>${ex}</b>.`});}});});
   trained.forEach(g=>{const seen=a.patSeen[g]||new Set();(IDEAL_PATS[g]||[]).forEach(p=>{if(!seen.has(p)){const ex=EXERCISES.find(x=>x.group===g&&x.pat===p&&x.tier<=2)||EXERCISES.find(x=>x.group===g&&x.pat===p);if(ex)gaps.push({lv:'info',prio:patPrio(g,p),x:`Your ${g.toLowerCase()} work has no <b>${p==='iso'?'isolation':patLabel(p)}</b> movement — pair it with <b>${ex.name}</b> for complete development.`});}});});
   gaps.sort((x,y)=>y.prio-x.prio);t.push(...gaps.slice(0,2));
-  const under=trained.map(g=>({g,pw:a.perWeek[g]})).filter(x=>x.pw<8).sort((x,y)=>x.pw-y.pw)[0];
+  // volume landmark applies to major muscles you clearly train (≥4 sets in the window); core/calves have their own norms
+  const under=trained.filter(g=>a.groupSets[g]>=4&&g!=='Core'&&g!=='Calves').map(g=>({g,pw:a.perWeek[g]})).filter(x=>x.pw<8).sort((x,y)=>x.pw-y.pw)[0];
   if(under)t.push({lv:'warn',x:`Only ~<b>${under.pw.toFixed(1)}</b> sets/week of ${under.g.toLowerCase()} — aim for <b>10+</b> weekly sets to drive growth.`});
   const pr=progressionStat(sessions,now,bw);
   if(pr.n>=2)t.push({lv:pr.up>=pr.n/2?'good':'info',x:`Progression: <b>${pr.up}/${pr.n}</b> of your tracked lifts are trending up in estimated strength this month.${pr.up>=pr.n/2?' Keep it going.':' Lean on the +weight suggestions to push the rest.'}`});
@@ -768,9 +776,11 @@ function personalRecords(sessions,bw,limit){
   completed(sessions).forEach(s=>s.exercises.forEach(e=>e.sets.forEach(st=>{
     if(!isWorking(st))return;const w=setLoad(e.id,st.w,bw),r=+st.r||0;if(!w||!r)return;
     const est=e1rm(w,r);
-    if(!best[e.id]||est>best[e.id].est)best[e.id]={id:e.id,w:+st.w||0,load:w,r,est,name:EX[e.id]?EX[e.id].name:e.name,date:s.date};
+    const ex=EX[e.id];
+    if(!best[e.id]||est>best[e.id].est)best[e.id]={id:e.id,w:+st.w||0,load:w,r,est,name:ex?ex.name:e.name,date:s.date,compound:!!ex&&ex.type==='compound',bodyweight:!!ex&&ex.equip==='Bodyweight'};
   })));
-  return Object.values(best).sort((a,b)=>b.est-a.est).slice(0,limit||8);
+  // compound lifts (where an estimated 1RM means something) first, by e1RM; isolation after, by load
+  return Object.values(best).sort((a,b)=>(b.compound-a.compound)||(a.compound?b.est-a.est:b.load-a.load)).slice(0,limit||8);
 }
 // Volume per week for the last n weeks (oldest first), weeks starting Sunday
 function weeklyVolumes(sessions,now,bw,n){
@@ -947,6 +957,14 @@ const state={
 };
 state.settings.rest=Object.assign({auto:true,sound:true,notify:false,compound:120,isolation:75},state.settings.rest||{});
 state.deleted=pruneTombstones(state.deleted);
+// Demo build: load sample data the first time this browser opens it (viewers keep their own copy)
+if(CFG.DEMO&&IL.seed&&!state.sessions.length&&!lsGet('il_seeded',false)){
+  const d=IL.seed.make(Date.now());
+  state.sessions=d.sessions;state.routines=d.routines;Object.assign(state.settings,d.settings);
+  lsSet(LS.sessions,state.sessions);lsSet(LS.routines,state.routines);lsSet(LS.settings,state.settings);lsSet('il_seeded',1);
+  state.justSeeded=true;
+}
+function resetDemo(){try{Object.values(LS).forEach(k=>localStorage.removeItem(k));localStorage.removeItem('il_seeded');}catch(e){}location.reload();}
 
 const saveSessions=()=>lsSet(LS.sessions,state.sessions);
 const saveActive=()=>lsSet(LS.active,state.active);
@@ -1112,6 +1130,7 @@ function dropboxAdapter(){
 }
 async function initCloud(){
   try{
+    if(CFG.DEMO){state.cloudName='none';emit();return;}
     if(typeof window!=='undefined'&&window.claude&&claude.use){
       const a=artifactAdapter();if(await a.init()){state.cloud=a;state.cloudName='artifact';emit();return;}
     }
@@ -1127,7 +1146,7 @@ function disconnectDropbox(){IL.dropbox.disconnect();state.cloud=null;state.clou
 
 IL.store={state,LS,uid,saveSessions,saveActive,saveSettings,saveRoutines,saveDirty,onChange,emit,
   upsertSession,deleteSession,restoreSession,saveRoutine,deleteRoutine,saveSettingsCloud,persistActive,setActive,
-  absorbRemote,importBackup,initCloud,connectDropbox,disconnectDropbox,exportPayload:()=>exportPayload(state,CFG.VERSION)};
+  absorbRemote,importBackup,initCloud,connectDropbox,disconnectDropbox,resetDemo,exportPayload:()=>exportPayload(state,CFG.VERSION)};
 
 })();
 
@@ -1176,6 +1195,7 @@ function closeSheet(){$('#sheet').classList.remove('on');$('#scrim').classList.r
 function applyTheme(){const t=state.settings.theme;if(t==='system')document.documentElement.removeAttribute('data-theme');else document.documentElement.setAttribute('data-theme',t);}
 function updateCloud(){
   const el=$('#cloudStatus'),t=$('#cloudText');if(!el)return;
+  if(CFG.DEMO){el.className='cloud';t.textContent='Demo · sample data';return;}
   if(state.cloudError&&state.cloudName!=='none'){el.className='cloud err';t.textContent='Sync problem';return;}
   if(state.cloudName==='artifact'||state.cloudName==='dropbox'){
     const pending=state.dirty.size||state.syncing;
@@ -1403,8 +1423,8 @@ function viewLibrary(){
     <div class="view-title" style="margin:0 2px 14px;font-size:22px">Exercise Library</div>
     <div class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
       <input id="libSearch" placeholder="Describe or name an exercise…" value="${esc(libQuery)}"></div>
-    <div class="chips" style="margin:13px 0 4px;flex-wrap:nowrap;overflow-x:auto;padding-bottom:4px">
-      ${['All',...GROUPS].map(g=>`<button class="chip ${libGroup===g?'on':''}" data-lg="${g}" style="flex-shrink:0">${g}</button>`).join('')}</div>
+    <div class="chips hscroll" style="margin:13px 0 4px">
+      ${['All',...GROUPS].map(g=>`<button class="chip ${libGroup===g?'on':''}" data-lg="${g}">${g}</button>`).join('')}</div>
     <div class="dim" style="font-size:12.5px;margin:8px 2px 10px">${res.length} exercise${res.length!==1?'s':''}</div>
     <div class="card list">${res.length?res.map(e=>libRow(e)).join(''):'<div style="padding:24px;text-align:center" class="dim">No match. Try a simpler word like “press” or “curl”.</div>'}</div>
   </div>`;
@@ -1445,9 +1465,10 @@ function volumeChart(){
 function prList(){
   const arr=A.personalRecords(state.sessions,bw(),8);
   if(!arr.length)return`<div style="padding:22px;text-align:center" class="dim">Log a few sets and your PRs show up here.</div>`;
+  const setStr=p=>p.bodyweight?(p.w?'Bodyweight +'+p.w+U():'Bodyweight')+' × '+p.r:p.w+U()+' × '+p.r;
   return arr.map(p=>`<div class="ex-row"><div style="flex:1;min-width:0"><div class="ex-name">${esc(p.name)}</div>
-    <div class="ex-sub">Best set ${p.w}${U()} × ${p.r}${p.load!==p.w?' · '+p.load+' with bodyweight':''}</div></div>
-    <div style="text-align:right"><div class="mono" style="font-weight:700;font-size:16px">${p.est}<span class="dim" style="font-size:11px"> ${U()} e1RM</span></div></div></div>`).join('');
+    <div class="ex-sub">Best set ${setStr(p)}</div></div>
+    <div style="text-align:right">${p.compound?`<div class="mono" style="font-weight:700;font-size:16px">${p.est}<span class="dim" style="font-size:11px"> ${U()} e1RM</span></div>`:`<div class="mono dim" style="font-weight:600;font-size:13px">${p.load}${U()}</div>`}</div></div>`).join('');
 }
 function balBar(l,lv,r,rv){
   const total=lv+rv||1,lp=Math.round(lv/total*100);
@@ -1495,7 +1516,7 @@ function openAddExercise(){
     <div class="card list" id="addSuggest" style="margin-bottom:16px">${sugg.map(s=>`<div class="ex-row" data-quickadd="${s.id}"><div class="ex-ic">${exIcon(EX[s.id].group)}</div><div style="flex:1;min-width:0"><div class="ex-name">${esc(EX[s.id].name)}</div><div class="ex-sub" style="color:var(--accent)">${esc(s.why)}</div></div><div class="ex-add">＋</div></div>`).join('')}</div>`:'';
   openSheet('Add exercise',`${suggHTML}<div class="search" style="margin-bottom:12px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
     <input id="addSearch" placeholder="Search or describe an exercise…"></div>
-    <div class="chips" id="addGroups" style="margin-bottom:12px;flex-wrap:nowrap;overflow-x:auto;padding-bottom:4px">${['All',...GROUPS].map(g=>`<button class="chip ${g==='All'?'on':''}" data-ag="${g}" style="flex-shrink:0">${g}</button>`).join('')}</div>
+    <div class="chips hscroll" id="addGroups" style="margin-bottom:12px">${['All',...GROUPS].map(g=>`<button class="chip ${g==='All'?'on':''}" data-ag="${g}">${g}</button>`).join('')}</div>
     <div class="card list" id="addResults">${SR.searchEx('').map(e=>libRow(e,'data-quickadd="'+e.id+'"')).join('')}</div>`);
   const pick=ev=>{const b=ev.target.closest('[data-quickadd]');if(!b)return;addExerciseToCur(b.dataset.quickadd);closeSheet();};
   const sg=$('#addSuggest');if(sg)sg.addEventListener('click',pick);
@@ -1513,6 +1534,13 @@ function openNameSheet(title,defaultName,cb){
   const go=()=>{const n=inp.value.trim();if(!n){toast('Give it a name');return;}closeSheet();cb(n);};
   $('#nameOk').addEventListener('click',go);inp.addEventListener('keydown',e=>{if(e.key==='Enter')go();});
 }
+function openNumberSheet(title,value,cb){
+  openSheet(title,`<input class="field mono" id="numInput" inputmode="decimal" placeholder="0" value="${esc(value)}" style="font-size:22px;text-align:center">
+    <div style="height:12px"></div><button class="btn primary block" id="numOk">Save</button>`);
+  const inp=$('#numInput');setTimeout(()=>{inp.focus();inp.select();},300);
+  const go=()=>{const v=parseFloat(inp.value);if(isNaN(v)){toast('Enter a number');return;}closeSheet();cb(v);};
+  $('#numOk').addEventListener('click',go);inp.addEventListener('keydown',e=>{if(e.key==='Enter')go();});
+}
 function saveAsRoutine(s){
   const ids=s.exercises.map(e=>e.id);if(!ids.length)return;
   const guess=[...new Set(ids.map(id=>EX[id]&&EX[id].group).filter(Boolean))].slice(0,2).join(' & ')||'My routine';
@@ -1521,6 +1549,8 @@ function saveAsRoutine(s){
 function fmtSec(s){return Math.floor(s/60)+':'+String(s%60).padStart(2,'0');}
 function cloudSection(){
   const n=state.cloudName;const last=state.lastSync?new Date(state.lastSync).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}):'';
+  if(CFG.DEMO)return `<div class="card" style="padding:13px 15px;background:var(--surface-2);border:none"><div class="cloud" style="font-size:13px"><span class="dot"></span>This is a demo with sample data. Anything you change stays in this browser only.</div>
+      <button class="btn sm ghost" id="btnResetDemo" style="margin-top:10px">Reset sample data</button></div>`;
   if(n==='artifact')return `<div class="card" style="padding:13px 15px;background:var(--surface-2);border:none"><div class="cloud synced" style="font-size:13px"><span class="dot"></span>Backed up to your Claude account — safe if you lose this phone.</div></div>`;
   if(CFG.BUILD==='site'){
     if(!DBX.isConfigured())return `<div class="card" style="padding:13px 15px;background:var(--surface-2);border:none"><div class="cloud local" style="font-size:13px"><span class="dot"></span>Cloud backup is off. Add your Dropbox app key in <b>config.json</b> and rebuild (see README).</div></div>`;
@@ -1536,7 +1566,7 @@ function openSettings(){
     <div class="settingrow"><div><div style="font-weight:600">Units</div><div class="dim" style="font-size:13px">Weight display</div></div>
       <div class="seg" id="segUnit"><button data-u="lb" class="${U()==='lb'?'on':''}">lb</button><button data-u="kg" class="${U()==='kg'?'on':''}">kg</button></div></div>
     <div class="settingrow"><div><div style="font-weight:600">Bodyweight</div><div class="dim" style="font-size:13px">Counts pull-ups, dips &amp; push-ups toward volume and PRs</div></div>
-      <div class="stepper"><button data-bw="-1">−</button><span class="val mono" id="bwVal">${bw()?bw()+' '+U():'—'}</span><button data-bw="1">＋</button></div></div>
+      <div class="stepper"><button data-bw="-1">−</button><button class="val mono" id="bwVal" title="Tap to type">${bw()?bw()+' '+U():'Set'}</button><button data-bw="1">＋</button></div></div>
     <div class="settingrow"><div><div style="font-weight:600">Theme</div><div class="dim" style="font-size:13px">Appearance</div></div>
       <div class="seg" id="segTheme"><button data-t="system" class="${st.theme==='system'?'on':''}">Auto</button><button data-t="light" class="${st.theme==='light'?'on':''}">Light</button><button data-t="dark" class="${st.theme==='dark'?'on':''}">Dark</button></div></div>
     <div style="height:18px"></div>
@@ -1559,10 +1589,13 @@ function openSettings(){
   $('#segUnit').addEventListener('click',e=>{const b=e.target.closest('[data-u]');if(!b)return;const nu=b.dataset.u;if(nu===U())return;
     showConfirm('Switch to '+nu+'?','Every logged weight will be converted so your history and PRs stay accurate.','Convert to '+nu,()=>{convertUnits(U(),nu);openSettings();render();toast('Converted to '+nu);},'primary');});
   $('#segTheme').addEventListener('click',e=>{const b=e.target.closest('[data-t]');if(!b)return;state.settings.theme=b.dataset.t;S.saveSettingsCloud();applyTheme();openSettings();});
-  $('#sheetBody').querySelectorAll('[data-bw]').forEach(b=>b.addEventListener('click',()=>{state.settings.bodyweight=Math.max(0,bw()+(+b.dataset.bw));S.saveSettingsCloud();$('#bwVal').textContent=bw()?bw()+' '+U():'—';}));
+  const bwStep=U()==='kg'?1:2.5;
+  $('#sheetBody').querySelectorAll('[data-bw]').forEach(b=>b.addEventListener('click',()=>{state.settings.bodyweight=Math.max(0,bw()+(+b.dataset.bw)*bwStep);S.saveSettingsCloud();$('#bwVal').textContent=bw()?bw()+' '+U():'Set';}));
+  $('#bwVal').addEventListener('click',()=>openNumberSheet('Your bodyweight ('+U()+')',bw()||'',v=>{state.settings.bodyweight=Math.max(0,v);S.saveSettingsCloud();openSettings();}));
   $('#btnExport').addEventListener('click',exportData);
   $('#fileImport').addEventListener('change',importData);
   const on=(sel,fn)=>{const el=$(sel);if(el)el.addEventListener('click',fn);};
+  on('#btnResetDemo',()=>showConfirm('Reset the demo?','Reloads the original sample data and discards your changes.','Reset',()=>S.resetDemo()));
   on('#btnDbxOn',()=>S.connectDropbox());
   on('#btnDbxOff',()=>showConfirm('Disconnect Dropbox?','Your data stays on this phone; it just stops syncing.','Disconnect',()=>{S.disconnectDropbox();openSettings();render();}));
   on('#btnSyncNow',async()=>{if(state.cloud){toast('Syncing…');await state.cloud.syncNow();openSettings();}});
@@ -1703,7 +1736,10 @@ function bind(){
   // library
   const ls=$('#libSearch');if(ls)ls.addEventListener('input',()=>{libQuery=ls.value;const pos=ls.selectionStart;render();const n=$('#libSearch');if(n){n.focus();n.setSelectionRange(pos,pos);}});
   v.querySelectorAll('[data-lg]').forEach(b=>b.addEventListener('click',()=>{libGroup=b.dataset.lg;render();}));
-  v.querySelectorAll('[data-open]').forEach(b=>b.addEventListener('click',()=>openSheet(EX[b.dataset.open].name,exerciseDetail(b.dataset.open))));
+  // library rows: the "+" adds straight to today's workout; the rest of the row opens details
+  v.querySelectorAll('[data-open]').forEach(b=>b.addEventListener('click',e=>{
+    if(e.target.closest('.ex-add')){addExerciseToCur(b.dataset.open);return;}
+    openSheet(EX[b.dataset.open].name,exerciseDetail(b.dataset.open));}));
 }
 function bindLog(root){
   root.addEventListener('click',e=>{
@@ -1771,6 +1807,7 @@ function boot(){
   // re-render on cloud changes, but never yank focus from someone typing a weight
   S.onChange(()=>{updateCloud();const a=document.activeElement;if(a&&a.tagName==='INPUT')return;render();});
   applyTheme();setTab('today');S.initCloud();
+  if(state.justSeeded)setTimeout(()=>toast('Sample data loaded — explore every tab'),600);
 }
 IL.ui={toast,render,setTab,openSettings,boot};
 boot();

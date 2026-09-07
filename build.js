@@ -10,15 +10,18 @@ const write=(p,d)=>{const f=path.join(root,p);fs.mkdirSync(path.dirname(f),{recu
 const MODULES=['src/data/exercises.js','src/engine/progression.js','src/engine/search.js','src/engine/builder.js','src/engine/analysis.js','src/engine/sync.js','src/app/dropbox.js','src/app/store.js','src/app/ui.js'];
 const FONTS='<link rel="preconnect" href="https://fonts.googleapis.com">\n<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>\n<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">';
 
-function bundle(target){
-  const head=`/* Ironlog v${pkg.version} · ${target} build · ${new Date().toISOString()} */\nvar IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:${JSON.stringify(target)},VERSION:${JSON.stringify(pkg.version)},DROPBOX_APP_KEY:${JSON.stringify(cfg.DROPBOX_APP_KEY||'')}};\n`;
+function bundle(target,demo){
+  const head=`/* Ironlog v${pkg.version} · ${target}${demo?' demo':''} build · ${new Date().toISOString()} */\nvar IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:${JSON.stringify(target)},DEMO:${!!demo},VERSION:${JSON.stringify(pkg.version)},DROPBOX_APP_KEY:${JSON.stringify(cfg.DROPBOX_APP_KEY||'')}};\n`;
+  const mods=demo?[...MODULES.slice(0,7),'src/app/seed.js',...MODULES.slice(7)]:MODULES;   // seed data only ships in the demo
   // each module is wrapped so its top-level consts stay private; exports go on IL
-  return head+MODULES.map(m=>`\n/* ===== ${m} ===== */\n(function(){'use strict';\n${read(m)}\n})();\n`).join('');
+  return head+mods.map(m=>`\n/* ===== ${m} ===== */\n(function(){'use strict';\n${read(m)}\n})();\n`).join('');
 }
 const css=read('src/styles.css'),body=read('src/template.html');
 
 // --- Artifact (the claude.ai wrapper supplies doctype/head; we start at <title>) ---
 const artifact=`<title>Ironlog</title>\n${FONTS}\n<style>\n${css}\n</style>\n${body}\n<script>\n${bundle('artifact')}\n</script>\n`;
+// --- Shareable demo artifact: no cloud database (so it can be shared publicly), seeded with sample data ---
+const demo=`<title>Ironlog Demo</title>\n${FONTS}\n<style>\n${css}\n</style>\n${body}\n<script>\n${bundle('artifact',true)}\n</script>\n`;
 
 // --- Standalone site ---
 const SW_REG=`if('serviceWorker' in navigator&&location.hostname!=='localhost'){navigator.serviceWorker.register('./sw.js').then(reg=>{reg.addEventListener('updatefound',()=>{const nw=reg.installing;if(!nw)return;nw.addEventListener('statechange',()=>{if(nw.state==='installed'&&navigator.serviceWorker.controller&&IL.ui)IL.ui.toast('Update ready',{label:'Reload',fn:()=>location.reload()});});});}).catch(()=>{});}`;
@@ -84,6 +87,7 @@ function makeIcon(size){
 
 console.log('Building Ironlog v'+pkg.version+(cfg.DROPBOX_APP_KEY?' (Dropbox key set)':' (no Dropbox key — cloud backup off in site build)'));
 write('dist/app.html',artifact);
+write('dist/demo.html',demo);
 write('docs/index.html',site);
 write('docs/sw.js',sw);
 write('docs/manifest.webmanifest',manifest);

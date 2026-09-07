@@ -22,6 +22,14 @@ const state={
 };
 state.settings.rest=Object.assign({auto:true,sound:true,notify:false,compound:120,isolation:75},state.settings.rest||{});
 state.deleted=pruneTombstones(state.deleted);
+// Demo build: load sample data the first time this browser opens it (viewers keep their own copy)
+if(CFG.DEMO&&IL.seed&&!state.sessions.length&&!lsGet('il_seeded',false)){
+  const d=IL.seed.make(Date.now());
+  state.sessions=d.sessions;state.routines=d.routines;Object.assign(state.settings,d.settings);
+  lsSet(LS.sessions,state.sessions);lsSet(LS.routines,state.routines);lsSet(LS.settings,state.settings);lsSet('il_seeded',1);
+  state.justSeeded=true;
+}
+function resetDemo(){try{Object.values(LS).forEach(k=>localStorage.removeItem(k));localStorage.removeItem('il_seeded');}catch(e){}location.reload();}
 
 const saveSessions=()=>lsSet(LS.sessions,state.sessions);
 const saveActive=()=>lsSet(LS.active,state.active);
@@ -187,6 +195,7 @@ function dropboxAdapter(){
 }
 async function initCloud(){
   try{
+    if(CFG.DEMO){state.cloudName='none';emit();return;}
     if(typeof window!=='undefined'&&window.claude&&claude.use){
       const a=artifactAdapter();if(await a.init()){state.cloud=a;state.cloudName='artifact';emit();return;}
     }
@@ -202,4 +211,4 @@ function disconnectDropbox(){IL.dropbox.disconnect();state.cloud=null;state.clou
 
 IL.store={state,LS,uid,saveSessions,saveActive,saveSettings,saveRoutines,saveDirty,onChange,emit,
   upsertSession,deleteSession,restoreSession,saveRoutine,deleteRoutine,saveSettingsCloud,persistActive,setActive,
-  absorbRemote,importBackup,initCloud,connectDropbox,disconnectDropbox,exportPayload:()=>exportPayload(state,CFG.VERSION)};
+  absorbRemote,importBackup,initCloud,connectDropbox,disconnectDropbox,resetDemo,exportPayload:()=>exportPayload(state,CFG.VERSION)};

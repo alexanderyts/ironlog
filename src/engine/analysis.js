@@ -10,15 +10,17 @@ const completed=sessions=>sessions.filter(s=>s.completed!==false&&s.exercises.le
 function analyze(sessions,now){
   now=now||Date.now();const winDays=28,weeks=4;
   const done=completed(sessions).filter(s=>s.date>=now-winDays*DAY);
-  const groupSets={},pat={hpush:0,vpush:0,hpull:0,vpull:0,hinge:0,squat:0,lunge:0,iso:0},regSeen={},patSeen={};
+  const groupSets={},effSets={},pat={hpush:0,vpush:0,hpull:0,vpull:0,hinge:0,squat:0,lunge:0,iso:0},regSeen={},patSeen={};
   let totalSets=0;
   done.forEach(s=>s.exercises.forEach(e=>{const ex=EX[e.id];if(!ex)return;const n=e.sets.filter(isWorking).length;if(!n)return;
     totalSets+=n;groupSets[ex.group]=(groupSets[ex.group]||0)+n;pat[ex.pat]=(pat[ex.pat]||0)+n;
+    // effective volume: a press also trains triceps/shoulders — secondary muscles get half credit
+    ex.muscles.forEach((m,i)=>{effSets[m]=(effSets[m]||0)+(i===0||m===ex.group?n:n*0.5);});
     (regSeen[ex.group]=regSeen[ex.group]||new Set()).add(ex.reg);(patSeen[ex.group]=patSeen[ex.group]||new Set()).add(ex.pat);}));
   const push=pat.hpush+pat.vpush,pull=pat.hpull+pat.vpull;
   let upperSets=0,lowerSets=0;Object.entries(groupSets).forEach(([g,n])=>{LOWER_GROUPS.indexOf(g)>=0?lowerSets+=n:upperSets+=n;});
-  const perWeek={};Object.entries(groupSets).forEach(([g,n])=>perWeek[g]=n/weeks);
-  return {sessions:done.length,totalSets,groupSets,perWeek,push,pull,upperSets,lowerSets,regSeen,patSeen,weeks};
+  const perWeek={};Object.entries(groupSets).forEach(([g,n])=>perWeek[g]=(effSets[g]||n)/weeks);
+  return {sessions:done.length,totalSets,groupSets,effSets,perWeek,push,pull,upperSets,lowerSets,regSeen,patSeen,weeks};
 }
 // How many tracked lifts trend up in estimated 1RM over the last 4 weeks
 function progressionStat(sessions,now,bw){
@@ -39,12 +41,14 @@ function buildTips(a,sessions,now,bw){
     else if(a.pull>=a.push*1.5&&a.pull-a.push>=3)t.push({lv:'warn',x:`You pull far more than you press (<b>${a.pull}</b> vs <b>${a.push}</b>). Add a press to even it out.`});
     else t.push({lv:'good',x:`Push/pull balance looks healthy (<b>${a.push}</b> vs <b>${a.pull}</b> sets).`});
   }
-  if(a.upperSets+a.lowerSets>=8&&a.lowerSets*2<=a.upperSets)t.push({lv:'warn',x:`Legs are undertrained — <b>${a.lowerSets}</b> lower-body sets vs <b>${a.upperSets}</b> upper. Add a squat or hinge day.`});
+  // upper has twice the muscle groups, so ~2:1 is normal (push/pull/legs); flag only a real skew
+  if(a.upperSets+a.lowerSets>=8&&a.lowerSets*3<=a.upperSets)t.push({lv:'warn',x:`Legs are undertrained — <b>${a.lowerSets}</b> lower-body sets vs <b>${a.upperSets}</b> upper. Add a squat or hinge day.`});
   const gaps=[];
   trained.forEach(g=>{const seen=a.regSeen[g]||new Set();(REGIONS[g]||[]).forEach(r=>{if(!seen.has(r)){const ex=exampleFor(g,r);if(ex)gaps.push({lv:'info',prio:gapPrio(g,r),x:`You train ${g.toLowerCase()} but skip <b>${regLabel(g,r)}</b>. Try <b>${ex}</b>.`});}});});
   trained.forEach(g=>{const seen=a.patSeen[g]||new Set();(IDEAL_PATS[g]||[]).forEach(p=>{if(!seen.has(p)){const ex=EXERCISES.find(x=>x.group===g&&x.pat===p&&x.tier<=2)||EXERCISES.find(x=>x.group===g&&x.pat===p);if(ex)gaps.push({lv:'info',prio:patPrio(g,p),x:`Your ${g.toLowerCase()} work has no <b>${p==='iso'?'isolation':patLabel(p)}</b> movement — pair it with <b>${ex.name}</b> for complete development.`});}});});
   gaps.sort((x,y)=>y.prio-x.prio);t.push(...gaps.slice(0,2));
-  const under=trained.map(g=>({g,pw:a.perWeek[g]})).filter(x=>x.pw<8).sort((x,y)=>x.pw-y.pw)[0];
+  // volume landmark applies to major muscles you clearly train (≥4 sets in the window); core/calves have their own norms
+  const under=trained.filter(g=>a.groupSets[g]>=4&&g!=='Core'&&g!=='Calves').map(g=>({g,pw:a.perWeek[g]})).filter(x=>x.pw<8).sort((x,y)=>x.pw-y.pw)[0];
   if(under)t.push({lv:'warn',x:`Only ~<b>${under.pw.toFixed(1)}</b> sets/week of ${under.g.toLowerCase()} — aim for <b>10+</b> weekly sets to drive growth.`});
   const pr=progressionStat(sessions,now,bw);
   if(pr.n>=2)t.push({lv:pr.up>=pr.n/2?'good':'info',x:`Progression: <b>${pr.up}/${pr.n}</b> of your tracked lifts are trending up in estimated strength this month.${pr.up>=pr.n/2?' Keep it going.':' Lean on the +weight suggestions to push the rest.'}`});
@@ -57,9 +61,11 @@ function personalRecords(sessions,bw,limit){
   completed(sessions).forEach(s=>s.exercises.forEach(e=>e.sets.forEach(st=>{
     if(!isWorking(st))return;const w=setLoad(e.id,st.w,bw),r=+st.r||0;if(!w||!r)return;
     const est=e1rm(w,r);
-    if(!best[e.id]||est>best[e.id].est)best[e.id]={id:e.id,w:+st.w||0,load:w,r,est,name:EX[e.id]?EX[e.id].name:e.name,date:s.date};
+    const ex=EX[e.id];
+    if(!best[e.id]||est>best[e.id].est)best[e.id]={id:e.id,w:+st.w||0,load:w,r,est,name:ex?ex.name:e.name,date:s.date,compound:!!ex&&ex.type==='compound',bodyweight:!!ex&&ex.equip==='Bodyweight'};
   })));
-  return Object.values(best).sort((a,b)=>b.est-a.est).slice(0,limit||8);
+  // compound lifts (where an estimated 1RM means something) first, by e1RM; isolation after, by load
+  return Object.values(best).sort((a,b)=>(b.compound-a.compound)||(a.compound?b.est-a.est:b.load-a.load)).slice(0,limit||8);
 }
 // Volume per week for the last n weeks (oldest first), weeks starting Sunday
 function weeklyVolumes(sessions,now,bw,n){

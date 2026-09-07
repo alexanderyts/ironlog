@@ -1,6 +1,6 @@
 {
   "name": "ironlog",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Ironlog — a mobile-first workout tracker with an intelligent workout builder and coaching.",
   "private": true,
   "scripts": {
@@ -9,5 +9,7 @@
     "dev": "node server.js",
     "check": "npm test && npm run build"
   },
-  "engines": { "node": ">=20" }
+  "engines": {
+    "node": ">=20"
+  }
 }
