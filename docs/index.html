@@ -25,6 +25,7 @@
   --shadow:0 1px 2px rgba(20,27,36,.06),0 6px 20px rgba(20,27,36,.06);
   --radius:16px; --radius-sm:11px;
   --safe-b:env(safe-area-inset-bottom,0px);
+  --tab-h:64px;
 }
 @media (prefers-color-scheme:dark){
   :root:not([data-theme="light"]){
@@ -52,23 +53,37 @@ html{touch-action:manipulation}
    across engines. */
 html,body{overscroll-behavior-y:contain}
 [hidden]{display:none!important}
+/* ── iOS safe-area model (read before touching the header/tab bar) ──────────────────────────────
+   On iOS (standalone PWA and the Claude app's WKWebView alike), a freshly launched page is first
+   laid out with the safe areas applied as an INSET: the viewport is shrunk to the "safe" rectangle
+   and env(safe-area-inset-*) reads 0. At some later native layout pass (typically the first scroll)
+   it flips to full-bleed: the viewport grows to the whole screen and env() becomes real (34px at the
+   bottom of a Face ID iPhone, 44–59px at the top). WebKit bug 191872 — open since 2018, no CSS or JS
+   hook fires for the flip, and measuring in JS just reads the same wrong numbers.
+
+   What that means: the ~34px strip under the home indicator is OUTSIDE the viewport in the inset
+   state. Nothing can paint there — WebKit fills it with the canvas colour (html/body background).
+   So a bottom bar painted in a colour other than the canvas shows a visible seam above that strip
+   on launch. That seam is the "gap" seen on every previous attempt (sticky, fixed, flow, dvh);
+   the bar was always in the right place, it was just a different colour from the strip below it.
+
+   The fix is to make the layout INVARIANT across both states, so the flip is a no-op on screen:
+     • html and body both carry --bg, so the un-paintable strip is a known colour;
+     • the tab bar and header are painted in that same --bg tint, not --surface;
+     • the bar is fixed to the viewport bottom with padding-bottom:env(inset-bottom). Inset state:
+       bar bottom sits 34px above the screen edge with 0 padding. Full-bleed: bar bottom sits at
+       the screen edge with 34px padding. The icons land on the same screen pixel either way, and
+       the padding region is the same colour as the strip it replaces. Same logic for the header
+       via padding-top. Content clearance (body padding-bottom) tracks the bar with the same env().
+   No timers, no measurement, nothing to get wrong. Do not reintroduce dvh/JS-measured heights. */
+html{background:var(--bg)}
 body{
-  /* Flex column + #view flex-grow (below) is what settles the tab bar at the true bottom on short
-     screens — NOT positioning the bar itself. The bar (see .tabbar below) still has zero position
-     rule, so it's still immune to the WebKit viewport-metrics bug (bugs.webkit.org #191872,
-     confirmed on real devices in both the Claude iOS app and an installed standalone PWA — sticky
-     AND fixed both showed a first-load gap there, self-correcting only after the user happened to
-     scroll). min-height here doesn't need to be pixel-perfect for that bug to stay harmless: even
-     if it under-measures, flex-grow just fills whatever space IS correctly available, so the worst
-     case is a small sliver, never the large dead gap a bar floating above unclaimed space produces
-     when nothing pushes it down. */
-  display:flex; flex-direction:column;
-  min-height:100vh; min-height:100dvh;
   background:var(--bg); color:var(--ink);
+  padding-bottom:calc(var(--tab-h) + var(--safe-b));
   font-family:"IBM Plex Sans",system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
   -webkit-font-smoothing:antialiased; line-height:1.5; font-size:14px;
 }
-#view{flex:1 1 auto; width:100%}
+#view{width:100%}
 button{font-family:inherit; cursor:pointer; border:none; background:none; color:inherit}
 input,select{font-family:inherit}
 h1,h2,h3{margin:0; text-wrap:balance; font-family:"Archivo",system-ui,sans-serif}
@@ -84,21 +99,13 @@ h1,h2,h3{margin:0; text-wrap:balance; font-family:"Archivo",system-ui,sans-serif
 .icon-btn:active{background:var(--surface-2)}
 .view-title{font-family:"Archivo";font-weight:800;font-size:15px;letter-spacing:-.01em}
 
-/* Tab bar */
-/* Deliberately NOT position:fixed or sticky. Both were tried on real devices and both still showed
-   a gap below the bar on first load, in both this app's real delivery contexts (Claude iOS app
-   WKWebView and an installed standalone PWA) — confirmed to be the exact same root cause each time
-   (WebKit bug 191872: safe-area/viewport metrics wrong until an undeterminable point after load,
-   self-correcting only once the user happens to scroll). Every viewport-relative positioning scheme
-   shares that same broken reference point, so none of them can be made reliable here. Plain normal
-   document flow has no such dependency — it's just the last item in body's flex column, which
-   #view's flex-grow (above) naturally pushes down to the bottom of whatever space is actually
-   available on short screens, without the bar itself ever needing to know where "the viewport" is.
-   Trade-off: on tabs taller than one screen (Library, Progress) this scrolls out of view instead of
-   staying pinned — a deliberate, confirmed trade for a bar that is simply never wrong. */
-.tabbar{background:color-mix(in srgb,var(--surface) 92%,transparent);backdrop-filter:blur(14px);border-top:1px solid var(--line);padding-bottom:var(--safe-b)}
+/* Tab bar — see the safe-area model comment above body. Fixed to the viewport bottom, painted in
+   the canvas colour (--bg, opaque) so the padding region and the un-paintable strip below it in the
+   inset state are indistinguishable. Must stay opaque --bg: a translucent or --surface bar brings
+   the launch seam straight back. */
+.tabbar{position:fixed;left:0;right:0;bottom:0;z-index:30;background:var(--bg);border-top:1px solid var(--line);padding-bottom:var(--safe-b)}
 .tabbar .row{max-width:520px;margin:0 auto;display:grid;grid-template-columns:repeat(4,1fr)}
-.tab{height:64px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:var(--ink-3);font-size:11px;font-weight:600;letter-spacing:.01em}
+.tab{height:var(--tab-h);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:var(--ink-3);font-size:11px;font-weight:600;letter-spacing:.01em}
 .tab svg{width:23px;height:23px}
 .tab.active{color:var(--accent)}
 
@@ -335,8 +342,8 @@ h1,h2,h3{margin:0; text-wrap:balance; font-family:"Archivo",system-ui,sans-serif
 </div>
 
 <script>
-/* Ironlog v0.8.5 · site build · 2026-09-09T12:52:06.803Z */
-var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.8.5",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
+/* Ironlog v0.8.6 · site build · 2026-09-09T13:10:36.130Z */
+var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.8.6",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
 
 /* ===== src/data/exercises.js ===== */
 (function(){'use strict';
@@ -1643,6 +1650,22 @@ function cloudSection(){
   }
   return `<div class="card" style="padding:13px 15px;background:var(--surface-2);border:none"><div class="cloud local" style="font-size:13px"><span class="dot"></span>Saved on this phone. Open the app signed in on your account to enable cloud backup.</div></div>`;
 }
+/* Layout diagnostics shown under the version in Settings. Reads the real safe-area insets by
+   measuring a probe element (the only reliable way — computed --safe-b just echoes "env(...)").
+   If a viewport problem is ever reported again, these numbers say which state iOS is in:
+   inset state = insets 0 and inner < screen height; full-bleed = insets real and inner = screen. */
+function viewportDiag(){
+  try{
+    const probe=document.createElement('div');
+    probe.style.cssText='position:fixed;left:-9999px;top:0;visibility:hidden;pointer-events:none;width:1px;height:env(safe-area-inset-bottom,0px);padding-top:env(safe-area-inset-top,0px)';
+    document.body.appendChild(probe);
+    const cs=getComputedStyle(probe);
+    const b=Math.round(parseFloat(cs.height)||0), t=Math.round(parseFloat(cs.paddingTop)||0);
+    probe.remove();
+    const vv=window.visualViewport;
+    return `screen ${screen.width}×${screen.height} · inner ${innerWidth}×${innerHeight}`+(vv?` · visual ${Math.round(vv.height)}`:'')+` · inset top ${t} bottom ${b}`;
+  }catch(e){return '';}
+}
 function openSettings(){
   const R=state.settings.rest,st=state.settings;
   openSheet('Settings',`
@@ -1668,7 +1691,8 @@ function openSettings(){
     <div class="eyebrow" style="margin-bottom:10px">Your data</div>
     <button class="btn ghost block" id="btnExport" style="margin-bottom:10px">⬇ Export a backup file</button>
     <label class="btn ghost block" style="margin-bottom:10px">⬆ Import a backup<input type="file" id="fileImport" accept="application/json" hidden></label>`}
-    <div class="dim" style="font-size:12px;text-align:center;margin-top:18px">Ironlog v${APP_VERSION} · ${state.sessions.length} sessions · ${state.routines.length} routines</div>`);
+    <div class="dim" style="font-size:12px;text-align:center;margin-top:18px">Ironlog v${APP_VERSION} · ${state.sessions.length} sessions · ${state.routines.length} routines</div>
+    <div class="dim mono" style="font-size:10.5px;text-align:center;margin-top:4px;opacity:.7">${viewportDiag()}</div>`);
   $('#segUnit').addEventListener('click',e=>{const b=e.target.closest('[data-u]');if(!b)return;const nu=b.dataset.u;if(nu===U())return;
     showConfirm('Switch to '+nu+'?','Every logged weight will be converted so your history and PRs stay accurate.','Convert to '+nu,()=>{convertUnits(U(),nu);openSettings();render();toast('Converted to '+nu);},'primary');});
   $('#segTheme').addEventListener('click',e=>{const b=e.target.closest('[data-t]');if(!b)return;state.settings.theme=b.dataset.t;S.saveSettingsCloud();applyTheme();openSettings();});

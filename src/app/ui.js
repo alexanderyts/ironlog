@@ -428,6 +428,22 @@ function cloudSection(){
   }
   return `<div class="card" style="padding:13px 15px;background:var(--surface-2);border:none"><div class="cloud local" style="font-size:13px"><span class="dot"></span>Saved on this phone. Open the app signed in on your account to enable cloud backup.</div></div>`;
 }
+/* Layout diagnostics shown under the version in Settings. Reads the real safe-area insets by
+   measuring a probe element (the only reliable way — computed --safe-b just echoes "env(...)").
+   If a viewport problem is ever reported again, these numbers say which state iOS is in:
+   inset state = insets 0 and inner < screen height; full-bleed = insets real and inner = screen. */
+function viewportDiag(){
+  try{
+    const probe=document.createElement('div');
+    probe.style.cssText='position:fixed;left:-9999px;top:0;visibility:hidden;pointer-events:none;width:1px;height:env(safe-area-inset-bottom,0px);padding-top:env(safe-area-inset-top,0px)';
+    document.body.appendChild(probe);
+    const cs=getComputedStyle(probe);
+    const b=Math.round(parseFloat(cs.height)||0), t=Math.round(parseFloat(cs.paddingTop)||0);
+    probe.remove();
+    const vv=window.visualViewport;
+    return `screen ${screen.width}×${screen.height} · inner ${innerWidth}×${innerHeight}`+(vv?` · visual ${Math.round(vv.height)}`:'')+` · inset top ${t} bottom ${b}`;
+  }catch(e){return '';}
+}
 function openSettings(){
   const R=state.settings.rest,st=state.settings;
   openSheet('Settings',`
@@ -453,7 +469,8 @@ function openSettings(){
     <div class="eyebrow" style="margin-bottom:10px">Your data</div>
     <button class="btn ghost block" id="btnExport" style="margin-bottom:10px">⬇ Export a backup file</button>
     <label class="btn ghost block" style="margin-bottom:10px">⬆ Import a backup<input type="file" id="fileImport" accept="application/json" hidden></label>`}
-    <div class="dim" style="font-size:12px;text-align:center;margin-top:18px">Ironlog v${APP_VERSION} · ${state.sessions.length} sessions · ${state.routines.length} routines</div>`);
+    <div class="dim" style="font-size:12px;text-align:center;margin-top:18px">Ironlog v${APP_VERSION} · ${state.sessions.length} sessions · ${state.routines.length} routines</div>
+    <div class="dim mono" style="font-size:10.5px;text-align:center;margin-top:4px;opacity:.7">${viewportDiag()}</div>`);
   $('#segUnit').addEventListener('click',e=>{const b=e.target.closest('[data-u]');if(!b)return;const nu=b.dataset.u;if(nu===U())return;
     showConfirm('Switch to '+nu+'?','Every logged weight will be converted so your history and PRs stay accurate.','Convert to '+nu,()=>{convertUnits(U(),nu);openSettings();render();toast('Converted to '+nu);},'primary');});
   $('#segTheme').addEventListener('click',e=>{const b=e.target.closest('[data-t]');if(!b)return;state.settings.theme=b.dataset.t;S.saveSettingsCloud();applyTheme();openSettings();});
