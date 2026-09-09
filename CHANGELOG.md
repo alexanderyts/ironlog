@@ -2,6 +2,13 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.10.0 — 2026-09-09 · Phase 4: mesocycle-aware workout building
+"Build me a workout" now builds *toward* progress instead of reshuffling (roadmap #3).
+- **Continue, don't rebuild.** Picking muscles you trained within the last 10 days continues that session's exercise list (with Phase 3's progressed weights) — the button itself says *Continue your plan · Session 3 · 5 exercises from Tuesday*, with *Build a fresh plan instead* as the deliberate escape hatch. Matching tolerates one incidental add-on exercise from another group.
+- **Deliberate rotation, one movement at a time, never the anchor.** A non-anchor exercise rotates when it's *stalled* (3+ performances, best e1RM not improved across the last two sessions — exactly when a variation helps) or *stale* (5+ consecutive sessions and not currently earning load bumps; 8+ regardless). Stalled beats stale; at most one swap per session; replacement is same group, same region/pattern preferred. The toast names the swap and why.
+- **No new persisted state — by design.** The session history *is* the plan: the plan for a muscle combination is the most recent matching session, and streaks/stalls are derived by walking history. It syncs via the existing session merge for free, adds no schema, and can never drift from what was actually done.
+- Engine: `planWorkout`, `findPlan`, `exerciseStreak`, `isStalled`, `isProgressing`, `replacementFor` in `src/engine/builder.js` (design comment there). 6 new tests (47 total).
+
 ## v0.9.0 — 2026-09-09 · Phase 3: pattern-aware progressive overload
 The overload engine now understands how you actually structure sets (roadmap #2).
 - **Pattern detection** (`setPattern`): flat straight sets, ascending ramps, descending top-set-plus-back-offs, or mixed (pyramids). One rule covers all of them: the heaviest working set(s) are the *anchor*, and only the anchor decides whether to add load. Where the max sits determines the pattern; the pattern only changes how the other sets are carried.

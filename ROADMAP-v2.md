@@ -77,7 +77,7 @@ Its own phase because it's cross-cutting CSS/layout touching every screen — wo
 **Phase 3 — pattern-aware progressive overload (#2)** — ✅ shipped v0.9.0 (2026-09-09). Engine: `setPattern` / `nextSets` / `fmtPerf` in `src/engine/progression.js`; the per-exercise "ready / reps short / under range" signal Phase 4 needs is `nextSets(...).short` and `.under`.
 The foundation the next phase builds on: once the app can tell ascending/descending/flat apart and knows whether a specific exercise is progressing, that per-exercise signal is exactly what #3's rotation trigger (stalled lift → prioritize for variation) needs.
 
-**Phase 4 — mesocycle-aware workout building (#3)**
+**Phase 4 — mesocycle-aware workout building (#3)** — ✅ shipped v0.10.0 (2026-09-09). Derived from history, no new persisted plan state; `planWorkout` in `src/engine/builder.js`.
 The largest, most architecturally significant change (new persisted plan/cycle state, rotation heuristics) — sequenced last because it consumes #3's per-exercise progress data and reuses #4's now-correctly-scoped suggestion logic for its rotation choices.
 
 ---

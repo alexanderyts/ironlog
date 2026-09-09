@@ -142,5 +142,98 @@ function complementSuggestions(chosenIds,limit){
   return res;
 }
 
-IL.builder={prescribedSets,seedExercise,lastSessionIds,perfPriority,orderByFatigue,isHeavyAxial,capHeavyAxial,pickForGroup,buildRecommendation,complementSuggestions};
+/* ── Mesocycle-aware planning ────────────────────────────────────────────────────────────────────
+   Progressive overload needs the SAME movements repeated long enough to add load to them, and the
+   practice effect (technique improving with exposure) is itself a big part of early progress. So a
+   "Build me a workout" for muscles you trained recently must not reshuffle the accessories — it
+   should continue the plan, and rotate movements only deliberately: one at a time, never the
+   anchor, and only when a movement is stale or stalled (a stall is exactly when a variation helps).
+
+   Deliberately NO new persisted "plan" state: the session history already is the plan record.
+   The plan for a muscle combination = the most recent completed session for that combination
+   (within CONTINUE_DAYS); repeat streaks and stalls are derived by walking history. That syncs via
+   the existing session merge for free and can never drift out of step with what was actually done.
+
+   Rotation rules (RP/Helms-style mesocycle practice, simplified):
+     • anchor (the group's tier-1 key-pattern lift) is never rotated by the planner
+     • STALLED: ≥3 performances and the best e1RM has not improved across the last two sessions
+     • STALE:   repeated ≥ROTATE_AFTER consecutive sessions AND not currently progressing (its last
+                session didn't earn a load bump), or ≥ROTATE_HARD sessions regardless
+     • at most ONE rotation per continue; stalled beats stale, longer streak breaks ties
+     • replacement: same group, same region and pattern preferred, not already in the plan */
+const CONTINUE_DAYS=10,ROTATE_AFTER=5,ROTATE_HARD=8;
+const {e1rm,nextSets:prescribe}=IL.prog;
+
+function sessionGroups(s){const g={};s.exercises.forEach(e=>{const x=EX[e.id];if(x)g[x.group]=(g[x.group]||0)+1;});return g;}
+// The most recent completed session (within the window) that trained exactly these groups —
+// tolerating one incidental add-on exercise from another group.
+function findPlan(groups,sessions,now){
+  now=now||Date.now();const want=new Set(groups);
+  for(const s of sessions||[]){
+    if(s.completed===false||!s.exercises.length)continue;
+    if(now-s.date>CONTINUE_DAYS*86400000)break;
+    const sg=sessionGroups(s);
+    if(![...want].every(g=>sg[g]))continue;
+    if(Object.keys(sg).some(g=>!want.has(g)&&sg[g]>1))continue;
+    return s;
+  }
+  return null;
+}
+// Consecutive most-recent sessions of this exercise's group that included it
+function exerciseStreak(sessions,exId){
+  const ex=EX[exId];if(!ex)return 0;let n=0;
+  for(const s of sessions||[]){
+    if(s.completed===false)continue;
+    if(!s.exercises.some(e=>EX[e.id]&&EX[e.id].group===ex.group))continue;
+    if(s.exercises.some(e=>e.id===exId))n++;else break;
+  }
+  return n;
+}
+// Best e1RM (or reps for weightless work) of the last three performances, newest first
+function recentScores(sessions,exId,n){
+  const out=[];let before;
+  for(let i=0;i<(n||3);i++){
+    const lp=lastPerf(sessions,exId,{beforeTs:before});if(!lp)break;
+    out.push(Math.max(...lp.sets.map(s=>s.w>0?e1rm(s.w,s.r):s.r)));before=lp.date;
+  }
+  return out;
+}
+function isStalled(sessions,exId){const sc=recentScores(sessions,exId,3);return sc.length>=3&&sc[0]<=sc[1]&&sc[1]<=sc[2];}
+function isProgressing(sessions,exId){const lp=lastPerf(sessions,exId);return !!lp&&prescribe(lp.sets,EX[exId],'lb').bumped;}
+function planAnchor(ids,g){
+  const c=ids.map(id=>EX[id]).filter(e=>e&&e.group===g&&e.tier===1&&(IDEAL_PATS[g]||[]).indexOf(e.pat)>=0);
+  return c.sort((a,b)=>perfPriority(b)-perfPriority(a))[0]||null;
+}
+function replacementFor(exId,planIds,seed){
+  const e=EX[exId];
+  const cands=EXERCISES.filter(x=>x.group===e.group&&x.id!==exId&&planIds.indexOf(x.id)<0);
+  return cands.map(x=>{let sc=(x.reg===e.reg?4:0)+(x.pat===e.pat?3:0)+(x.type===e.type?1:0)+(x.tier===1?.5:x.tier===2?.3:0)+((hashId(x.id)+(seed||0))%5)/100;return{x,sc};})
+    .sort((a,b)=>b.sc-a.sc)[0]?.x||null;
+}
+// What to train for these groups today. Returns {ids, mode:'continue'|'fresh', plan, rotation,
+// streak}. opts.fresh forces a fresh build (the "Start fresh" escape hatch).
+function planWorkout(groups,sessions,seed,opts){
+  opts=opts||{};sessions=sessions||[];
+  groups=groups&&groups.length?groups.slice():['Chest','Back'];
+  seed=seed==null?Math.floor(Math.random()*997):seed;
+  const plan=opts.fresh?null:findPlan(groups,sessions,opts.now);
+  if(!plan)return{ids:buildRecommendation(groups,sessions,seed),mode:'fresh',plan:null,rotation:null,streak:0};
+  let ids=plan.exercises.map(e=>e.id).filter(id=>EX[id]);
+  const anchors=new Set(groups.map(g=>planAnchor(ids,g)).filter(Boolean).map(e=>e.id));
+  const cands=ids.filter(id=>!anchors.has(id)).map(id=>{
+    const streak=exerciseStreak(sessions,id),stalled=isStalled(sessions,id),progressing=isProgressing(sessions,id);
+    const stale=streak>=ROTATE_HARD||(streak>=ROTATE_AFTER&&!progressing);
+    return{id,streak,pri:stalled?2:stale?1:0};
+  }).filter(c=>c.pri>0).sort((a,b)=>b.pri-a.pri||b.streak-a.streak);
+  let rotation=null;
+  if(cands.length){
+    const c=cands[0],to=replacementFor(c.id,ids,seed);
+    if(to){ids=ids.map(id=>id===c.id?to.id:id);rotation={from:c.id,to:to.id,why:c.pri===2?'stalled':'time for a change',streak:c.streak};}
+  }
+  const streak=Math.min(...ids.filter(id=>!rotation||id!==rotation.to).map(id=>exerciseStreak(sessions,id)));
+  return{ids:orderByFatigue(capHeavyAxial(ids),groups[0]),mode:'continue',plan,rotation,streak:isFinite(streak)?streak:0};
+}
+
+IL.builder={prescribedSets,seedExercise,lastSessionIds,perfPriority,orderByFatigue,isHeavyAxial,capHeavyAxial,pickForGroup,buildRecommendation,complementSuggestions,
+  CONTINUE_DAYS,ROTATE_AFTER,ROTATE_HARD,findPlan,exerciseStreak,isStalled,isProgressing,planAnchor,replacementFor,planWorkout};
 if(typeof module!=='undefined')module.exports=IL.builder;

@@ -127,14 +127,25 @@ function startWorkoutView(){
     <div class="eyebrow" style="margin:22px 2px 10px">Target muscle groups</div>
     <div class="chips" id="groupPick">${GROUPS.map(g=>`<button class="chip ${pickedGroups.has(g)?'on':''}" data-g="${g}">${g}</button>`).join('')}</div>
     <div class="spacer"></div><div class="spacer"></div>
-    <button class="btn primary block" id="btnRecommend" style="height:56px;font-size:16px">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2 2M16.4 16.4l2 2M18.4 5.6l-2 2M7.6 16.4l-2 2"/><circle cx="12" cy="12" r="3.2"/></svg>
-      Build me a workout</button>
+    <div id="buildBtns">${buildButtons()}</div>
     <div style="height:10px"></div>
     <button class="btn ghost block" id="btnBlank">Start from scratch</button>
     ${routineList()}
     ${recentTemplates()}
   </div>`;
+}
+// The build button knows whether these muscles have a plan in progress (see planWorkout in
+// builder.js) and says so, so "continue" is the obvious default and "fresh" a deliberate choice.
+const ICON_BUILD='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2 2M16.4 16.4l2 2M18.4 5.6l-2 2M7.6 16.4l-2 2"/><circle cx="12" cy="12" r="3.2"/></svg>';
+function buildButtons(){
+  const plan=pickedGroups.size?B.findPlan([...pickedGroups],state.sessions):null;
+  if(!plan)return `<button class="btn primary block" id="btnRecommend" style="height:56px;font-size:16px">${ICON_BUILD} Build me a workout</button>`;
+  const wk=Math.min(...plan.exercises.map(e=>B.exerciseStreak(state.sessions,e.id)))+1;
+  return `<button class="btn primary block" id="btnRecommend" style="height:auto;padding:12px 16px;font-size:16px;flex-direction:column;gap:2px">
+      <span style="display:flex;align-items:center;gap:8px">${ICON_BUILD} Continue your plan</span>
+      <span style="font-size:12.5px;font-weight:500;opacity:.85">Session ${wk} · ${plan.exercises.length} exercises from ${relDay(plan.date).toLowerCase()}</span></button>
+    <div style="height:8px"></div>
+    <button class="btn ghost block" id="btnFresh">Build a fresh plan instead</button>`;
 }
 function routineList(){
   if(!state.routines.length)return'';
@@ -154,6 +165,12 @@ function recentTemplates(){
 const SCHEMA=1;
 function newSession(exIds){return{id:S.uid(),schema:SCHEMA,date:Date.now(),updatedAt:Date.now(),completed:false,exercises:(exIds||[]).map(id=>B.seedExercise(id,state.sessions,null,U()))};}
 function startSession(exIds,msg){S.setActive(newSession(exIds));todayScreen='active';render();if(msg)toast(msg);}
+function buildAndStart(fresh){
+  const p=B.planWorkout([...pickedGroups],state.sessions,null,{fresh});pickedGroups.clear();
+  let msg='Workout built — adjust anything';
+  if(p.mode==='continue')msg=p.rotation?`Plan continued · swapped ${EX[p.rotation.from].name} → ${EX[p.rotation.to].name} (${p.rotation.why})`:'Plan continued — weights progressed from last time';
+  startSession(p.ids,msg);
+}
 
 /* ---------------- session editor (live workout or editing a past one) ---------------- */
 function editorView(s,mode){
@@ -645,8 +662,13 @@ function bind(){
   bindClick('#btnResume',()=>{todayScreen='active';render();});
   bindClick('#btnGoLibrary',()=>setTab('library'));
   bindClick('#btnBackHome',leaveEditor);
-  const gp=$('#groupPick');if(gp)gp.addEventListener('click',e=>{const b=e.target.closest('[data-g]');if(!b)return;const g=b.dataset.g;pickedGroups.has(g)?pickedGroups.delete(g):pickedGroups.add(g);b.classList.toggle('on');});
-  bindClick('#btnRecommend',()=>{const ids=B.buildRecommendation([...pickedGroups],state.sessions);pickedGroups.clear();startSession(ids,'Workout built — adjust anything');});
+  const bindBuild=()=>{
+    bindClick('#btnRecommend',()=>buildAndStart(false));
+    bindClick('#btnFresh',()=>buildAndStart(true));
+  };
+  const gp=$('#groupPick');if(gp)gp.addEventListener('click',e=>{const b=e.target.closest('[data-g]');if(!b)return;const g=b.dataset.g;pickedGroups.has(g)?pickedGroups.delete(g):pickedGroups.add(g);b.classList.toggle('on');
+    const bb=$('#buildBtns');if(bb){bb.innerHTML=buildButtons();bindBuild();}});
+  bindBuild();
   bindClick('#btnBlank',()=>startSession([]));
   v.querySelectorAll('[data-repeat]').forEach(b=>b.addEventListener('click',()=>{const s=state.sessions.find(x=>x.id===b.dataset.repeat);if(s)startSession(s.exercises.map(e=>e.id),'Loaded — weights prefilled from history');}));
   v.querySelectorAll('[data-routine]').forEach(el=>el.addEventListener('click',e=>{
