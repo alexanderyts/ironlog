@@ -2,6 +2,11 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.11.0 — 2026-09-09 · Remove sets (Roadmap v3, Phase 1)
+- A **"－ Remove set"** action appears next to "＋ Add set" whenever an exercise has more than one set, and removes the last set — the exact mirror of Add. Chosen over a per-row ✕ because the set-row grid (34px / 1fr / 1fr / 44px) already leaves the +/− steppers little room on a 375px phone; a fifth column would cramp the number fields. Swipe-to-delete was rejected too — it fights the iOS back-gesture on the installed PWA.
+- Confirms before removing a set that's already checked done; removes an undone set immediately. **Undo** restores it (toast pattern, same as routine/exercise delete). The control disappears at one set, so an exercise is never left empty (use ✕ to drop the whole movement).
+- No engine change — `setPattern`/`nextSets` already handle variable set counts; all 47 tests pass untouched.
+
 ## v0.10.0 — 2026-09-09 · Phase 4: mesocycle-aware workout building
 "Build me a workout" now builds *toward* progress instead of reshuffling (roadmap #3).
 - **Continue, don't rebuild.** Picking muscles you trained within the last 10 days continues that session's exercise list (with Phase 3's progressed weights) — the button itself says *Continue your plan · Session 3 · 5 exercises from Tuesday*, with *Build a fresh plan instead* as the deliberate escape hatch. Matching tolerates one incidental add-on exercise from another group.
