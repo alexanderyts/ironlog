@@ -152,7 +152,7 @@ function recentTemplates(){
       <span class="ex-add" style="background:var(--surface-2)">↻</span></button>`).join('');
 }
 const SCHEMA=1;
-function newSession(exIds){return{id:S.uid(),schema:SCHEMA,date:Date.now(),updatedAt:Date.now(),completed:false,exercises:(exIds||[]).map(id=>B.seedExercise(id,state.sessions))};}
+function newSession(exIds){return{id:S.uid(),schema:SCHEMA,date:Date.now(),updatedAt:Date.now(),completed:false,exercises:(exIds||[]).map(id=>B.seedExercise(id,state.sessions,null,U()))};}
 function startSession(exIds,msg){S.setActive(newSession(exIds));todayScreen='active';render();if(msg)toast(msg);}
 
 /* ---------------- session editor (live workout or editing a past one) ---------------- */
@@ -194,7 +194,9 @@ function logExercise(s,e,ei,mode){
   if(mode==='active'){
     const sg=P.suggestion(state.sessions,e.id,{unit:U(),activeDate:s.date,activeId:s.id});
     if(sg.lp){const w=sg.kind==='weight';
-      sugg=`<div class="sugg ${w?'':'match'}"><span>${w?'💪 '+sg.text:sg.text} · <span class="lastp">${esc(sg.setsStr)}</span></span>${w?`<button class="apply" data-bumpw="${ei}">+${inc()}${U()}</button>`:''}</div>`;}
+      // The prescription is already in the set rows; offer a one-tap revert until a set is done
+      const canRevert=w&&!e.sets.some(st=>st.done);
+      sugg=`<div class="sugg ${w?'':'match'}"><span>${w?'💪 ':''}${esc(sg.text)} · <span class="lastp">last: ${esc(sg.setsStr)}</span></span>${canRevert?`<button class="apply" data-keepw="${ei}">Keep last</button>`:''}</div>`;}
   }
   return `<div class="card log-ex" data-ei="${ei}">
     <div class="log-ex-head">
@@ -372,7 +374,7 @@ function exerciseDetail(id){
     <p class="instr">${esc(e.instr)}</p>
     <div class="card" style="padding:12px 15px;margin:16px 0">
       <div class="row-between"><span class="eyebrow">Target rep range</span><span class="mono" style="font-weight:600">${e.rr[0]}–${e.rr[1]}</span></div>
-      ${lp?`<div class="row-between" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line)"><span class="eyebrow">Last time</span><span class="mono" style="font-weight:600">${lp.sets.length}×${lp.sets[0].r} @ ${Math.max(...lp.sets.map(s=>s.w))}${U()}</span></div>`:''}
+      ${lp?`<div class="row-between" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line)"><span class="eyebrow">Last time</span><span class="mono" style="font-weight:600">${esc(P.fmtPerf(lp.sets,U()))}</span></div>`:''}
     </div>
     <a class="btn ghost block" href="${demoURL(id)}" target="_blank" rel="noopener" style="margin-bottom:10px;text-decoration:none">▶ Watch a demo video</a>
     <button class="btn primary block" data-addto="${id}">${inWorkout?'✓ Already in this workout':'＋ Add to '+(todayScreen==='edit'?'this session':'today’s workout')}</button>`;
@@ -595,7 +597,7 @@ function addExerciseToCur(id){
   if(todayScreen!=='edit'&&!state.active){S.setActive(newSession([]));}
   const t=cur();
   if(t.exercises.some(x=>x.id===id)){toast('Already added');return;}
-  t.exercises.push(B.seedExercise(id,state.sessions,t.id));
+  t.exercises.push(B.seedExercise(id,state.sessions,t.id,U()));
   persistCur();if(todayScreen!=='edit')todayScreen='active';
   if(currentTab!=='today')setTab('today');else render();
   toast(EX[id].name+' added');
@@ -687,7 +689,8 @@ function bindLog(root){
     const add=e.target.closest('[data-addset]');if(add){const ei=+add.dataset.addset;const sets=t.exercises[ei].sets;const last=sets[sets.length-1]||{w:'',r:''};sets.push({w:last.w,r:last.r,done:false});persistCur();render();return;}
     const del=e.target.closest('[data-delex]');if(del){const ei=+del.dataset.delex;const removed=t.exercises.splice(ei,1)[0];persistCur();render();
       toast(removed.name+' removed',{label:'Undo',fn:()=>{const c=cur();if(c){c.exercises.splice(ei,0,removed);persistCur();render();}}});return;}
-    const bwp=e.target.closest('[data-bumpw]');if(bwp){const ei=+bwp.dataset.bumpw;t.exercises[ei].sets.forEach(s=>{s.w=(+s.w||0)+inc();});persistCur();render();toast('Weights bumped +'+inc()+U());return;}
+    const kw=e.target.closest('[data-keepw]');if(kw){const ei=+kw.dataset.keepw;const ex=t.exercises[ei];const lp=P.lastPerf(state.sessions,ex.id,{beforeTs:t.date,excludeId:t.id});
+      if(lp)ex.sets=lp.sets.map(s=>({w:s.w,r:s.r,done:false}));persistCur();render();toast('Using last time’s weights');return;}
     const oe=e.target.closest('[data-openex]');if(oe){openSheet(EX[oe.dataset.openex].name,exerciseDetail(oe.dataset.openex));return;}
   });
   root.addEventListener('input',e=>{const inp=e.target.closest('input[data-f]');if(!inp)return;const t=cur();if(!t)return;

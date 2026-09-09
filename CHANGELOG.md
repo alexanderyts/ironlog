@@ -2,6 +2,14 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.9.0 — 2026-09-09 · Phase 3: pattern-aware progressive overload
+The overload engine now understands how you actually structure sets (roadmap #2).
+- **Pattern detection** (`setPattern`): flat straight sets, ascending ramps, descending top-set-plus-back-offs, or mixed (pyramids). One rule covers all of them: the heaviest working set(s) are the *anchor*, and only the anchor decides whether to add load. Where the max sits determines the pattern; the pattern only changes how the other sets are carried.
+- **Prescription** (`nextSets`, double progression): every anchor set at the top of the rep range → anchor gets one plate increment and its reps reset to the bottom of the range; non-anchor sets shift *proportionally* (same ratio to the anchor, rounded to the plate grid, never below last time, never above the anchor) so a ramp keeps its shape. Anchor short → last time carried forward verbatim as the target, with the message stating exactly how many anchor reps were missing ("2 more reps on your top set earns +5lb"). Below the range → "stay at X and own it". Bodyweight-only → progress by reps.
+- **Prefill:** new sessions and added exercises are seeded with the prescription instead of a stale copy of last time. The card explains what was done and offers a one-tap **Keep last** revert until a set is marked done. The old uniform "+5 to every set" button is gone — it was wrong for anything but flat sets.
+- **Last-time display** (`fmtPerf`): flat work reads `3×8/8/8 @ 135lb`; ramped work reads `135→155→185lb · 10/8/6` so you can see the shape.
+- 6 new engine tests (42 total).
+
 ## v0.8.10 — 2026-09-09
 **Confirmed fixed on device.** The tab bar saga (v0.8.0–v0.8.10, spanning sticky/fixed/flow/dvh positioning attempts, a colour-seam theory, and finally on-device instrumentation) is closed.
 The v0.8.9 launch timeline identified the trigger: `4ms deficit 62 · nudge scroll · nudge meta · touch · tab today` all did nothing; `1413ms tab history → 1449ms deficit 0`. History is the first tab whose content is taller than the 894px launch viewport, i.e. the first time the document becomes scrollable — that is what makes WebKit recompute the viewport. Today is shorter than 894px and never triggers it; a one-frame nudge wasn't long enough for the round trip.

@@ -16,11 +16,72 @@ test('lastPerf returns the most recent working sets, respecting exclusions',()=>
 test('suggestion: hitting the top of the rep range → add weight; otherwise beat last time',()=>{
   const now=Date.now();
   const top=[session(2,[['barbell-bench-press',[set(135,8),set(135,8),set(135,8)]]],{now})];
-  assert.equal(P.suggestion(top,'barbell-bench-press',{unit:'lb'}).kind,'weight');
+  const sg=P.suggestion(top,'barbell-bench-press',{unit:'lb'});
+  assert.equal(sg.kind,'weight');
+  assert.deepEqual(sg.next,[{w:140,r:5},{w:140,r:5},{w:140,r:5}],'flat: every set bumped, reps reset to the bottom of the range');
   const mid=[session(2,[['barbell-bench-press',[set(135,8),set(135,6)]]],{now})];
-  assert.equal(P.suggestion(mid,'barbell-bench-press',{unit:'lb'}).kind,'match');
+  const sm=P.suggestion(mid,'barbell-bench-press',{unit:'lb'});
+  assert.equal(sm.kind,'match');
+  assert.match(sm.text,/^2 more reps earns \+5lb/);
+  assert.deepEqual(sm.next,[{w:135,r:8},{w:135,r:6}],'not ready: last time carried forward as the target');
   assert.equal(P.suggestion([],'barbell-bench-press').kind,'new');
   assert.equal(P.suggestion(top,'barbell-bench-press',{unit:'kg'}).setsStr,'3×8/8/8 @ 135kg');
+});
+
+test('setPattern: flat / ascending / descending / mixed, anchored on the heaviest sets',()=>{
+  assert.deepEqual(P.setPattern([set(135,8),set(135,8)]),{pattern:'flat',anchor:[0,1],top:135});
+  assert.deepEqual(P.setPattern([set(135,10),set(155,8),set(185,6)]),{pattern:'ascending',anchor:[2],top:185});
+  assert.deepEqual(P.setPattern([set(135,10),set(175,8),set(175,6)]),{pattern:'ascending',anchor:[1,2],top:175},'ramp that holds at the top: both top sets anchor');
+  assert.deepEqual(P.setPattern([set(225,5),set(205,8),set(205,8)]),{pattern:'descending',anchor:[0],top:225});
+  assert.deepEqual(P.setPattern([set(135,10),set(185,6),set(135,10)]),{pattern:'mixed',anchor:[1],top:185});
+  assert.deepEqual(P.setPattern([set(0,15),set(0,15)]),{pattern:'flat',anchor:[0,1],top:0});
+});
+
+test('nextSets: ascending ramp bumps the top set and shifts the ramp proportionally on the plate grid',()=>{
+  const ex=IL.data.EX['barbell-bench-press']; // rr 5–8 → 185×8 hits the top
+  const n=P.nextSets([set(135,10),set(155,9),set(185,8)],ex,'lb');
+  assert.equal(n.bumped,true);assert.equal(n.pattern,'ascending');assert.equal(n.newTop,190);
+  assert.deepEqual(n.sets,[{w:140,r:10},{w:160,r:9},{w:190,r:5}]);
+  // not ready: top set short by 2 → carried forward verbatim, short counted on the anchor only
+  const m=P.nextSets([set(135,10),set(155,9),set(185,6)],ex,'lb');
+  assert.equal(m.bumped,false);assert.equal(m.short,2);
+  assert.deepEqual(m.sets,[{w:135,r:10},{w:155,r:9},{w:185,r:6}]);
+});
+
+test('nextSets: top set + back-offs bumps the opener, back-offs follow, never above the opener or below last time',()=>{
+  const ex=IL.data.EX['back-squat'];
+  const hi=ex.rr[1];
+  const n=P.nextSets([set(225,hi),set(205,hi+2),set(205,hi+2)],ex,'lb');
+  assert.equal(n.pattern,'descending');assert.equal(n.bumped,true);
+  assert.equal(n.sets[0].w,230);assert.equal(n.sets[0].r,ex.rr[0]);
+  assert.ok(n.sets[1].w>=205&&n.sets[1].w<=230);assert.equal(n.sets[1].r,hi+2,'back-off reps kept as last time');
+  // kg grid
+  const k=P.nextSets([set(100,hi),set(90,hi)],ex,'kg');
+  assert.equal(k.sets[0].w,102.5);assert.equal(k.sets[1].w%2.5,0);
+});
+
+test('nextSets: under-range and bodyweight cases',()=>{
+  const ex=IL.data.EX['barbell-bench-press'];
+  const u=P.nextSets([set(185,3),set(185,3)],ex,'lb');
+  assert.equal(u.bumped,false);assert.equal(u.under,true);
+  const sg=P.suggestion([session(1,[['barbell-bench-press',[set(185,3)]]])],'barbell-bench-press',{unit:'lb'});
+  assert.match(sg.text,/stay at 185lb/);
+  const bw=P.nextSets([set(0,20),set(0,20)],IL.data.EX['push-up']||{rr:[8,20]},'lb');
+  assert.equal(bw.bumped,false);assert.equal(bw.weighted,false);
+});
+
+test('fmtPerf describes flat and ramped work differently',()=>{
+  assert.equal(P.fmtPerf([set(135,8),set(135,8)],'lb'),'2×8/8 @ 135lb');
+  assert.equal(P.fmtPerf([set(135,10),set(155,8),set(185,6)],'lb'),'135→155→185lb · 10/8/6');
+  assert.equal(P.fmtPerf([],'lb'),'');
+  assert.equal(P.fmtPerf([set(0,12),set(0,10)],'lb'),'2×12/10 · bodyweight');
+});
+
+test('seedExercise seeds the prescription, not a stale copy of last time',()=>{
+  const B=IL.builder;
+  const hist=[session(2,[['barbell-bench-press',[set(135,8),set(135,8)]]])];
+  assert.deepEqual(B.seedExercise('barbell-bench-press',hist,null,'lb').sets,[{w:140,r:5,done:false},{w:140,r:5,done:false}]);
+  assert.equal(B.seedExercise('deadlift',hist,null,'lb').sets.length,4,'no history: prescribed set count');
 });
 
 test('unit conversion: lb → kg → lb is exact; kg → lb → kg within a tenth',()=>{

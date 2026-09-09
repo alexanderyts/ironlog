@@ -35,18 +35,95 @@ function lastPerf(sessions,exId,opts){
   }
   return null;
 }
-// Progressive-overload suggestion for an exercise. kind: 'new' | 'weight' | 'match'
+function unitIncrement(unit){return unit==='kg'?2.5:5;}
+
+/* ── Pattern-aware progressive overload ──────────────────────────────────────────────────────────
+   Lifters don't only do straight sets. The three patterns that matter, and what they mean for the
+   load decision:
+     flat        135×8 135×8 135×8       every set is equally informative
+     ascending   135×10 155×8 185×6      a ramp; the LAST (heaviest) set is the real test
+     descending  225×5 205×8 205×8       top set + back-offs; the FIRST (heaviest) set is the test,
+                                         the back-offs exist to accumulate volume, not to progress
+   One rule covers all of them, plus anything irregular (a pyramid up-and-down = 'mixed'):
+     ► the heaviest working set(s) are the ANCHOR, and only the anchor decides whether to add load.
+   Which sets the anchor is falls out of where the max weight sits; the pattern label only changes
+   how the non-anchor sets are carried forward and how we describe last time.
+
+   Decision (double progression, the standard hypertrophy scheme): if every anchor set reached the
+   top of the exercise's rep range, add one plate-increment to the anchor and drop its reps to the
+   bottom of the range to climb again. Non-anchor sets are shifted PROPORTIONALLY (same ratio to the
+   anchor as last time, rounded to the plate grid, never below last time, never above the anchor) so
+   a ramp or a set of back-offs keeps its shape instead of being copied stale or bumped uniformly.
+   If the anchor fell short, last time is carried forward verbatim as the target to beat, and the
+   message says exactly how many anchor reps were missing. Below the bottom of the range → hold.
+   Weightless (bodyweight) work can't take a plate increment → progress by reps instead. */
+
+const sameW=(a,b)=>Math.abs((+a||0)-(+b||0))<1e-6;
+function roundTo(w,grid){return Math.round(w/grid)*grid;}
+
+// Classifies working sets. Returns {pattern, anchor:[indices], top:maxWeight}
+function setPattern(sets){
+  const w=sets.map(s=>+s.w||0);
+  if(!w.length)return{pattern:'flat',anchor:[],top:0};
+  const top=Math.max(...w);
+  const anchor=w.map((x,i)=>sameW(x,top)?i:-1).filter(i=>i>=0);
+  if(anchor.length===w.length)return{pattern:'flat',anchor,top};
+  let up=true,down=true;
+  for(let i=1;i<w.length;i++){if(w[i]<w[i-1]-1e-6)up=false;if(w[i]>w[i-1]+1e-6)down=false;}
+  if(up&&anchor[0]===w.length-anchor.length)return{pattern:'ascending',anchor,top};
+  if(down&&anchor[anchor.length-1]===anchor.length-1)return{pattern:'descending',anchor,top};
+  return{pattern:'mixed',anchor,top};
+}
+
+// "3×8/8/8 @ 135lb" for flat work; "135→155→185lb · 10/8/6" when the weight changes across sets
+function fmtPerf(sets,unit){
+  unit=unit||'';if(!sets||!sets.length)return'';
+  const p=setPattern(sets);
+  if(p.pattern==='flat')return sets.length+'×'+sets.map(s=>s.r).join('/')+(p.top>0?' @ '+p.top+unit:' · bodyweight');
+  return sets.map(s=>+s.w||0).join('→')+unit+' · '+sets.map(s=>s.r).join('/');
+}
+
+// What to load next time, from last time's working sets. Returns {sets:[{w,r}], bumped, pattern,
+// anchor, short:(anchor reps missing), under:(any anchor set below the range)}
+function nextSets(last,ex,unit){
+  const lo=ex?ex.rr[0]:8,hi=ex?ex.rr[1]:12,inc=unitIncrement(unit||'lb');
+  const p=setPattern(last);
+  const anchorSets=p.anchor.map(i=>last[i]);
+  const short=anchorSets.reduce((n,s)=>n+Math.max(0,hi-(+s.r||0)),0);
+  const under=anchorSets.some(s=>(+s.r||0)<lo);
+  const weighted=p.top>0;
+  const ready=weighted&&short===0;
+  if(!ready)return{sets:last.map(s=>({w:+s.w||0,r:+s.r||0})),bumped:false,pattern:p.pattern,anchor:p.anchor,short,under,weighted};
+  const newTop=p.top+inc;
+  const sets=last.map((s,i)=>{
+    const w=+s.w||0;
+    if(p.anchor.includes(i))return{w:newTop,r:lo};
+    const shifted=Math.min(newTop,Math.max(w,roundTo(w*newTop/p.top,inc)));
+    return{w:shifted,r:+s.r||0};
+  });
+  return{sets,bumped:true,pattern:p.pattern,anchor:p.anchor,short:0,under:false,weighted,newTop};
+}
+
+// Progressive-overload suggestion for an exercise. kind: 'new' | 'weight' | 'match' | 'reps'
+// 'weight' means the prescription (`next`) already carries the bump; the text explains it.
 function suggestion(sessions,exId,opts){
   opts=opts||{};const unit=opts.unit||'lb';
   const lp=lastPerf(sessions,exId,{beforeTs:opts.activeDate,excludeId:opts.activeId});
-  const ex=EX[exId];const hi=ex?ex.rr[1]:12;
-  if(!lp||!lp.sets.length)return{lp:null,kind:'new',text:'First time logging this — set your baseline.'};
-  const allTop=lp.sets.every(s=>s.r>=hi);
-  const setsStr=lp.sets.length+'×'+lp.sets.map(s=>s.r).join('/')+' @ '+Math.max(...lp.sets.map(s=>s.w))+unit;
-  if(allTop)return{lp,kind:'weight',text:'Hit top reps last time',setsStr};
-  return{lp,kind:'match',text:'Beat last time',setsStr};
+  const ex=EX[exId];
+  if(!lp||!lp.sets.length)return{lp:null,kind:'new',text:'First time logging this — set your baseline.',next:null};
+  const n=nextSets(lp.sets,ex,unit),setsStr=fmtPerf(lp.sets,unit),inc=unitIncrement(unit);
+  const ramp=n.pattern!=='flat';
+  const topLbl=n.pattern==='descending'?'opener':'top set';
+  if(n.bumped){
+    const text=ramp?`${n.pattern==='descending'?'Opener':'Top set'} hit the range — ${topLbl} prefilled at ${n.newTop}${unit}, the rest shifted up`
+                   :`Hit top reps last time — prefilled +${inc}${unit}`;
+    return{lp,kind:'weight',pattern:n.pattern,text,setsStr,next:n.sets};
+  }
+  if(!n.weighted)return{lp,kind:n.short===0?'reps':'match',pattern:n.pattern,text:n.short===0?'Hit top reps — add a rep or some load':'Beat last time',setsStr,next:n.sets};
+  if(n.under)return{lp,kind:'match',pattern:n.pattern,text:`Fell under the range on the ${ramp?topLbl:'work sets'} — stay at ${Math.max(...lp.sets.map(s=>s.w))}${unit} and own it`,setsStr,next:n.sets};
+  const where=ramp?` on your ${topLbl}`:'';
+  return{lp,kind:'match',pattern:n.pattern,text:`${n.short} more rep${n.short===1?'':'s'}${where} earns +${inc}${unit}`,setsStr,next:n.sets};
 }
-function unitIncrement(unit){return unit==='kg'?2.5:5;}
 
 // lb <-> kg. kg keeps 0.1 resolution and lb 0.25, so any lb value on a quarter-pound grid
 // survives lb → kg → lb exactly (kg-rounding error ≤ 0.05 kg ≈ 0.11 lb, under half a step).
@@ -72,5 +149,5 @@ function calcStreak(sessions,now){
   return n;
 }
 
-IL.prog={DAY,startOfDay,e1rm,isWorking,setLoad,sessionVolume,sessionSets,fmtVol,lastPerf,suggestion,unitIncrement,convertWeight,convertSessions,calcStreak};
+IL.prog={DAY,startOfDay,e1rm,isWorking,setLoad,sessionVolume,sessionSets,fmtVol,lastPerf,setPattern,fmtPerf,nextSets,suggestion,unitIncrement,convertWeight,convertSessions,calcStreak};
 if(typeof module!=='undefined')module.exports=IL.prog;

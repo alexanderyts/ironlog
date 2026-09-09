@@ -4,14 +4,16 @@ var IL=globalThis.IL||(globalThis.IL={});
 if(typeof require==='function'&&!IL.data)require('../data/exercises.js');
 if(typeof require==='function'&&!IL.prog)require('./progression.js');
 const {C,I,EXERCISES,EX,REGIONS,IDEAL_PATS,PAT_RANK,EQUIP_LOAD,regLabel,patLabel,hashId}=IL.data;
-const {lastPerf}=IL.prog;
+const {lastPerf,nextSets}=IL.prog;
 
 // Working sets a movement deserves when you've never logged it: main lifts 4, other compounds 3,
 // isolation 3, finishers 2. Reps prefilled at the bottom of the target range.
 function prescribedSets(ex){if(!ex)return 3;if(ex.type===C)return ex.tier===1?4:3;return ex.tier===3?2:3;}
-function seedExercise(id,sessions,excludeId){
+// With history, the sets are seeded with the pattern-aware progressive-overload prescription
+// (see nextSets in progression.js), not a stale copy of last time.
+function seedExercise(id,sessions,excludeId,unit){
   const ex=EX[id];const lp=lastPerf(sessions||[],id,{excludeId});
-  if(lp&&lp.sets.length)return{id,name:ex?ex.name:id,sets:lp.sets.map(s=>({w:s.w,r:s.r,done:false}))};
+  if(lp&&lp.sets.length)return{id,name:ex?ex.name:id,sets:nextSets(lp.sets,ex,unit).sets.map(s=>({w:s.w,r:s.r,done:false}))};
   const n=prescribedSets(ex),r=ex?ex.rr[0]:'';
   return{id,name:ex?ex.name:id,sets:Array.from({length:n},()=>({w:'',r:r,done:false}))};
 }
