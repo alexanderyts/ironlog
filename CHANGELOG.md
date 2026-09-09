@@ -2,6 +2,12 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.8.3 — 2026-09-09
+Fix for the installed home-screen PWA getting stuck on an old version after a deploy (separate issue from the tab bar saga above — this is specific to `docs/` / GitHub Pages, not the Claude artifact).
+- **Root cause:** the offline service worker cached everything, including the app's own HTML document, cache-first with no revalidation — once cached, it would never check the network again for a newer copy, so an installed PWA could get stuck on whatever version happened to be cached the first time, indefinitely, even while online. That's exactly what happened: stuck on v0.8.1 through two full app force-quits.
+- **Fix:** network-first specifically for the HTML document (the one thing that must never go stale while online — the whole app is a single self-contained file, so a fresh document *is* a fresh app), falling back to the cached copy only when genuinely offline. Static assets (icons, manifest) stay cache-first since those rarely change and don't need revalidating. Future version bumps will now be picked up automatically on next launch while online, no manual cache-clearing needed.
+- **To unstick a PWA already stuck on an old cached version right now:** iOS Settings → Safari → Advanced → Website Data → find the site → swipe to delete, then remove and re-add the home-screen icon. That forces a fully clean install; going forward this class of staleness shouldn't recur.
+
 ## v0.8.2 — 2026-09-09
 v0.8.1's fix wasn't enough either — real-device follow-up: tab bar was flush on Today/History at first launch, misaligned, but visiting Library and Progress corrected it — permanently, even back on Today/History. That specific pattern (wrong until a real scroll happens, then fixed everywhere from then on) pointed at something more specific than a timing/staleness issue, so before patching again this was researched properly rather than guessed at a second time.
 - **Root cause, confirmed:** this is a known, unresolved native WebKit bug (bugs.webkit.org #191872) — inside an embedded WKWebView specifically, `env(safe-area-inset-*)` and related viewport metrics stay wrong until an *arbitrary, undeterminable* point after load, sometimes only after the WebView's internal scroll view performs a real layout pass. There is no confirmed JS-only way to force that correction — it's native-side, and this app can't touch the host app's native code.
