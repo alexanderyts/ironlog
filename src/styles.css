@@ -88,7 +88,10 @@ h1,h2,h3{margin:0; text-wrap:balance; font-family:"Archivo",system-ui,sans-serif
    the canvas colour (--bg, opaque) so the padding region and the un-paintable strip below it in the
    inset state are indistinguishable. Must stay opaque --bg: a translucent or --surface bar brings
    the launch seam straight back. */
-.tabbar{position:fixed;left:0;right:0;bottom:calc(-1 * var(--deficit));z-index:30;background:var(--bg);border-top:1px solid var(--line);padding-bottom:var(--safe-b)}
+/* translateZ(0) is load-bearing: it makes the bar its own compositing layer, and only composited
+   layers get painted in the region below the short launch viewport (v0.8.7 screenshot: icons drawn,
+   labels — which fall below the 894px line — missing). */
+.tabbar{position:fixed;left:0;right:0;bottom:calc(-1 * var(--deficit));z-index:30;background:var(--bg);border-top:1px solid var(--line);padding-bottom:var(--safe-b);transform:translateZ(0)}
 .tabbar .row{max-width:520px;margin:0 auto;display:grid;grid-template-columns:repeat(4,1fr)}
 .tab{height:var(--tab-h);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:var(--ink-3);font-size:11px;font-weight:600;letter-spacing:.01em}
 .tab svg{width:23px;height:23px}
@@ -242,7 +245,7 @@ h1,h2,h3{margin:0; text-wrap:balance; font-family:"Archivo",system-ui,sans-serif
 .routine .ex-ic{width:38px;height:38px}
 .routine .del{margin-left:auto;color:var(--ink-3);width:32px;height:32px;border-radius:8px;display:grid;place-items:center;flex-shrink:0}
 /* rest timer */
-.restbar{position:fixed;left:0;right:0;bottom:calc(74px + var(--safe-b) - var(--deficit));z-index:40;display:none}
+.restbar{position:fixed;left:0;right:0;bottom:calc(74px + var(--safe-b) - var(--deficit));transform:translateZ(0);z-index:40;display:none}
 .restbar.on{display:block}
 .restbar .inner{max-width:520px;margin:0 auto;padding:0 12px}
 .restbar .rcard{background:var(--ink);color:var(--bg);border-radius:14px;padding:9px 12px;display:flex;align-items:center;gap:11px;box-shadow:0 6px 24px rgba(0,0,0,.25)}

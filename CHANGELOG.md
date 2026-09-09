@@ -2,6 +2,11 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.8.8 — 2026-09-09
+v0.8.7 confirmed on device: bar in the right place on every tab, `deficit 0` after correction. Two leftovers, both consequences of the launch deficit state:
+- **Tab labels missing on Today at launch.** The icons were drawn but the labels sit below the 894px launch viewport, and only composited layers get painted in that overflow region (which is exactly why the parked sheet, with its `transform`, was visible there). The tab bar and rest bar now carry `transform:translateZ(0)` so they are composited and paint fully below the line.
+- **Light flicker on tab switch.** Switching tabs scrolls to top, which is what triggers WebKit's viewport correction; for up to 150ms the bar was offset by a now-stale 62px. The deficit is now checked every animation frame (one subtraction — free) and on `scroll`, so it can never be stale beyond the frame the correction lands in. Also, at boot the app nudges the scroll position by 1px and back (document made scrollable for one frame) to try to make WebKit correct itself before the first paint the user sees.
+
 ## v0.8.7 — 2026-09-09
 First version built from real on-device numbers (the v0.8.6 Settings readout: `screen 440×956 · inner 440×894 · inset top 62`, iPhone Pro Max, installed PWA). They overturned v0.8.6's colour-seam theory.
 - **What the numbers say.** The layout viewport at launch is 894px on a 956px screen — short by 62px, which is the *top* inset (Dynamic Island), not the 34px home-indicator inset. WebKit subtracts the status-bar height from the bottom of the viewport until a later native layout pass (usually the first scroll) corrects it. `env()` itself is fine: the tab bar's icons in the screenshot sit at exactly the pixel a bar anchored to a 894px viewport with a 34px inset would put them. And the white strip under the bar was the *closed bottom sheet* — parked at `translateY(101%)` just below the viewport, in the overflow region iOS still paints at launch.

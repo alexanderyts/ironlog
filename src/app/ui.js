@@ -466,15 +466,29 @@ function syncViewportDeficit(){
   _lastDeficit=d;
   document.documentElement.style.setProperty('--deficit',d+'px');
 }
+/* Try to make WebKit do its correction now, before the user sees anything, rather than on their
+   first tab switch (that's the flicker in v0.8.7: switching tabs scrolls, WebKit corrects, and the
+   bar was offset by a stale 62px until the next check). A real scroll offset change is what
+   triggers it, so make the document scrollable for one frame and scroll 1px and back. */
+function nudgeViewport(){
+  if(!viewportDeficit())return;
+  const de=document.documentElement, prev=de.style.minHeight;
+  de.style.minHeight=(innerHeight+4)+'px';
+  window.scrollTo(0,1);
+  requestAnimationFrame(()=>{window.scrollTo(0,0);de.style.minHeight=prev;syncViewportDeficit();});
+}
 function watchViewport(){
   syncViewportDeficit();
-  ['resize','orientationchange','pageshow','focus'].forEach(ev=>addEventListener(ev,syncViewportDeficit));
+  ['resize','orientationchange','pageshow','focus','scroll'].forEach(ev=>addEventListener(ev,syncViewportDeficit,{passive:true}));
   document.addEventListener('visibilitychange',syncViewportDeficit);
   if(window.visualViewport)visualViewport.addEventListener('resize',syncViewportDeficit);
-  // WebKit's correction fires no event we can hook, so poll: tight for the first seconds, then slow.
-  const t0=Date.now();
-  const tick=()=>{syncViewportDeficit();setTimeout(tick,Date.now()-t0<10000?150:1000);};
-  setTimeout(tick,150);
+  // WebKit's correction fires no event we can hook, so check every frame while the page is visible
+  // (one subtraction per frame — free). A frame-level check means the bar can never be visibly
+  // stale for longer than the frame the correction lands in.
+  const frame=()=>{if(!document.hidden)syncViewportDeficit();requestAnimationFrame(frame);};
+  requestAnimationFrame(frame);
+  nudgeViewport();
+  setTimeout(nudgeViewport,400);
 }
 function openSettings(){
   const R=state.settings.rest,st=state.settings;
