@@ -2,6 +2,14 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.7.0 — 2026-09-09
+Roadmap v2, Phase 1 — correctness fixes from first real-world use. Full plan in `ROADMAP-v2.md`.
+- **Fixed:** the "suggested" exercise at the bottom of a workout could recommend a movement from a muscle group not even in your session (e.g. a press suggested on a pull day) — this came from a session-level push/pull "balance" bonus that ignored group membership entirely. Removed it; suggestions are now always restricted to muscle groups already in the workout. Push/pull balance is a multi-week concern and stays in Coach's Notes, where it belongs.
+- **Fixed:** Coach's Notes could deliver comparative verdicts ("you press more than you pull", "legs are undertrained") after a single lopsided session. Those now require real history — **at least 4 distinct sessions spread across at least 10 days** — before they appear. Before that threshold, you get an honest "log N more sessions" message plus whatever per-muscle tips (region/pattern gaps) are already individually meaningful — the report genuinely gets richer as your history grows, instead of jumping straight to full judgment on day one.
+- **Fixed:** volume read as "10k lb", which reads like an ambiguous unit rather than a number. Session/week volume now shows full comma-formatted numbers ("12,480 lb") up to 99,999 — far more readable for weight-room numbers than an abbreviation — and reserves "k"/"M" for numbers actually too long to read at a glance. Tap the ⓘ next to any "Volume" label for a one-line explainer of what it means.
+- **Added:** a **Forearms** muscle group — Wrist Curl, Reverse Wrist Curl, Reverse Curl, Farmer's Carry, Wrist Roller — fully wired into the smart builder, search, and coaching analysis like every other group.
+- **Added:** 5 more exercises broadening thin spots in the library — Nordic Hamstring Curl, Step-Up, Chest-Supported Row, Rack Pull, Landmine Press.
+
 ## v0.6.2 — 2026-09-09
 - Bumped version to force the service worker to refresh cached clients (the Dropbox-key config change in the previous commit didn't bump the version, so the offline cache didn't know to invalidate itself).
 - Moved "Cloud backup" higher in Settings, right under Units, so the Connect Dropbox button doesn't require scrolling past the rest-timer options to find.

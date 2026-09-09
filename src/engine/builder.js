@@ -3,7 +3,7 @@
 var IL=globalThis.IL||(globalThis.IL={});
 if(typeof require==='function'&&!IL.data)require('../data/exercises.js');
 if(typeof require==='function'&&!IL.prog)require('./progression.js');
-const {C,I,EXERCISES,EX,REGIONS,IDEAL_PATS,PAT_RANK,EQUIP_LOAD,PUSH_PATS,PULL_PATS,regLabel,patLabel,hashId}=IL.data;
+const {C,I,EXERCISES,EX,REGIONS,IDEAL_PATS,PAT_RANK,EQUIP_LOAD,regLabel,patLabel,hashId}=IL.data;
 const {lastPerf}=IL.prog;
 
 // Working sets a movement deserves when you've never logged it: main lifts 4, other compounds 3,
@@ -115,7 +115,9 @@ function buildRecommendation(groups,sessions,seed){
     out.push(...pickForGroup(g,cap,seed,sessions).map(e=>e.id));});
   return orderByFatigue(capHeavyAxial(out),groups[0]);
 }
-// Suggest exercises that COMPLEMENT what's already chosen. Returns [{id, why}].
+// Suggest exercises that COMPLEMENT what's already chosen — always from a muscle group already in
+// the workout (a pull day should never get a press "to balance" it; that's a program-level,
+// multi-week concern that Coach's Notes already covers, not a within-session one). Returns [{id, why}].
 function complementSuggestions(chosenIds,limit){
   limit=limit||3;
   const chosen=chosenIds.map(id=>EX[id]).filter(Boolean);
@@ -123,22 +125,14 @@ function complementSuggestions(chosenIds,limit){
   const groups=new Set(chosen.map(e=>e.group));
   const covReg={},covPatG={},covPat=new Set();
   chosen.forEach(e=>{(covReg[e.group]=covReg[e.group]||new Set()).add(e.reg);(covPatG[e.group]=covPatG[e.group]||new Set()).add(e.pat);covPat.add(e.pat);});
-  const pushN=chosen.filter(e=>PUSH_PATS.indexOf(e.pat)>=0).length;
-  const pullN=chosen.filter(e=>PULL_PATS.indexOf(e.pat)>=0).length;
-  const scored=EXERCISES.filter(e=>chosenIds.indexOf(e.id)<0).map(e=>{
+  const scored=EXERCISES.filter(e=>groups.has(e.group)&&chosenIds.indexOf(e.id)<0).map(e=>{
     let sc=0,why='';
-    if(groups.has(e.group)){
-      const ideal=REGIONS[e.group]||[],ip=IDEAL_PATS[e.group]||[];
-      if(ideal.indexOf(e.reg)>=0&&!(covReg[e.group]&&covReg[e.group].has(e.reg))){sc+=5;why='Hits your '+regLabel(e.group,e.reg)+' — not covered yet';}
-      if(ip.indexOf(e.pat)>=0&&!(covPatG[e.group]&&covPatG[e.group].has(e.pat))){sc+=4;if(!why)why='Adds '+(e.pat==='iso'?'an isolation angle':'a '+patLabel(e.pat))+' — pairs with your '+e.group.toLowerCase()+' work';}
-      else if(!covPat.has(e.pat)&&e.pat!=='iso'){sc+=2;if(!why)why='Adds a '+patLabel(e.pat)+' — new movement angle';}
-      if(e.type===I&&!why){sc+=0.6;why='Isolation to finish off your '+e.group.toLowerCase();}
-      sc+=e.tier===1?0.5:e.tier===2?0.3:0;
-    }
-    if(e.tier<=2){   // a session with pressing and NO pulling is the imbalance that matters most
-      if(pushN-pullN>=2&&PULL_PATS.indexOf(e.pat)>=0){sc+=pullN===0?10:4.5;why='Balances your pressing with a pull';}
-      if(pullN-pushN>=2&&PUSH_PATS.indexOf(e.pat)>=0){sc+=pushN===0?10:4.5;why='Balances your pulling with a press';}
-    }
+    const ideal=REGIONS[e.group]||[],ip=IDEAL_PATS[e.group]||[];
+    if(ideal.indexOf(e.reg)>=0&&!(covReg[e.group]&&covReg[e.group].has(e.reg))){sc+=5;why='Hits your '+regLabel(e.group,e.reg)+' — not covered yet';}
+    if(ip.indexOf(e.pat)>=0&&!(covPatG[e.group]&&covPatG[e.group].has(e.pat))){sc+=4;if(!why)why='Adds '+(e.pat==='iso'?'an isolation angle':'a '+patLabel(e.pat))+' — pairs with your '+e.group.toLowerCase()+' work';}
+    else if(!covPat.has(e.pat)&&e.pat!=='iso'){sc+=2;if(!why)why='Adds a '+patLabel(e.pat)+' — new movement angle';}
+    if(e.type===I&&!why){sc+=0.6;why='Isolation to finish off your '+e.group.toLowerCase();}
+    sc+=e.tier===1?0.5:e.tier===2?0.3:0;
     return {e,sc,why};
   }).filter(x=>x.sc>0).sort((a,b)=>b.sc-a.sc);
   const res=[],seen=new Set();

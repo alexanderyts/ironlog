@@ -54,5 +54,12 @@ test('streak counts consecutive training weeks and tolerates an untrained curren
 
 test('e1rm and fmtVol',()=>{
   assert.equal(P.e1rm(100,1),100);assert.equal(P.e1rm(100,10),133);
-  assert.equal(P.fmtVol(950),950);assert.equal(P.fmtVol(5900),'5.9k');assert.equal(P.fmtVol(12000),'12k');
+  // comma-formatted (readable to a lifter) up to 99,999 — a real session/week volume almost never
+  // exceeds this, so "k" abbreviation is reserved for numbers actually too long to read at a glance
+  assert.equal(P.fmtVol(950),'950');
+  assert.equal(P.fmtVol(5900),'5,900');
+  assert.equal(P.fmtVol(12000),'12,000');
+  assert.equal(P.fmtVol(99999),'99,999');
+  assert.equal(P.fmtVol(142000),'142k');
+  assert.equal(P.fmtVol(2500000),'2.5M');
 });

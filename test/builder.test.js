@@ -94,13 +94,20 @@ test('set prescription: main lifts 4, other compounds 3, isolation 3, finishers 
   assert.deepEqual(B.seedExercise('back-squat',hist).sets.map(s=>[s.w,s.r]),[[225,5],[225,5]]);
 });
 
-test('complementary suggestions fill region gaps and balance push/pull',()=>{
+test('complementary suggestions fill region/pattern gaps within the workout\'s own muscles',()=>{
   const afterBench=B.complementSuggestions(['barbell-bench-press'],3).map(s=>EX[s.id].reg);
   assert.ok(afterBench.includes('upper')&&afterBench.includes('lower'),'suggests upper + lower chest: '+afterBench);
-  const top=B.complementSuggestions(['barbell-bench-press','overhead-press'],1)[0];
-  assert.ok(['hpull','vpull'].includes(EX[top.id].pat),'two presses → suggest a pull, got '+EX[top.id].name);
-  assert.ok(EX[top.id].tier<=2,'never a niche move for balance');
   const afterRdl=B.complementSuggestions(['romanian-deadlift'],1)[0];
   assert.equal(EX[afterRdl.id].pat,'iso','hinge → suggests a curl');
   assert.match(afterRdl.why,/an isolation/);
+});
+
+test('never suggests a muscle group outside the current workout (a pull day never gets a press)',()=>{
+  const pullDay=['deadlift','barbell-row','lat-pulldown','barbell-curl'];
+  const pullGroups=new Set(pullDay.map(id=>EX[id].group));
+  for(const s of B.complementSuggestions(pullDay,10))assert.ok(pullGroups.has(EX[s.id].group),'suggested '+EX[s.id].name+' ('+EX[s.id].group+') on a pull day');
+  // two presses (Chest + Shoulders) — every suggestion must stay within those two groups, never a pull
+  const pushDay=['barbell-bench-press','overhead-press'];
+  const pushGroups=new Set(pushDay.map(id=>EX[id].group));
+  for(const s of B.complementSuggestions(pushDay,10))assert.ok(pushGroups.has(EX[s.id].group),'suggested '+EX[s.id].name+' ('+EX[s.id].group+') outside the push day\'s own muscles');
 });

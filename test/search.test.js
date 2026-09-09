@@ -19,3 +19,9 @@ test('empty query lists everything; nonsense lists nothing',()=>{
   assert.equal(searchEx('').length,IL.data.EXERCISES.length);
   assert.equal(searchEx('zzqx').length,0);
 });
+test('forearm exercises are in the library and searchable',()=>{
+  assert.equal(top('wrist curl'),'Wrist Curl');
+  assert.equal(top('farmer carry'),"Farmer's Carry");
+  assert.ok(IL.data.EXERCISES.some(e=>e.group==='Forearms'&&e.id==='reverse-wrist-curl'));
+  assert.ok(IL.data.GROUPS.includes('Forearms'));
+});

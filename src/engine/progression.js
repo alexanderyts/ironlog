@@ -14,7 +14,14 @@ function isWorking(st){return st.done!==false&&!st.warm;}
 function setLoad(exId,w,bw){const f=BW_FACTOR[exId]||0;return (+w||0)+(bw&&f?Math.round(bw*f):0);}
 function sessionVolume(s,bw){let v=0;s.exercises.forEach(e=>e.sets.forEach(st=>{if(isWorking(st))v+=setLoad(e.id,st.w,bw)*(+st.r||0);}));return v;}
 function sessionSets(s){let n=0;s.exercises.forEach(e=>e.sets.forEach(st=>{if(isWorking(st))n++;}));return n;}
-function fmtVol(v){return v>=1000?(v/1000).toFixed(v>=10000?0:1)+'k':Math.round(v);}
+// Comma-format up to 99,999 (a lifter reads "12,480 lb" faster than "12.5k lb" — the ambiguous "k"
+// only earns its keep once a number is genuinely too long to read at a glance).
+function fmtVol(v){
+  v=Math.round(v||0);
+  if(v<100000)return v.toLocaleString('en-US');
+  if(v<1000000)return Math.round(v/1000)+'k';
+  return (v/1000000).toFixed(1)+'M';
+}
 
 // Most recent completed performance of an exercise. opts: {beforeTs, excludeId}
 function lastPerf(sessions,exId,opts){

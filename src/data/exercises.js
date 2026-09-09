@@ -27,6 +27,8 @@ const RAW=[
  ["t-bar-row","T-Bar Row","Back",["Back","Biceps"],"Barbell",C,[8,12],"Hinge over the bar and row it into the chest.",""],
  ["straight-arm-pulldown","Straight-Arm Pulldown","Back",["Back"],"Cable",I,[10,15],"With straight arms, pull the bar down to the thighs using the lats.",""],
  ["face-pull","Face Pull","Back",["Shoulders","Back"],"Cable",I,[12,20],"Pull the rope to the face, flaring elbows out for rear delts.",""],
+ ["chest-supported-row","Chest-Supported Row","Back",["Back","Biceps"],"Machine",C,[8,12],"Chest braced against the pad, row the handles to your sides.",""],
+ ["rack-pull","Rack Pull","Back",["Back","Hamstrings","Glutes"],"Barbell",C,[3,6],"Bar set just below the knee, pull to lockout without a full deadlift descent.",""],
  // Shoulders
  ["overhead-press","Overhead Press","Shoulders",["Shoulders","Triceps"],"Barbell",C,[5,8],"Press the bar overhead from the shoulders to full lockout.","ohp,military press,shoulder press"],
  ["dumbbell-shoulder-press","Dumbbell Shoulder Press","Shoulders",["Shoulders","Triceps"],"Dumbbell",C,[8,12],"Press dumbbells from shoulder height to overhead lockout.","db shoulder press"],
@@ -37,6 +39,7 @@ const RAW=[
  ["cable-lateral-raise","Cable Lateral Raise","Shoulders",["Shoulders"],"Cable",I,[12,20],"Raise the cable out to the side to shoulder height.",""],
  ["upright-row","Upright Row","Shoulders",["Shoulders","Back"],"Barbell",C,[10,15],"Pull the bar up the body to chest height, leading with the elbows.",""],
  ["shrug","Barbell Shrug","Shoulders",["Shoulders"],"Barbell",I,[10,15],"Elevate the shoulders straight up toward the ears, pause, lower.","traps,shrugs"],
+ ["landmine-press","Landmine Press","Shoulders",["Shoulders","Triceps"],"Barbell",C,[8,12],"Press one end of a barbell up and forward from shoulder height.",""],
  // Biceps
  ["barbell-curl","Barbell Curl","Biceps",["Biceps"],"Barbell",I,[8,12],"Curl the bar up keeping elbows fixed, lower under control.","bicep curl"],
  ["dumbbell-curl","Dumbbell Curl","Biceps",["Biceps"],"Dumbbell",I,[8,12],"Curl the dumbbells up, supinating the wrists at the top.","db curl"],
@@ -60,6 +63,7 @@ const RAW=[
  ["goblet-squat","Goblet Squat","Quads",["Quads","Glutes"],"Dumbbell",C,[8,15],"Hold a dumbbell at the chest and squat to depth.",""],
  ["bulgarian-split-squat","Bulgarian Split Squat","Quads",["Quads","Glutes"],"Dumbbell",C,[8,12],"Rear foot elevated, lunge straight down on the front leg.","split squat"],
  ["walking-lunge","Walking Lunge","Quads",["Quads","Glutes"],"Dumbbell",C,[10,14],"Step forward into a lunge and alternate legs walking forward.","lunge"],
+ ["step-up","Step-Up","Quads",["Quads","Glutes"],"Dumbbell",C,[8,12],"Step onto a box or bench, driving through the lead leg to stand tall.",""],
  ["leg-extension","Leg Extension","Quads",["Quads"],"Machine",I,[12,15],"Extend the knees against the pad to straight, control down.",""],
  // Hamstrings
  ["romanian-deadlift","Romanian Deadlift","Hamstrings",["Hamstrings","Glutes"],"Barbell",C,[8,12],"Hinge at the hips with soft knees, feel the hamstring stretch, stand.","rdl"],
@@ -67,6 +71,7 @@ const RAW=[
  ["seated-leg-curl","Seated Leg Curl","Hamstrings",["Hamstrings"],"Machine",I,[10,15],"Curl the pad down and under, squeeze the hamstrings.",""],
  ["stiff-leg-deadlift","Stiff-Leg Deadlift","Hamstrings",["Hamstrings","Glutes"],"Barbell",C,[8,12],"Keep legs mostly straight and hinge to load the hamstrings.",""],
  ["good-morning","Good Morning","Hamstrings",["Hamstrings","Back"],"Barbell",C,[8,12],"Bar on the back, hinge forward with a flat back, return upright.",""],
+ ["nordic-curl","Nordic Hamstring Curl","Hamstrings",["Hamstrings"],"Bodyweight",I,[5,10],"Kneeling with ankles anchored, lower your torso forward under control and pull back up.","nordic hamstring curl"],
  // Glutes
  ["hip-thrust","Hip Thrust","Glutes",["Glutes","Hamstrings"],"Barbell",C,[8,12],"Shoulders on a bench, drive the hips up and squeeze the glutes.",""],
  ["glute-bridge","Glute Bridge","Glutes",["Glutes"],"Bodyweight",I,[12,20],"From the floor, drive the hips up and squeeze at the top.",""],
@@ -81,7 +86,13 @@ const RAW=[
  ["cable-crunch","Cable Crunch","Core",["Core"],"Cable",I,[12,20],"Kneel and crunch the rib cage toward the pelvis against the cable.",""],
  ["russian-twist","Russian Twist","Core",["Core"],"Bodyweight",I,[16,30],"Seated and leaned back, rotate side to side; log total touches.",""],
  ["ab-wheel","Ab Wheel Rollout","Core",["Core"],"Bodyweight",C,[8,15],"Roll the wheel out keeping a braced core, pull back in.",""],
- ["crunch","Crunch","Core",["Core"],"Bodyweight",I,[15,25],"Curl the shoulders off the floor, squeeze the abs, lower slowly.",""]
+ ["crunch","Crunch","Core",["Core"],"Bodyweight",I,[15,25],"Curl the shoulders off the floor, squeeze the abs, lower slowly.",""],
+ // Forearms
+ ["wrist-curl","Wrist Curl","Forearms",["Forearms"],"Dumbbell",I,[12,20],"Rest forearms on your thighs or a bench, curl the wrists up, lower fully.",""],
+ ["reverse-wrist-curl","Reverse Wrist Curl","Forearms",["Forearms"],"Dumbbell",I,[12,20],"Palms down, extend the wrists up against the weight, lower fully.",""],
+ ["reverse-curl","Reverse Curl","Forearms",["Forearms","Biceps"],"Barbell",I,[10,15],"Overhand grip, curl the bar up keeping elbows fixed at your sides.","reverse bicep curl"],
+ ["farmers-carry","Farmer's Carry","Forearms",["Forearms","Core"],"Dumbbell",C,[20,40],"Grip a heavy dumbbell in each hand and walk with tall posture; log seconds as reps.","farmer walk"],
+ ["wrist-roller","Wrist Roller","Forearms",["Forearms"],"Other",I,[1,3],"Roll the weight up by twisting the handle, then lower it under control.",""]
 ];
 
 // [region/head, movement pattern, tier]. tier 1 = foundational lift (can anchor a session and should be
@@ -96,21 +107,23 @@ const META={
  'romanian-deadlift':['overall','hinge',1],'lying-leg-curl':['overall','iso',2],'seated-leg-curl':['overall','iso',2],'stiff-leg-deadlift':['overall','hinge',1],'good-morning':['overall','hinge',2],
  'hip-thrust':['overall','hinge',1],'glute-bridge':['overall','iso',3],'cable-kickback':['overall','iso',3],'sumo-deadlift':['overall','hinge',1],
  'standing-calf-raise':['gastro','iso',1],'seated-calf-raise':['soleus','iso',2],
- 'plank':['antiext','iso',2],'hanging-leg-raise':['flexion','iso',1],'cable-crunch':['flexion','iso',2],'russian-twist':['rotation','iso',3],'ab-wheel':['antiext','iso',1],'crunch':['flexion','iso',3]
+ 'plank':['antiext','iso',2],'hanging-leg-raise':['flexion','iso',1],'cable-crunch':['flexion','iso',2],'russian-twist':['rotation','iso',3],'ab-wheel':['antiext','iso',1],'crunch':['flexion','iso',3],
+ 'nordic-curl':['overall','iso',2],'step-up':['overall','lunge',2],'chest-supported-row':['mid','hpull',2],'rack-pull':['lower','hinge',2],'landmine-press':['front','vpush',2],
+ 'wrist-curl':['flexor','iso',1],'reverse-wrist-curl':['extensor','iso',1],'reverse-curl':['extensor','iso',2],'farmers-carry':['grip','iso',1],'wrist-roller':['grip','iso',3]
 };
 
 const EXERCISES=RAW.map(r=>{const m=META[r[0]]||['overall','iso',3];
   return {id:r[0],name:r[1],group:r[2],muscles:r[3],equip:r[4],type:r[5],rr:r[6],instr:r[7],alias:r[8],reg:m[0],pat:m[1],tier:m[2]||3};});
 const EX={}; EXERCISES.forEach(e=>EX[e.id]=e);
-const GROUPS=["Chest","Back","Shoulders","Biceps","Triceps","Quads","Hamstrings","Glutes","Calves","Core"];
+const GROUPS=["Chest","Back","Shoulders","Biceps","Triceps","Forearms","Quads","Hamstrings","Glutes","Calves","Core"];
 
 // Ideal region coverage per muscle group (what a well-rounded session hits)
-const REGIONS={Chest:['upper','mid','lower'],Shoulders:['front','side','rear'],Back:['lats','mid','upper'],Biceps:['long','short','brachialis'],Triceps:['long','lateral'],Quads:['overall'],Hamstrings:['overall'],Glutes:['overall'],Calves:['gastro','soleus'],Core:['flexion','antiext','rotation']};
+const REGIONS={Chest:['upper','mid','lower'],Shoulders:['front','side','rear'],Back:['lats','mid','upper'],Biceps:['long','short','brachialis'],Triceps:['long','lateral'],Forearms:['flexor','extensor'],Quads:['overall'],Hamstrings:['overall'],Glutes:['overall'],Calves:['gastro','soleus'],Core:['flexion','antiext','rotation']};
 // Complementary movement patterns a muscle needs (hamstrings = a hinge AND a knee-flexion curl, etc.)
-const IDEAL_PATS={Chest:['hpush','iso'],Back:['vpull','hpull'],Shoulders:['vpush','iso'],Biceps:['iso'],Triceps:['hpush','iso'],Quads:['squat','lunge','iso'],Hamstrings:['hinge','iso'],Glutes:['hinge','iso'],Calves:['iso'],Core:['iso']};
+const IDEAL_PATS={Chest:['hpush','iso'],Back:['vpull','hpull'],Shoulders:['vpush','iso'],Biceps:['iso'],Triceps:['hpush','iso'],Forearms:['iso'],Quads:['squat','lunge','iso'],Hamstrings:['hinge','iso'],Glutes:['hinge','iso'],Calves:['iso'],Core:['iso']};
 // Systemic demand of a pattern — drives session ordering (big lifts first)
 const PAT_RANK={squat:6,hinge:6,vpush:4,hpush:4,vpull:4,hpull:4,lunge:3,iso:1};
-const EQUIP_LOAD={Barbell:8,Machine:4,Dumbbell:5,Cable:2,Bodyweight:1};
+const EQUIP_LOAD={Barbell:8,Machine:4,Dumbbell:5,Cable:2,Bodyweight:1,Other:1};
 const PUSH_PATS=['hpush','vpush'], PULL_PATS=['hpull','vpull'], LOWER_GROUPS=['Quads','Hamstrings','Glutes','Calves'];
 // Fraction of bodyweight lifted on bodyweight moves (used when a bodyweight is set)
 const BW_FACTOR={'pull-up':1,'chin-up':1,'chest-dip':1,'tricep-dip':1,'push-up':0.65};
@@ -121,6 +134,7 @@ const GROUP_ICON={
  Shoulders:'<circle cx="6" cy="9" r="3"/><circle cx="18" cy="9" r="3"/><path d="M6 12v6M18 12v6"/>',
  Biceps:'<path d="M6 20c0-6 2-9 6-9s6 2 6 6c0 2-2 3-4 3M6 11V5l4 2"/>',
  Triceps:'<path d="M18 20c0-6-2-9-6-9s-6 2-6 6c0 2 2 3 4 3M18 11V5l-4 2"/>',
+ Forearms:'<path d="M9 21V9c0-3 1.5-5 3-5s3 2 3 5v12M6 13h3M15 13h3"/>',
  Quads:'<path d="M8 3v8l-2 10M16 3v8l2 10M8 7h8"/>',
  Hamstrings:'<path d="M8 3v10l2 8M16 3v10l-2 8"/>',
  Glutes:'<path d="M12 4c-4 0-6 3-6 7s2 7 6 7 6-3 6-7-2-7-6-7zM12 4v14"/>',
@@ -130,7 +144,7 @@ const GROUP_ICON={
 function exIcon(g){return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">'+(GROUP_ICON[g]||GROUP_ICON.Core)+'</svg>';}
 
 function regLabel(group,reg){
-  const M={Chest:{upper:'upper chest',mid:'mid chest',lower:'lower chest'},Back:{lats:'lats (vertical pull)',mid:'mid-back',upper:'upper back / rear delts',lower:'lower back'},Shoulders:{front:'front delts',side:'side delts',rear:'rear delts',traps:'traps'},Biceps:{long:'biceps long head',short:'biceps short head',brachialis:'brachialis',overall:'biceps'},Triceps:{long:'triceps long head',lateral:'triceps lateral head'},Quads:{overall:'quads'},Hamstrings:{overall:'hamstrings'},Glutes:{overall:'glutes'},Calves:{gastro:'gastrocnemius (upper calf)',soleus:'soleus (lower calf)'},Core:{flexion:'ab flexion',antiext:'deep core',rotation:'rotational core'}};
+  const M={Chest:{upper:'upper chest',mid:'mid chest',lower:'lower chest'},Back:{lats:'lats (vertical pull)',mid:'mid-back',upper:'upper back / rear delts',lower:'lower back'},Shoulders:{front:'front delts',side:'side delts',rear:'rear delts',traps:'traps'},Biceps:{long:'biceps long head',short:'biceps short head',brachialis:'brachialis',overall:'biceps'},Triceps:{long:'triceps long head',lateral:'triceps lateral head'},Forearms:{flexor:'forearm flexors',extensor:'forearm extensors',grip:'grip strength'},Quads:{overall:'quads'},Hamstrings:{overall:'hamstrings'},Glutes:{overall:'glutes'},Calves:{gastro:'gastrocnemius (upper calf)',soleus:'soleus (lower calf)'},Core:{flexion:'ab flexion',antiext:'deep core',rotation:'rotational core'}};
   return (M[group]&&M[group][reg])||reg;
 }
 function patLabel(p){return {hpush:'horizontal press',vpush:'overhead press',hpull:'row',vpull:'pull-up / pulldown',hinge:'hip hinge',squat:'squat',lunge:'lunge',iso:'isolation'}[p]||p;}

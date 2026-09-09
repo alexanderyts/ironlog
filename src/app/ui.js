@@ -17,6 +17,9 @@ function relDay(ts){const t=startOfDay(Date.now()),d=startOfDay(ts);const diff=M
   if(diff===0)return'Today';if(diff===1)return'Yesterday';if(diff<7)return diff+' days ago';return fmtDate(ts);}
 const volOf=s=>P.sessionVolume(s,bw());
 const setsOf=s=>P.sessionSets(s);
+// A "Volume" stat label, tappable for a one-line explainer (the number itself, e.g. "12,480 lb", has
+// no context otherwise — see ROADMAP-v2 #1).
+function volLabel(label){return `<span data-vol-info style="cursor:pointer">${label||'Volume'} <span class="dim" style="font-weight:400">ⓘ</span></span>`;}
 const completedSessions=()=>state.sessions.filter(s=>s.completed!==false&&s.exercises.length);
 const ICON_BACK='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>';
 function demoURL(id){const e=EX[id];return 'https://www.youtube.com/results?search_query='+encodeURIComponent('how to '+e.name+' proper form technique');}
@@ -93,7 +96,7 @@ function homeView(){
     <div class="statgrid" style="grid-template-columns:1fr 1fr 1fr;margin:16px 0 18px;gap:9px">
       <div class="card stat" style="padding:14px 12px"><div class="k">This wk</div><div class="v mono">${wk.length}</div></div>
       <div class="card stat" style="padding:14px 12px"><div class="k">Streak</div><div class="v mono">${streak}<small>wk</small></div></div>
-      <div class="card stat" style="padding:14px 12px"><div class="k">Volume</div><div class="v mono">${fmtVol(wkVol)}</div></div>
+      <div class="card stat" style="padding:14px 12px"><div class="k">${volLabel()}</div><div class="v mono">${fmtVol(wkVol)}</div></div>
     </div>
     ${state.active?'':`<button class="btn primary block" id="btnStartFlow" style="height:56px;font-size:16px">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg> Start a workout</button>`}
@@ -162,7 +165,7 @@ function editorView(s,mode){
       <h2 style="font-size:23px;margin-top:4px">${new Date(s.date).toLocaleDateString(undefined,{weekday:'long'})}'s session</h2></div>
     <div class="statgrid" style="margin:14px 0 18px">
       <div class="card stat"><div class="k">Working sets</div><div class="v mono">${sets}</div></div>
-      <div class="card stat"><div class="k">Volume</div><div class="v mono">${fmtVol(vol)}<small>${U()}</small></div></div>
+      <div class="card stat"><div class="k">${volLabel()}</div><div class="v mono">${fmtVol(vol)}<small>${U()}</small></div></div>
     </div>
     <div id="logList">${s.exercises.map((e,i)=>logExercise(s,e,i,mode)).join('')||emptyLog()}</div>
     <div style="display:flex;gap:4px;flex-wrap:wrap;margin:0 0 6px">
@@ -291,7 +294,7 @@ function viewProgress(){
     <div class="view-title" style="margin:0 2px 14px;font-size:22px">Progress</div>
     <div class="statgrid">
       <div class="card stat"><div class="k">This week</div><div class="v mono">${wk.length}<small>workouts</small></div></div>
-      <div class="card stat"><div class="k">Week volume</div><div class="v mono">${fmtVol(wkVol)}<small>${U()}</small></div></div>
+      <div class="card stat"><div class="k">${volLabel('Week volume')}</div><div class="v mono">${fmtVol(wkVol)}<small>${U()}</small></div></div>
       <div class="card stat"><div class="k">30-day workouts</div><div class="v mono">${mo.length}</div></div>
       <div class="card stat"><div class="k">Current streak</div><div class="v mono">${P.calcStreak(done,now)}<small>wk</small></div></div>
     </div>
@@ -321,16 +324,34 @@ function balBar(l,lv,r,rv){
   return `<div style="margin-bottom:13px"><div class="row-between" style="font-size:12.5px;margin-bottom:5px"><span style="font-weight:600">${l} <span class="mono dim">${lv}</span></span><span style="font-weight:600"><span class="mono dim">${rv}</span> ${r}</span></div>
     <div style="height:9px;border-radius:5px;overflow:hidden;display:flex;background:var(--surface-2)"><div style="width:${lp}%;background:var(--accent)"></div><div style="flex:1;background:var(--good)"></div></div></div>`;
 }
+// How much longer until Coach's Notes will show program-level verdicts (push/pull balance, legs
+// undertrained, weekly-volume landmarks) — those need real history to mean anything, so a brand-new
+// user sees encouragement here instead of a premature judgment. See analysis.js MIN_COMPARATIVE_*.
+function buildupMessage(a){
+  const remS=Math.max(0,A.MIN_COMPARATIVE_SESSIONS-a.sessions);
+  if(remS>0)return `Log ${remS} more session${remS===1?'':'s'} and I'll start giving you balance and volume feedback.`;
+  if(a.daySpan<A.MIN_COMPARATIVE_DAYS)return `A few more days of training and I'll start giving you balance and volume feedback.`;
+  return `I'll start giving you balance and volume feedback soon.`;
+}
+function tipsCard(tips){
+  const dot={warn:'var(--warn)',good:'var(--good)',info:'var(--ink-3)'};
+  return `<div class="card" style="padding:4px 16px">${tips.map((t,i)=>`<div style="display:flex;gap:11px;padding:12px 0;${i?'border-top:1px solid var(--line)':''}"><span style="width:9px;height:9px;border-radius:50%;background:${dot[t.lv]};flex-shrink:0;margin-top:5px"></span><div style="font-size:13.5px;line-height:1.5">${t.x}</div></div>`).join('')}</div>`;
+}
 function coachCard(done){
   if(!done.length)return '';
   const a=A.analyze(state.sessions,Date.now());
-  if(a.sessions<1)return `<div class="eyebrow" style="margin:24px 2px 10px">Effectiveness</div><div class="card" style="padding:20px;text-align:center"><div class="dim">Train in the last 4 weeks to see your balance analysis and coaching tips.</div></div>`;
   const tips=A.buildTips(a,state.sessions,Date.now(),bw());
-  const dot={warn:'var(--warn)',good:'var(--good)',info:'var(--ink-3)'};
+  if(!a.readyForComparative){
+    // early on: encouragement + whatever per-muscle tips (region/pattern gaps, progression) are
+    // already individually meaningful — no full balance analysis yet, so no "Effectiveness" bars
+    return `<div class="eyebrow" style="margin:24px 2px 10px">Coach's notes</div>
+      <div class="card" style="padding:16px;margin-bottom:${tips.length?'12':'0'}px"><div class="dim" style="font-size:13.5px;line-height:1.5">${buildupMessage(a)}</div></div>
+      ${tips.length?tipsCard(tips):''}`;
+  }
   return `<div class="eyebrow" style="margin:24px 2px 10px">Effectiveness · last 4 weeks</div>
     <div class="card" style="padding:16px 16px 6px">${balBar('Push',a.push,'Pull',a.pull)}${balBar('Upper body',a.upperSets,'Lower body',a.lowerSets)}</div>
     <div class="eyebrow" style="margin:18px 2px 10px">Coach's notes</div>
-    <div class="card" style="padding:4px 16px">${tips.map((t,i)=>`<div style="display:flex;gap:11px;padding:12px 0;${i?'border-top:1px solid var(--line)':''}"><span style="width:9px;height:9px;border-radius:50%;background:${dot[t.lv]};flex-shrink:0;margin-top:5px"></span><div style="font-size:13.5px;line-height:1.5">${t.x}</div></div>`).join('')}</div>`;
+    ${tips.length?tipsCard(tips):`<div class="card" style="padding:20px;text-align:center"><div class="dim">Nothing to flag — your training looks well-rounded right now.</div></div>`}`;
 }
 function muscleBreakdown(mo){
   const arr=A.muscleSetCounts(mo);if(!arr.length)return'';
@@ -650,6 +671,7 @@ function boot(){
   $('#restSkip').addEventListener('click',stopRest);
   $('#restAdd').addEventListener('click',()=>{if(!restState)return;restState.end+=15000;restState.total+=15;$('#restbar').classList.remove('done');if(!restInt)restInt=setInterval(tickRest,300);tickRest();});
   document.addEventListener('pointerdown',unlockAudio);
+  $('#view').addEventListener('click',e=>{if(e.target.closest('[data-vol-info]'))toast('Volume = weight × reps, added up across your working sets');});
   // re-render on cloud changes, but never yank focus from someone typing a weight
   S.onChange(()=>{updateCloud();const a=document.activeElement;if(a&&a.tagName==='INPUT')return;render();});
   applyTheme();setTab('today');S.initCloud();
