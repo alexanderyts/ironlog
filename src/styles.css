@@ -34,21 +34,22 @@ html{touch-action:manipulation}
 html,body{overscroll-behavior-y:contain}
 [hidden]{display:none!important}
 body{
-  /* No min-height here on purpose. This app's real delivery contexts (Claude iOS app WKWebView, an
-     installed standalone PWA) both hit a confirmed, unresolved native WebKit bug (bugs.webkit.org
-     #191872) where env(safe-area-inset-*)/viewport metrics are wrong until an arbitrary point after
-     load — sometimes only correcting once the user visits a tab long enough to actually scroll,
-     confirmed identically in both contexts on real devices. No CSS positioning scheme (sticky,
-     fixed) escapes it, since both anchor to that same broken native viewport concept — both were
-     tried and both still showed a bottom-bar gap on first load. The tab bar (below) is plain normal
-     document flow instead, which has no viewport dependency to get wrong. Forcing body taller than
-     its own content via a viewport-relative min-height would only recreate the same problem one
-     level up (an inaccurate height leaving dead space of OUR OWN background instead of the host's,
-     which looks worse, not better) — so the page is simply exactly as tall as its real content. */
+  /* Flex column + #view flex-grow (below) is what settles the tab bar at the true bottom on short
+     screens — NOT positioning the bar itself. The bar (see .tabbar below) still has zero position
+     rule, so it's still immune to the WebKit viewport-metrics bug (bugs.webkit.org #191872,
+     confirmed on real devices in both the Claude iOS app and an installed standalone PWA — sticky
+     AND fixed both showed a first-load gap there, self-correcting only after the user happened to
+     scroll). min-height here doesn't need to be pixel-perfect for that bug to stay harmless: even
+     if it under-measures, flex-grow just fills whatever space IS correctly available, so the worst
+     case is a small sliver, never the large dead gap a bar floating above unclaimed space produces
+     when nothing pushes it down. */
+  display:flex; flex-direction:column;
+  min-height:100vh; min-height:100dvh;
   background:var(--bg); color:var(--ink);
   font-family:"IBM Plex Sans",system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
   -webkit-font-smoothing:antialiased; line-height:1.5; font-size:14px;
 }
+#view{flex:1 1 auto; width:100%}
 button{font-family:inherit; cursor:pointer; border:none; background:none; color:inherit}
 input,select{font-family:inherit}
 h1,h2,h3{margin:0; text-wrap:balance; font-family:"Archivo",system-ui,sans-serif}
@@ -71,10 +72,11 @@ h1,h2,h3{margin:0; text-wrap:balance; font-family:"Archivo",system-ui,sans-serif
    (WebKit bug 191872: safe-area/viewport metrics wrong until an undeterminable point after load,
    self-correcting only once the user happens to scroll). Every viewport-relative positioning scheme
    shares that same broken reference point, so none of them can be made reliable here. Plain normal
-   document flow has no such dependency — it just follows the content, which is measured locally and
-   correctly regardless of what the engine believes "the viewport" is at that moment. Trade-off: on
-   tabs taller than one screen (Library, Progress) this scrolls out of view instead of staying
-   pinned — a deliberate, confirmed trade for a bar that is simply never wrong. */
+   document flow has no such dependency — it's just the last item in body's flex column, which
+   #view's flex-grow (above) naturally pushes down to the bottom of whatever space is actually
+   available on short screens, without the bar itself ever needing to know where "the viewport" is.
+   Trade-off: on tabs taller than one screen (Library, Progress) this scrolls out of view instead of
+   staying pinned — a deliberate, confirmed trade for a bar that is simply never wrong. */
 .tabbar{background:color-mix(in srgb,var(--surface) 92%,transparent);backdrop-filter:blur(14px);border-top:1px solid var(--line);padding-bottom:var(--safe-b)}
 .tabbar .row{max-width:520px;margin:0 auto;display:grid;grid-template-columns:repeat(4,1fr)}
 .tab{height:64px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:var(--ink-3);font-size:11px;font-weight:600;letter-spacing:.01em}

@@ -5,7 +5,7 @@
 // there is fine and faster. A pure cache-first strategy for everything (the previous approach) meant
 // an installed PWA could get stuck on an old version indefinitely once anything was cached, with no
 // way to notice a new deploy without the user manually clearing site data — this fixes that for good.
-const V='ironlog-0.8.4';
+const V='ironlog-0.8.5';
 const ASSETS=['./','./index.html','./manifest.webmanifest','./icon-192.png','./icon-512.png','./apple-touch-icon.png'];
 self.addEventListener('install',e=>{e.waitUntil(caches.open(V).then(c=>c.addAll(ASSETS)).then(()=>self.skipWaiting()));});
 self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==V).map(k=>caches.delete(k)))).then(()=>self.clients.claim()));});
