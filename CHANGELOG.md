@@ -2,6 +2,12 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.8.1 — 2026-09-09
+Fix for the tab bar still being inconsistent after v0.8.0 (confirmed by real-device screenshots: flush on short tabs like Today/History, a visible gap below it on taller/scrolled tabs like Progress/Library).
+- Root cause, confirmed against WebKit's own bug tracker: `100dvh` is unreliable inside an embedded WKWebView specifically (the Claude iOS app renders Artifacts in one) — WebKit bugs 170595 and 261185 document real, shipped bugs where the viewport-height calculation gets "baked in" at a stale/mid-animation moment and doesn't reliably recompute afterward, unlike stock Safari. Since this app is a single-page app where `<body>` never reloads (only `<main>`'s content swaps between tabs), a stale snapshot from whenever a given tab last happened to reflow could persist indefinitely — explaining why it was tab-dependent rather than uniformly broken.
+- Fix: measure the real visible height directly with `window.visualViewport` (built on more reliable lower-level WebKit machinery than the `dvh` CSS unit) and drive the page's height from that instead — a JS-set `--vvh` custom property, re-synced on every viewport resize/scroll event, on every app render (i.e. every tab switch and in-app navigation), and via a couple of delayed re-checks after load to catch the WKWebView's own native layout still settling after first paint. `100vh`/`100dvh` remain as CSS-only fallbacks for the instant before JS runs.
+- Verified the fix mechanism directly in a live page: setting `--vvh` immediately and correctly cascades through to `body`'s height and the sticky tab bar's position.
+
 ## v0.8.0 — 2026-09-09
 Roadmap v2, Phase 2 — iOS usability pass. Full plan in `ROADMAP-v2.md`.
 - **Fixed:** rapid taps on the weight/rep +/- steppers could trigger iOS Safari's double-tap-to-zoom gesture, zooming the whole page. Added `touch-action: manipulation` document-wide — kills the double-tap-zoom gesture everywhere while still allowing normal panning and pinch-zoom-out for accessibility.

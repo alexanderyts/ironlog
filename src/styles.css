@@ -39,9 +39,12 @@ body{
      auto-hides on scroll — sticky elements follow normal document flow instead of the ambiguous
      "layout viewport vs. visual viewport" fixed-position math that causes the jump. min-height
      (with a plain-vh fallback for engines that don't understand dvh) makes short screens still
-     stretch to the true visible viewport so the bar settles at the real bottom edge every time. */
+     stretch to the true visible viewport so the bar settles at the real bottom edge every time.
+     100dvh alone is NOT enough inside an embedded WKWebView (confirmed WebKit bugs 170595/261185:
+     it can bake in a stale height from mid-toolbar-animation and never recompute) — --vvh is a JS-
+     measured window.visualViewport height kept live by ui.js, and always wins once it's set. */
   display:flex; flex-direction:column;
-  min-height:100vh; min-height:100dvh;
+  min-height:100vh; min-height:100dvh; min-height:var(--vvh,100vh);
   background:var(--bg); color:var(--ink);
   font-family:"IBM Plex Sans",system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
   -webkit-font-smoothing:antialiased; line-height:1.5; font-size:14px;

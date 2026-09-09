@@ -5,6 +5,35 @@ const {EX,EXERCISES,GROUPS,exIcon,C,I}=D;
 const state=S.state;
 const APP_VERSION=CFG.VERSION||'0';
 
+/* ---------------- viewport height (real fix for the sticky tab bar gap) ---------------- */
+// 100dvh is unreliable inside an embedded WKWebView (confirmed: WebKit bugs 170595 and 261185) —
+// it can bake in a stale height from mid-toolbar-animation and never recompute, which is exactly
+// why the gap only showed up on taller/scrolled tabs (Progress, Library) and not short ones (Today,
+// History): same <body>, same CSS rule, but a stale dvh snapshot from whenever that tab last
+// reflowed. window.visualViewport is built on lower-level, more reliable machinery and fires a real
+// event whenever the true visible area changes, so we measure it directly instead of trusting the
+// CSS unit. rAF-debounced per the documented recommended pattern.
+let vvhPending=false;
+function syncViewportHeight(){
+  if(vvhPending)return;vvhPending=true;
+  requestAnimationFrame(()=>{
+    vvhPending=false;
+    const h=(window.visualViewport&&window.visualViewport.height)||window.innerHeight;
+    if(h)document.documentElement.style.setProperty('--vvh',h+'px');
+  });
+}
+syncViewportHeight();
+if(window.visualViewport){window.visualViewport.addEventListener('resize',syncViewportHeight);window.visualViewport.addEventListener('scroll',syncViewportHeight);}
+window.addEventListener('resize',syncViewportHeight);
+window.addEventListener('orientationchange',syncViewportHeight);
+window.addEventListener('pageshow',syncViewportHeight);
+// a WKWebView's own native layout can still be settling after our first paint (its parent view's
+// constraints haven't resolved yet), which can hand JS a wrong initial measurement that no later
+// resize event corrects — a couple of cheap delayed re-checks catch that without depending on any
+// event actually firing.
+setTimeout(syncViewportHeight,150);
+setTimeout(syncViewportHeight,600);
+
 /* ---------------- helpers ---------------- */
 const $=s=>document.querySelector(s);
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
@@ -66,7 +95,7 @@ function render(){
   else if(currentTab==='history')v.innerHTML=viewHistory();
   else if(currentTab==='library')v.innerHTML=viewLibrary();
   else if(currentTab==='progress')v.innerHTML=viewProgress();
-  bind();updateCloud();
+  bind();updateCloud();syncViewportHeight();   // re-measure on every content change — see note above
 }
 // current session being edited on the Today tab (the live workout or a past one)
 const cur=()=>todayScreen==='edit'?editSession:state.active;
