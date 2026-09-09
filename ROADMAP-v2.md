@@ -74,7 +74,7 @@ Grouped by **risk and dependency**, not just difficulty. Bug fixes and self-cont
 **Phase 2 — iOS usability pass (#5)**
 Its own phase because it's cross-cutting CSS/layout touching every screen — worth isolating so any regression is easy to bisect, and worth doing early since it affects literally every session from here on, independent of the smarter-coaching work below.
 
-**Phase 3 — pattern-aware progressive overload (#2)**
+**Phase 3 — pattern-aware progressive overload (#2)** — ✅ shipped v0.9.0 (2026-09-09). Engine: `setPattern` / `nextSets` / `fmtPerf` in `src/engine/progression.js`; the per-exercise "ready / reps short / under range" signal Phase 4 needs is `nextSets(...).short` and `.under`.
 The foundation the next phase builds on: once the app can tell ascending/descending/flat apart and knows whether a specific exercise is progressing, that per-exercise signal is exactly what #3's rotation trigger (stalled lift → prioritize for variation) needs.
 
 **Phase 4 — mesocycle-aware workout building (#3)**
