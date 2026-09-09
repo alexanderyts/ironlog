@@ -2,6 +2,12 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.8.0 — 2026-09-09
+Roadmap v2, Phase 2 — iOS usability pass. Full plan in `ROADMAP-v2.md`.
+- **Fixed:** rapid taps on the weight/rep +/- steppers could trigger iOS Safari's double-tap-to-zoom gesture, zooming the whole page. Added `touch-action: manipulation` document-wide — kills the double-tap-zoom gesture everywhere while still allowing normal panning and pinch-zoom-out for accessibility.
+- **Fixed:** odd rubber-band bounce/reveal at the top and bottom of the screen. Added `overscroll-behavior-y: contain` to the page, plus `overscroll-behavior: contain` on the bottom-sheet's own scroll area so scrolling to the end of a sheet doesn't also start scrolling the page behind it.
+- **Fixed:** the bottom tab bar sat in a different spot depending on which tab you were on. Root cause: it was `position: fixed`, which iOS Safari positions relative to a "layout viewport" that can be taller than what's actually visible while the address bar is showing — a well-known Safari quirk where fixed bottom bars visibly shift as the address bar auto-hides/shows during scroll, so a short tab (address bar stays visible) and a long, scrolled tab (address bar hides) rendered the bar in different places. Rewrote the page as a flex column with the tab bar as `position: sticky` — sticky elements follow normal document flow instead of that ambiguous viewport math, so the bar now settles at the same true bottom edge on every tab, confirmed identical (812px in testing) on both a short empty screen and a long scrolled one, before and after scrolling.
+
 ## v0.7.0 — 2026-09-09
 Roadmap v2, Phase 1 — correctness fixes from first real-world use. Full plan in `ROADMAP-v2.md`.
 - **Fixed:** the "suggested" exercise at the bottom of a workout could recommend a movement from a muscle group not even in your session (e.g. a press suggested on a pull day) — this came from a session-level push/pull "balance" bonus that ignored group membership entirely. Removed it; suggestions are now always restricted to muscle groups already in the workout. Push/pull balance is a multi-week concern and stays in Coach's Notes, where it belongs.
