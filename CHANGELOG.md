@@ -3,6 +3,7 @@
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
 ## v0.8.10 — 2026-09-09
+**Confirmed fixed on device.** The tab bar saga (v0.8.0–v0.8.10, spanning sticky/fixed/flow/dvh positioning attempts, a colour-seam theory, and finally on-device instrumentation) is closed.
 The v0.8.9 launch timeline identified the trigger: `4ms deficit 62 · nudge scroll · nudge meta · touch · tab today` all did nothing; `1413ms tab history → 1449ms deficit 0`. History is the first tab whose content is taller than the 894px launch viewport, i.e. the first time the document becomes scrollable — that is what makes WebKit recompute the viewport. Today is shorter than 894px and never triggers it; a one-frame nudge wasn't long enough for the round trip.
 - **Fix:** in the installed app the document is kept at least `screen.height` tall. In the launch state that makes it 62px taller than the viewport, which triggers the correction within ~40ms of first paint; once corrected the viewport equals the screen so nothing is scrollable and nothing changes. Removed the one-frame scroll/meta nudges.
 - The tab-switch "flicker" was the correction landing (labels appearing); with the correction at boot there is nothing left to land.
