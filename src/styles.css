@@ -34,22 +34,23 @@ html{touch-action:manipulation}
 html,body{overscroll-behavior-y:contain}
 [hidden]{display:none!important}
 body{
-  /* Flex column + the tab bar as a sticky (not fixed) last child is the standard, robust fix for
-     iOS Safari's classic bug where position:fixed bottom bars shift/jump as the address bar
-     auto-hides on scroll — sticky elements follow normal document flow instead of the ambiguous
-     "layout viewport vs. visual viewport" fixed-position math that causes the jump. min-height
-     (with a plain-vh fallback for engines that don't understand dvh) makes short screens still
-     stretch to the true visible viewport so the bar settles at the real bottom edge every time.
-     100dvh alone is NOT enough inside an embedded WKWebView (confirmed WebKit bugs 170595/261185:
-     it can bake in a stale height from mid-toolbar-animation and never recompute) — --vvh is a JS-
-     measured window.visualViewport height kept live by ui.js, and always wins once it's set. */
-  display:flex; flex-direction:column;
+  /* min-height keeps short screens' background filling the true viewport instead of stopping at
+     the content's own height — plain vh/dvh fallbacks first, then --vvh (JS-measured
+     window.visualViewport height, kept live by ui.js) once it's set, for the best value available
+     in whichever engine is rendering. This is cosmetic polish only, NOT what positions the tab bar
+     (see .tabbar below) — deliberately decoupled, because inside an embedded WKWebView (the Claude
+     iOS app's Artifact renderer) neither dvh nor visualViewport can be trusted to be correct at any
+     knowable moment: WebKit bug 191872 documents env(safe-area-inset-*) / viewport metrics staying
+     wrong until an arbitrary, undeterminable point after load — confirmed on-device here as "wrong
+     on every tab until the user happens to visit one long enough to scroll, then correct everywhere
+     from then on." No JS-only trick reliably forces that native correction, so the tab bar's own
+     position must not depend on measuring it at all. */
   min-height:100vh; min-height:100dvh; min-height:var(--vvh,100vh);
   background:var(--bg); color:var(--ink);
   font-family:"IBM Plex Sans",system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
   -webkit-font-smoothing:antialiased; line-height:1.5; font-size:14px;
+  padding-bottom:calc(74px + var(--safe-b));
 }
-#view{flex:1 1 auto; width:100%}
 button{font-family:inherit; cursor:pointer; border:none; background:none; color:inherit}
 input,select{font-family:inherit}
 h1,h2,h3{margin:0; text-wrap:balance; font-family:"Archivo",system-ui,sans-serif}
@@ -65,8 +66,15 @@ h1,h2,h3{margin:0; text-wrap:balance; font-family:"Archivo",system-ui,sans-serif
 .icon-btn:active{background:var(--surface-2)}
 .view-title{font-family:"Archivo";font-weight:800;font-size:15px;letter-spacing:-.01em}
 
-/* Tab bar — sticky (not fixed), the last flex child of body; see the body rule above for why. */
-.tabbar{position:sticky;bottom:0;z-index:30;background:color-mix(in srgb,var(--surface) 92%,transparent);backdrop-filter:blur(14px);border-top:1px solid var(--line);padding-bottom:var(--safe-b)}
+/* Tab bar */
+/* position:fixed, not sticky — deliberately anchored straight to the viewport rather than derived
+   from body/flex height, which is exactly the measurement that's unreliable inside an embedded
+   WKWebView (see the body rule above). Fixed elements aren't affected by that: WebKit tracks their
+   edge independently of the buggy env()/visualViewport timing. The classic "fixed bottom bar jumps
+   as Safari's address bar auto-hides" issue this originally avoided doesn't apply to this app's
+   actual delivery contexts either way — the Claude iOS app's WKWebView and an installed standalone
+   PWA (display:standalone) both have no address bar to begin with. */
+.tabbar{position:fixed;left:0;right:0;bottom:0;z-index:30;background:color-mix(in srgb,var(--surface) 92%,transparent);backdrop-filter:blur(14px);border-top:1px solid var(--line);padding-bottom:var(--safe-b)}
 .tabbar .row{max-width:520px;margin:0 auto;display:grid;grid-template-columns:repeat(4,1fr)}
 .tab{height:64px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:var(--ink-3);font-size:11px;font-weight:600;letter-spacing:.01em}
 .tab svg{width:23px;height:23px}
