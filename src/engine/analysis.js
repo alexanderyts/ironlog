@@ -2,8 +2,8 @@
 var IL=globalThis.IL||(globalThis.IL={});
 if(typeof require==='function'&&!IL.data)require('../data/exercises.js');
 if(typeof require==='function'&&!IL.prog)require('./progression.js');
-const {EX,EXERCISES,REGIONS,IDEAL_PATS,LOWER_GROUPS,regLabel,patLabel,exampleFor}=IL.data;
-const {DAY,startOfDay,e1rm,isWorking,setLoad,sessionVolume}=IL.prog;
+const {EX,EXERCISES,REGIONS,IDEAL_PATS,LOWER_GROUPS,MODES,regLabel,patLabel,exampleFor}=IL.data;
+const {DAY,startOfDay,e1rm,isWorking,setLoad,sessionVolume,modeOf}=IL.prog;
 
 const completed=sessions=>sessions.filter(s=>s.completed!==false&&s.exercises.length);
 
@@ -72,17 +72,19 @@ function buildTips(a,sessions,now,bw){
   if(pr.n>=2)t.push({lv:pr.up>=pr.n/2?'good':'info',x:`Progression: <b>${pr.up}/${pr.n}</b> of your tracked lifts are trending up in estimated strength this month.${pr.up>=pr.n/2?' Keep it going.':' Lean on the +weight suggestions to push the rest.'}`});
   return t.slice(0,5);   // may be empty — the caller owns empty-state copy (it knows WHY: too little history vs. genuinely nothing to flag)
 }
-// Best set per exercise by estimated 1RM
+// Best set per exercise BY MODALITY (a Smith and a dumbbell overhead press are separate PRs) by
+// estimated 1RM. `showEst` is true only for compound lifts done with equipment whose 1RM estimate
+// is meaningful (barbell/smith/bodyweight) — cable/machine stacks show load instead of a bogus 1RM.
 function personalRecords(sessions,bw,limit){
   const best={};
-  completed(sessions).forEach(s=>s.exercises.forEach(e=>e.sets.forEach(st=>{
+  completed(sessions).forEach(s=>s.exercises.forEach(e=>{const mode=modeOf(e);e.sets.forEach(st=>{
     if(!isWorking(st))return;const w=setLoad(e.id,st.w,bw),r=+st.r||0;if(!w||!r)return;
-    const est=e1rm(w,r);
-    const ex=EX[e.id];
-    if(!best[e.id]||est>best[e.id].est)best[e.id]={id:e.id,w:+st.w||0,load:w,r,est,name:ex?ex.name:e.name,date:s.date,compound:!!ex&&ex.type==='compound',bodyweight:!!ex&&ex.equip==='Bodyweight'};
-  })));
-  // compound lifts (where an estimated 1RM means something) first, by e1RM; isolation after, by load
-  return Object.values(best).sort((a,b)=>(b.compound-a.compound)||(a.compound?b.est-a.est:b.load-a.load)).slice(0,limit||8);
+    const est=e1rm(w,r);const ex=EX[e.id];const key=e.id+':'+mode;
+    const showEst=!!ex&&ex.type==='compound'&&!!(MODES[mode]&&MODES[mode].e1rm);
+    if(!best[key]||est>best[key].est)best[key]={id:e.id,mode,w:+st.w||0,load:w,r,est,name:ex?ex.name:e.name,date:s.date,compound:!!ex&&ex.type==='compound',showEst,bodyweight:mode==='bodyweight'};
+  })}));
+  // e1RM-comparable lifts first (by e1RM); the rest after, by load
+  return Object.values(best).sort((a,b)=>(b.showEst-a.showEst)||(a.showEst?b.est-a.est:b.load-a.load)).slice(0,limit||8);
 }
 // Volume per week for the last n weeks (oldest first), weeks starting Sunday
 function weeklyVolumes(sessions,now,bw,n){

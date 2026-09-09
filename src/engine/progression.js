@@ -2,7 +2,12 @@
 // No DOM, no app state: everything takes the sessions array it should look at.
 var IL=globalThis.IL||(globalThis.IL={});
 if(typeof require==='function'&&!IL.data)require('../data/exercises.js');
-const {EX,BW_FACTOR}=IL.data;
+const {EX,BW_FACTOR,EQUIP_MODE,MODES}=IL.data;
+
+// The modality a logged exercise instance was performed with: its explicit `mode`, else derived
+// from the exercise's fixed equipment. Stable for any instance, so mode-less history (and every
+// existing test) resolves to a single consistent mode per exercise id — i.e. no behavior change.
+function modeOf(e){return (e&&e.mode)||EQUIP_MODE[EX[e&&e.id]&&EX[e.id].equip]||'barbell';}
 
 const DAY=86400000;
 function startOfDay(ts){const d=new Date(ts);d.setHours(0,0,0,0);return d.getTime();}
@@ -23,15 +28,27 @@ function fmtVol(v){
   return (v/1000000).toFixed(1)+'M';
 }
 
-// Most recent completed performance of an exercise. opts: {beforeTs, excludeId}
+// Most recent completed performance of an exercise. opts: {beforeTs, excludeId, mode}
+// When `mode` is given, only instances performed with that modality match — so progression compares
+// like-for-like (25 lb dumbbells never chase a 75 lb Smith). Omit mode to match regardless.
 function lastPerf(sessions,exId,opts){
   opts=opts||{};
   for(const s of sessions){
     if(s.completed===false)continue;
     if(opts.beforeTs&&s.date>=opts.beforeTs)continue;
     if(opts.excludeId&&s.id===opts.excludeId)continue;
-    const e=s.exercises.find(x=>x.id===exId&&x.sets.some(isWorking));
-    if(e)return{date:s.date,sets:e.sets.filter(isWorking).map(st=>({w:+st.w||0,r:+st.r||0}))};
+    const e=s.exercises.find(x=>x.id===exId&&(!opts.mode||modeOf(x)===opts.mode)&&x.sets.some(isWorking));
+    if(e)return{date:s.date,mode:modeOf(e),sets:e.sets.filter(isWorking).map(st=>({w:+st.w||0,r:+st.r||0}))};
+  }
+  return null;
+}
+// The modality used the last time this exercise was logged (for "remembering" the user's choice);
+// null if it's never been logged or was logged in its default mode.
+function lastModeFor(sessions,exId){
+  for(const s of sessions||[]){
+    if(s.completed===false)continue;
+    const e=s.exercises.find(x=>x.id===exId);
+    if(e)return e.mode||null;
   }
   return null;
 }
@@ -108,7 +125,7 @@ function nextSets(last,ex,unit){
 // 'weight' means the prescription (`next`) already carries the bump; the text explains it.
 function suggestion(sessions,exId,opts){
   opts=opts||{};const unit=opts.unit||'lb';
-  const lp=lastPerf(sessions,exId,{beforeTs:opts.activeDate,excludeId:opts.activeId});
+  const lp=lastPerf(sessions,exId,{beforeTs:opts.activeDate,excludeId:opts.activeId,mode:opts.mode});
   const ex=EX[exId];
   if(!lp||!lp.sets.length)return{lp:null,kind:'new',text:'First time logging this — set your baseline.',next:null};
   const n=nextSets(lp.sets,ex,unit),setsStr=fmtPerf(lp.sets,unit),inc=unitIncrement(unit);
@@ -149,5 +166,5 @@ function calcStreak(sessions,now){
   return n;
 }
 
-IL.prog={DAY,startOfDay,e1rm,isWorking,setLoad,sessionVolume,sessionSets,fmtVol,lastPerf,setPattern,fmtPerf,nextSets,suggestion,unitIncrement,convertWeight,convertSessions,calcStreak};
+IL.prog={DAY,startOfDay,e1rm,isWorking,setLoad,sessionVolume,sessionSets,fmtVol,modeOf,lastPerf,lastModeFor,setPattern,fmtPerf,nextSets,suggestion,unitIncrement,convertWeight,convertSessions,calcStreak};
 if(typeof module!=='undefined')module.exports=IL.prog;

@@ -193,6 +193,11 @@ html.standalone .tabbar{bottom:auto;top:calc(var(--screen-h,100vh) - var(--tab-h
 .sugg.match{background:var(--surface-2);color:var(--ink-2)}
 .sugg .lastp{font-family:"IBM Plex Mono";font-weight:600}
 .sugg .apply{margin-left:auto;background:var(--accent);color:var(--accent-ink);height:30px;padding:0 12px;border-radius:9px;font-weight:600;font-size:12.5px;flex-shrink:0}
+.modechip{margin:0 12px 10px;padding:4px 11px;border-radius:9px;background:var(--surface-2);color:var(--ink-2);font-size:12px;font-weight:600;display:inline-flex;align-items:center;gap:4px}
+.modechip:active{background:var(--accent-soft);color:var(--accent)}
+.modelist{display:flex;flex-direction:column;gap:2px}
+.modeopt{display:flex;align-items:center;gap:10px;text-align:left;padding:12px 12px;border-radius:12px}
+.modeopt.on{background:var(--accent-soft)}
 
 /* Stats */
 .statgrid{display:grid;grid-template-columns:1fr 1fr;gap:11px}
@@ -357,8 +362,8 @@ html.standalone .tabbar{bottom:auto;top:calc(var(--screen-h,100vh) - var(--tab-h
 </div>
 
 <script>
-/* Ironlog v0.11.0 · site build · 2026-09-09T17:45:45.445Z */
-var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.11.0",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
+/* Ironlog v0.12.0 · site build · 2026-09-09T17:57:47.955Z */
+var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.12.0",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
 
 /* ===== src/data/exercises.js ===== */
 (function(){'use strict';
@@ -488,6 +493,28 @@ const IDEAL_PATS={Chest:['hpush','iso'],Back:['vpull','hpull'],Shoulders:['vpush
 // Systemic demand of a pattern — drives session ordering (big lifts first)
 const PAT_RANK={squat:6,hinge:6,vpush:4,hpush:4,vpull:4,hpull:4,lunge:3,iso:1};
 const EQUIP_LOAD={Barbell:8,Machine:4,Dumbbell:5,Cable:2,Bodyweight:1,Other:1};
+
+/* ── Equipment modality ──────────────────────────────────────────────────────────────────────────
+   The same movement done with different equipment is a different thing to track: an overhead press
+   is 25 lb/hand with dumbbells but 75 on a Smith machine, and progressive overload is only valid
+   like-for-like. `mode` is an OPTIONAL tag on a logged exercise instance; when absent it's derived
+   from the exercise's fixed `equip` (EQUIP_MODE), so all existing history reads correctly with no
+   migration and the engine's default behavior is unchanged. Progression and PRs compare within
+   (id, mode); the weight field labels itself per mode (perHand → "per dumbbell"); e1rm=false marks
+   loads whose estimated 1RM isn't comparable to a free-weight 1RM (cable/machine stacks), so the PR
+   board shows load, not a bogus 1RM. NOTE: equipment-normalized VOLUME (e.g. dumbbell ×2) is
+   deliberately NOT applied here — doing so would retroactively change historical PR/volume numbers
+   and is ambiguous for unilateral work; it's left for an explicit future opt-in. */
+const MODES={
+ barbell:{label:'Barbell',perHand:false,e1rm:true},
+ dumbbell:{label:'Dumbbell',perHand:true,e1rm:true},
+ smith:{label:'Smith machine',perHand:false,e1rm:true},
+ machine:{label:'Machine',perHand:false,e1rm:false},
+ cable:{label:'Cable',perHand:false,e1rm:false},
+ bodyweight:{label:'Bodyweight',perHand:false,e1rm:true}
+};
+const MODE_ORDER=['barbell','dumbbell','smith','machine','cable','bodyweight'];
+const EQUIP_MODE={Barbell:'barbell',Dumbbell:'dumbbell',Machine:'machine',Cable:'cable',Bodyweight:'bodyweight',Other:'machine'};
 const PUSH_PATS=['hpush','vpush'], PULL_PATS=['hpull','vpull'], LOWER_GROUPS=['Quads','Hamstrings','Glutes','Calves'];
 // Fraction of bodyweight lifted on bodyweight moves (used when a bodyweight is set)
 const BW_FACTOR={'pull-up':1,'chin-up':1,'chest-dip':1,'tricep-dip':1,'push-up':0.65};
@@ -515,7 +542,7 @@ function patLabel(p){return {hpush:'horizontal press',vpush:'overhead press',hpu
 function exampleFor(group,reg){const e=EXERCISES.find(x=>x.group===group&&x.reg===reg&&x.type===C)||EXERCISES.find(x=>x.group===group&&x.reg===reg);return e?e.name:null;}
 function hashId(s){let h=0;for(let i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))>>>0;return h;}
 
-IL.data={C,I,EXERCISES,EX,GROUPS,META,REGIONS,IDEAL_PATS,PAT_RANK,EQUIP_LOAD,PUSH_PATS,PULL_PATS,LOWER_GROUPS,BW_FACTOR,GROUP_ICON,exIcon,regLabel,patLabel,exampleFor,hashId};
+IL.data={C,I,EXERCISES,EX,GROUPS,META,REGIONS,IDEAL_PATS,PAT_RANK,EQUIP_LOAD,MODES,MODE_ORDER,EQUIP_MODE,PUSH_PATS,PULL_PATS,LOWER_GROUPS,BW_FACTOR,GROUP_ICON,exIcon,regLabel,patLabel,exampleFor,hashId};
 
 })();
 
@@ -525,7 +552,12 @@ IL.data={C,I,EXERCISES,EX,GROUPS,META,REGIONS,IDEAL_PATS,PAT_RANK,EQUIP_LOAD,PUS
 // No DOM, no app state: everything takes the sessions array it should look at.
 var IL=globalThis.IL||(globalThis.IL={});
 if(typeof require==='function'&&!IL.data)require('../data/exercises.js');
-const {EX,BW_FACTOR}=IL.data;
+const {EX,BW_FACTOR,EQUIP_MODE,MODES}=IL.data;
+
+// The modality a logged exercise instance was performed with: its explicit `mode`, else derived
+// from the exercise's fixed equipment. Stable for any instance, so mode-less history (and every
+// existing test) resolves to a single consistent mode per exercise id — i.e. no behavior change.
+function modeOf(e){return (e&&e.mode)||EQUIP_MODE[EX[e&&e.id]&&EX[e.id].equip]||'barbell';}
 
 const DAY=86400000;
 function startOfDay(ts){const d=new Date(ts);d.setHours(0,0,0,0);return d.getTime();}
@@ -546,15 +578,27 @@ function fmtVol(v){
   return (v/1000000).toFixed(1)+'M';
 }
 
-// Most recent completed performance of an exercise. opts: {beforeTs, excludeId}
+// Most recent completed performance of an exercise. opts: {beforeTs, excludeId, mode}
+// When `mode` is given, only instances performed with that modality match — so progression compares
+// like-for-like (25 lb dumbbells never chase a 75 lb Smith). Omit mode to match regardless.
 function lastPerf(sessions,exId,opts){
   opts=opts||{};
   for(const s of sessions){
     if(s.completed===false)continue;
     if(opts.beforeTs&&s.date>=opts.beforeTs)continue;
     if(opts.excludeId&&s.id===opts.excludeId)continue;
-    const e=s.exercises.find(x=>x.id===exId&&x.sets.some(isWorking));
-    if(e)return{date:s.date,sets:e.sets.filter(isWorking).map(st=>({w:+st.w||0,r:+st.r||0}))};
+    const e=s.exercises.find(x=>x.id===exId&&(!opts.mode||modeOf(x)===opts.mode)&&x.sets.some(isWorking));
+    if(e)return{date:s.date,mode:modeOf(e),sets:e.sets.filter(isWorking).map(st=>({w:+st.w||0,r:+st.r||0}))};
+  }
+  return null;
+}
+// The modality used the last time this exercise was logged (for "remembering" the user's choice);
+// null if it's never been logged or was logged in its default mode.
+function lastModeFor(sessions,exId){
+  for(const s of sessions||[]){
+    if(s.completed===false)continue;
+    const e=s.exercises.find(x=>x.id===exId);
+    if(e)return e.mode||null;
   }
   return null;
 }
@@ -631,7 +675,7 @@ function nextSets(last,ex,unit){
 // 'weight' means the prescription (`next`) already carries the bump; the text explains it.
 function suggestion(sessions,exId,opts){
   opts=opts||{};const unit=opts.unit||'lb';
-  const lp=lastPerf(sessions,exId,{beforeTs:opts.activeDate,excludeId:opts.activeId});
+  const lp=lastPerf(sessions,exId,{beforeTs:opts.activeDate,excludeId:opts.activeId,mode:opts.mode});
   const ex=EX[exId];
   if(!lp||!lp.sets.length)return{lp:null,kind:'new',text:'First time logging this — set your baseline.',next:null};
   const n=nextSets(lp.sets,ex,unit),setsStr=fmtPerf(lp.sets,unit),inc=unitIncrement(unit);
@@ -672,7 +716,7 @@ function calcStreak(sessions,now){
   return n;
 }
 
-IL.prog={DAY,startOfDay,e1rm,isWorking,setLoad,sessionVolume,sessionSets,fmtVol,lastPerf,setPattern,fmtPerf,nextSets,suggestion,unitIncrement,convertWeight,convertSessions,calcStreak};
+IL.prog={DAY,startOfDay,e1rm,isWorking,setLoad,sessionVolume,sessionSets,fmtVol,modeOf,lastPerf,lastModeFor,setPattern,fmtPerf,nextSets,suggestion,unitIncrement,convertWeight,convertSessions,calcStreak};
 if(typeof module!=='undefined')module.exports=IL.prog;
 
 })();
@@ -713,18 +757,22 @@ var IL=globalThis.IL||(globalThis.IL={});
 if(typeof require==='function'&&!IL.data)require('../data/exercises.js');
 if(typeof require==='function'&&!IL.prog)require('./progression.js');
 const {C,I,EXERCISES,EX,REGIONS,IDEAL_PATS,PAT_RANK,EQUIP_LOAD,regLabel,patLabel,hashId}=IL.data;
-const {lastPerf,nextSets}=IL.prog;
+const {lastPerf,lastModeFor,nextSets,modeOf}=IL.prog;
 
 // Working sets a movement deserves when you've never logged it: main lifts 4, other compounds 3,
 // isolation 3, finishers 2. Reps prefilled at the bottom of the target range.
 function prescribedSets(ex){if(!ex)return 3;if(ex.type===C)return ex.tier===1?4:3;return ex.tier===3?2:3;}
 // With history, the sets are seeded with the pattern-aware progressive-overload prescription
-// (see nextSets in progression.js), not a stale copy of last time.
+// (see nextSets in progression.js), not a stale copy of last time. The modality the user last
+// performed this exercise with is remembered and carried onto the new instance, and the seed pulls
+// from that modality's history so the prescription is like-for-like.
 function seedExercise(id,sessions,excludeId,unit){
-  const ex=EX[id];const lp=lastPerf(sessions||[],id,{excludeId});
-  if(lp&&lp.sets.length)return{id,name:ex?ex.name:id,sets:nextSets(lp.sets,ex,unit).sets.map(s=>({w:s.w,r:s.r,done:false}))};
+  const ex=EX[id];const mode=lastModeFor(sessions,id);
+  const inst={id,name:ex?ex.name:id};if(mode)inst.mode=mode;
+  const lp=lastPerf(sessions||[],id,{excludeId,mode:mode||undefined});
+  if(lp&&lp.sets.length){inst.sets=nextSets(lp.sets,ex,unit).sets.map(s=>({w:s.w,r:s.r,done:false}));return inst;}
   const n=prescribedSets(ex),r=ex?ex.rr[0]:'';
-  return{id,name:ex?ex.name:id,sets:Array.from({length:n},()=>({w:'',r:r,done:false}))};
+  inst.sets=Array.from({length:n},()=>({w:'',r:r,done:false}));return inst;
 }
 // Exercise ids from the most recent completed session that trained this group
 function lastSessionIds(sessions,g){
@@ -898,17 +946,18 @@ function exerciseStreak(sessions,exId){
   }
   return n;
 }
-// Best e1RM (or reps for weightless work) of the last three performances, newest first
-function recentScores(sessions,exId,n){
+// Best e1RM (or reps for weightless work) of the last three performances, newest first. Mode-scoped
+// so alternating equipment doesn't produce a meaningless e1RM sequence.
+function recentScores(sessions,exId,n,mode){
   const out=[];let before;
   for(let i=0;i<(n||3);i++){
-    const lp=lastPerf(sessions,exId,{beforeTs:before});if(!lp)break;
+    const lp=lastPerf(sessions,exId,{beforeTs:before,mode});if(!lp)break;
     out.push(Math.max(...lp.sets.map(s=>s.w>0?e1rm(s.w,s.r):s.r)));before=lp.date;
   }
   return out;
 }
-function isStalled(sessions,exId){const sc=recentScores(sessions,exId,3);return sc.length>=3&&sc[0]<=sc[1]&&sc[1]<=sc[2];}
-function isProgressing(sessions,exId){const lp=lastPerf(sessions,exId);return !!lp&&prescribe(lp.sets,EX[exId],'lb').bumped;}
+function isStalled(sessions,exId,mode){const sc=recentScores(sessions,exId,3,mode);return sc.length>=3&&sc[0]<=sc[1]&&sc[1]<=sc[2];}
+function isProgressing(sessions,exId,mode){const lp=lastPerf(sessions,exId,{mode});return !!lp&&prescribe(lp.sets,EX[exId],'lb').bumped;}
 function planAnchor(ids,g){
   const c=ids.map(id=>EX[id]).filter(e=>e&&e.group===g&&e.tier===1&&(IDEAL_PATS[g]||[]).indexOf(e.pat)>=0);
   return c.sort((a,b)=>perfPriority(b)-perfPriority(a))[0]||null;
@@ -928,9 +977,10 @@ function planWorkout(groups,sessions,seed,opts){
   const plan=opts.fresh?null:findPlan(groups,sessions,opts.now);
   if(!plan)return{ids:buildRecommendation(groups,sessions,seed),mode:'fresh',plan:null,rotation:null,streak:0};
   let ids=plan.exercises.map(e=>e.id).filter(id=>EX[id]);
+  const modeById={};plan.exercises.forEach(e=>{if(EX[e.id])modeById[e.id]=modeOf(e);});
   const anchors=new Set(groups.map(g=>planAnchor(ids,g)).filter(Boolean).map(e=>e.id));
   const cands=ids.filter(id=>!anchors.has(id)).map(id=>{
-    const streak=exerciseStreak(sessions,id),stalled=isStalled(sessions,id),progressing=isProgressing(sessions,id);
+    const m=modeById[id],streak=exerciseStreak(sessions,id),stalled=isStalled(sessions,id,m),progressing=isProgressing(sessions,id,m);
     const stale=streak>=ROTATE_HARD||(streak>=ROTATE_AFTER&&!progressing);
     return{id,streak,pri:stalled?2:stale?1:0};
   }).filter(c=>c.pri>0).sort((a,b)=>b.pri-a.pri||b.streak-a.streak);
@@ -955,8 +1005,8 @@ if(typeof module!=='undefined')module.exports=IL.builder;
 var IL=globalThis.IL||(globalThis.IL={});
 if(typeof require==='function'&&!IL.data)require('../data/exercises.js');
 if(typeof require==='function'&&!IL.prog)require('./progression.js');
-const {EX,EXERCISES,REGIONS,IDEAL_PATS,LOWER_GROUPS,regLabel,patLabel,exampleFor}=IL.data;
-const {DAY,startOfDay,e1rm,isWorking,setLoad,sessionVolume}=IL.prog;
+const {EX,EXERCISES,REGIONS,IDEAL_PATS,LOWER_GROUPS,MODES,regLabel,patLabel,exampleFor}=IL.data;
+const {DAY,startOfDay,e1rm,isWorking,setLoad,sessionVolume,modeOf}=IL.prog;
 
 const completed=sessions=>sessions.filter(s=>s.completed!==false&&s.exercises.length);
 
@@ -1025,17 +1075,19 @@ function buildTips(a,sessions,now,bw){
   if(pr.n>=2)t.push({lv:pr.up>=pr.n/2?'good':'info',x:`Progression: <b>${pr.up}/${pr.n}</b> of your tracked lifts are trending up in estimated strength this month.${pr.up>=pr.n/2?' Keep it going.':' Lean on the +weight suggestions to push the rest.'}`});
   return t.slice(0,5);   // may be empty — the caller owns empty-state copy (it knows WHY: too little history vs. genuinely nothing to flag)
 }
-// Best set per exercise by estimated 1RM
+// Best set per exercise BY MODALITY (a Smith and a dumbbell overhead press are separate PRs) by
+// estimated 1RM. `showEst` is true only for compound lifts done with equipment whose 1RM estimate
+// is meaningful (barbell/smith/bodyweight) — cable/machine stacks show load instead of a bogus 1RM.
 function personalRecords(sessions,bw,limit){
   const best={};
-  completed(sessions).forEach(s=>s.exercises.forEach(e=>e.sets.forEach(st=>{
+  completed(sessions).forEach(s=>s.exercises.forEach(e=>{const mode=modeOf(e);e.sets.forEach(st=>{
     if(!isWorking(st))return;const w=setLoad(e.id,st.w,bw),r=+st.r||0;if(!w||!r)return;
-    const est=e1rm(w,r);
-    const ex=EX[e.id];
-    if(!best[e.id]||est>best[e.id].est)best[e.id]={id:e.id,w:+st.w||0,load:w,r,est,name:ex?ex.name:e.name,date:s.date,compound:!!ex&&ex.type==='compound',bodyweight:!!ex&&ex.equip==='Bodyweight'};
-  })));
-  // compound lifts (where an estimated 1RM means something) first, by e1RM; isolation after, by load
-  return Object.values(best).sort((a,b)=>(b.compound-a.compound)||(a.compound?b.est-a.est:b.load-a.load)).slice(0,limit||8);
+    const est=e1rm(w,r);const ex=EX[e.id];const key=e.id+':'+mode;
+    const showEst=!!ex&&ex.type==='compound'&&!!(MODES[mode]&&MODES[mode].e1rm);
+    if(!best[key]||est>best[key].est)best[key]={id:e.id,mode,w:+st.w||0,load:w,r,est,name:ex?ex.name:e.name,date:s.date,compound:!!ex&&ex.type==='compound',showEst,bodyweight:mode==='bodyweight'};
+  })}));
+  // e1RM-comparable lifts first (by e1RM); the rest after, by load
+  return Object.values(best).sort((a,b)=>(b.showEst-a.showEst)||(a.showEst?b.est-a.est:b.load-a.load)).slice(0,limit||8);
 }
 // Volume per week for the last n weeks (oldest first), weeks starting Sunday
 function weeklyVolumes(sessions,now,bw,n){
@@ -1410,7 +1462,8 @@ IL.store={state,LS,uid,saveSessions,saveActive,saveSettings,saveRoutines,saveDir
 // Views, interactions, rest timer and boot. Everything that touches the DOM lives here.
 var IL=globalThis.IL||(globalThis.IL={});
 const CFG=IL.config||{},D=IL.data,P=IL.prog,B=IL.builder,A=IL.analysis,S=IL.store,SR=IL.search,DBX=IL.dropbox;
-const {EX,EXERCISES,GROUPS,exIcon,C,I}=D;
+const {EX,EXERCISES,GROUPS,exIcon,C,I,MODES,MODE_ORDER,EQUIP_MODE}=D;
+const modeOf=P.modeOf;
 const state=S.state;
 const APP_VERSION=CFG.VERSION||'0';
 
@@ -1574,6 +1627,20 @@ function recentTemplates(){
 const SCHEMA=1;
 function newSession(exIds){return{id:S.uid(),schema:SCHEMA,date:Date.now(),updatedAt:Date.now(),completed:false,exercises:(exIds||[]).map(id=>B.seedExercise(id,state.sessions,null,U()))};}
 function startSession(exIds,msg){S.setActive(newSession(exIds));todayScreen='active';render();if(msg)toast(msg);}
+// Equipment picker for a logged exercise. Changing it re-scopes progression/PRs to that modality
+// (see modeOf/lastPerf); entered sets are kept (you're relabelling how it was done, not clearing it).
+// The choice is stored only when it differs from the exercise's native equipment, so data stays clean.
+function openModePicker(ei){
+  const t=cur();if(!t||!t.exercises[ei])return;const ex=t.exercises[ei];const native=EX[ex.id]?EQUIP_MODE[EX[ex.id].equip]:'barbell';const curMode=modeOf(ex);
+  openSheet('How did you do it?',`<div class="dim" style="font-size:13px;margin:-4px 2px 14px">Progress and PRs are tracked separately for each — a Smith press won’t be compared to dumbbells.</div>
+    <div class="modelist">${MODE_ORDER.map(m=>`<button class="ex-row modeopt ${m===curMode?'on':''}" data-pickmode="${m}">
+      <div style="flex:1;min-width:0"><div class="ex-name">${esc(MODES[m].label)}${m===native?' <span class="dim" style="font-weight:400;font-size:11px">· default</span>':''}</div>
+      <div class="ex-sub">${MODES[m].perHand?'Enter the weight of one dumbbell':MODES[m].e1rm?'Free-weight loading':'Stack / cable — shown as load, not a 1RM'}</div></div>
+      ${m===curMode?'<span style="color:var(--accent);font-size:18px">✓</span>':''}</button>`).join('')}</div>`);
+  $('#sheetBody').querySelectorAll('[data-pickmode]').forEach(b=>b.addEventListener('click',()=>{
+    const m=b.dataset.pickmode;if(m===native)delete ex.mode;else ex.mode=m;
+    persistCur();closeSheet();render();toast(MODES[m].label);}));
+}
 function buildAndStart(fresh){
   const p=B.planWorkout([...pickedGroups],state.sessions,null,{fresh});pickedGroups.clear();
   let msg='Workout built — adjust anything';
@@ -1616,14 +1683,15 @@ function topSuggestionHTML(){
     <span style="text-align:left;min-width:0"><span style="font-weight:700;display:block">Suggested: ${esc(EX[s.id].name)}</span><span class="dim" style="font-size:12.5px">${esc(s.why)}</span></span></button>`;
 }
 function logExercise(s,e,ei,mode){
-  const ex=EX[e.id];let sugg='';
+  const ex=EX[e.id];let sugg='';const emode=modeOf(e);
   if(mode==='active'){
-    const sg=P.suggestion(state.sessions,e.id,{unit:U(),activeDate:s.date,activeId:s.id});
+    const sg=P.suggestion(state.sessions,e.id,{unit:U(),activeDate:s.date,activeId:s.id,mode:emode});
     if(sg.lp){const w=sg.kind==='weight';
       // The prescription is already in the set rows; offer a one-tap revert until a set is done
       const canRevert=w&&!e.sets.some(st=>st.done);
       sugg=`<div class="sugg ${w?'':'match'}"><span>${w?'💪 ':''}${esc(sg.text)} · <span class="lastp">last: ${esc(sg.setsStr)}</span></span>${canRevert?`<button class="apply" data-keepw="${ei}">Keep last</button>`:''}</div>`;}
   }
+  const whdr=(U()==='kg'?'Kg':'Lb')+(MODES[emode]&&MODES[emode].perHand?' ea':'');
   return `<div class="card log-ex" data-ei="${ei}">
     <div class="log-ex-head">
       <div class="ex-ic">${exIcon(ex?ex.group:'Core')}</div>
@@ -1631,9 +1699,10 @@ function logExercise(s,e,ei,mode){
         <div class="ex-sub">${ex?ex.muscles.join(' · '):''} · target ${ex?ex.rr[0]+'–'+ex.rr[1]:'8–12'} reps</div></button>
       <button class="sheet-x" data-delex="${ei}" aria-label="Remove exercise">✕</button>
     </div>
+    <button class="modechip" data-mode="${ei}" aria-label="Change equipment">${esc(MODES[emode]?MODES[emode].label:emode)} ▾</button>
     ${sugg}
     <div class="setgrid">
-      <div class="set-hdr"><div>Set</div><div>${U()==='kg'?'Kg':'Lb'}</div><div>Reps</div><div></div></div>
+      <div class="set-hdr"><div>Set</div><div>${whdr}</div><div>Reps</div><div></div></div>
       ${e.sets.map((st,si)=>setRow(st,ei,si)).join('')}
     </div>
     <div class="set-actions">
@@ -1744,10 +1813,13 @@ function volumeChart(){
 function prList(){
   const arr=A.personalRecords(state.sessions,bw(),8);
   if(!arr.length)return`<div style="padding:22px;text-align:center" class="dim">Log a few sets and your PRs show up here.</div>`;
-  const setStr=p=>p.bodyweight?(p.w?'Bodyweight +'+p.w+U():'Bodyweight')+' × '+p.r:p.w+U()+' × '+p.r;
-  return arr.map(p=>`<div class="ex-row"><div style="flex:1;min-width:0"><div class="ex-name">${esc(p.name)}</div>
+  const setStr=p=>p.bodyweight?(p.w?'Bodyweight +'+p.w+U():'Bodyweight')+' × '+p.r:p.w+U()+(MODES[p.mode]&&MODES[p.mode].perHand?'/hand':'')+' × '+p.r;
+  // show the modality only when it isn't the exercise's native equipment (so a Smith/cable variant
+  // is distinguishable from the default; ordinary PRs stay uncluttered)
+  const modeTag=p=>{const ex=EX[p.id];const native=ex&&EQUIP_MODE[ex.equip];return p.mode&&p.mode!==native?` <span class="pill" style="font-size:10px;padding:1px 7px">${esc(MODES[p.mode].label)}</span>`:'';};
+  return arr.map(p=>`<div class="ex-row"><div style="flex:1;min-width:0"><div class="ex-name">${esc(p.name)}${modeTag(p)}</div>
     <div class="ex-sub">Best set ${setStr(p)}</div></div>
-    <div style="text-align:right">${p.compound?`<div class="mono" style="font-weight:700;font-size:16px">${p.est}<span class="dim" style="font-size:11px"> ${U()} e1RM</span></div>`:`<div class="mono dim" style="font-weight:600;font-size:13px">${p.load}${U()}</div>`}</div></div>`).join('');
+    <div style="text-align:right">${p.showEst?`<div class="mono" style="font-weight:700;font-size:16px">${p.est}<span class="dim" style="font-size:11px"> ${U()} e1RM</span></div>`:`<div class="mono dim" style="font-weight:600;font-size:13px">${p.load}${U()}</div>`}</div></div>`).join('');
 }
 function balBar(l,lv,r,rv){
   const total=lv+rv||1,lp=Math.round(lv/total*100);
@@ -2126,8 +2198,9 @@ function bindLog(root){
       if(sets[idx].done)showConfirm('Remove last set?','That set is marked done — remove it anyway?','Remove',doRemove);else doRemove();return;}
     const del=e.target.closest('[data-delex]');if(del){const ei=+del.dataset.delex;const removed=t.exercises.splice(ei,1)[0];persistCur();render();
       toast(removed.name+' removed',{label:'Undo',fn:()=>{const c=cur();if(c){c.exercises.splice(ei,0,removed);persistCur();render();}}});return;}
-    const kw=e.target.closest('[data-keepw]');if(kw){const ei=+kw.dataset.keepw;const ex=t.exercises[ei];const lp=P.lastPerf(state.sessions,ex.id,{beforeTs:t.date,excludeId:t.id});
+    const kw=e.target.closest('[data-keepw]');if(kw){const ei=+kw.dataset.keepw;const ex=t.exercises[ei];const lp=P.lastPerf(state.sessions,ex.id,{beforeTs:t.date,excludeId:t.id,mode:modeOf(ex)});
       if(lp)ex.sets=lp.sets.map(s=>({w:s.w,r:s.r,done:false}));persistCur();render();toast('Using last time’s weights');return;}
+    const mc=e.target.closest('[data-mode]');if(mc){openModePicker(+mc.dataset.mode);return;}
     const oe=e.target.closest('[data-openex]');if(oe){openSheet(EX[oe.dataset.openex].name,exerciseDetail(oe.dataset.openex));return;}
   });
   root.addEventListener('input',e=>{const inp=e.target.closest('input[data-f]');if(!inp)return;const t=cur();if(!t)return;

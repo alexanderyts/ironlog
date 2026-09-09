@@ -2,6 +2,15 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.12.0 — 2026-09-09 · Equipment modality (Roadmap v3, Phase 2)
+The same movement done with different equipment is now tracked correctly — an overhead press at 25 lb/hand with dumbbells is never compared to 75 on a Smith machine.
+- **A modality chip** (`Barbell ▾`) on each logged exercise opens a six-way picker (barbell · dumbbell · smith · machine · cable · bodyweight). It defaults to the exercise's natural equipment and is **remembered** from last time, so the common case (always barbell bench) never shows a decision — invisible until you need it.
+- **Progression is scoped to (id, mode):** `lastPerf` / `suggestion` / `nextSets` / stall & progress detection / `planWorkout` / PRs all compare like-for-like. Switch to dumbbells and the "last time" line, prefill and +weight suggestion all follow your dumbbell history, not the barbell one.
+- **Weight entry is unambiguous:** in dumbbell mode the weight column reads "Lb ea" and the picker says "enter the weight of one dumbbell."
+- **PRs are per-modality** and tagged with the equipment when it isn't the default; cable/machine stacks show **load, not a bogus 1RM** (`e1rm=false`), while barbell/smith/bodyweight keep the e1RM estimate.
+- **Optional and inert by default:** `mode` is only stored when it differs from the exercise's native equipment; all existing history derives its mode from `equip` at read time — no migration, and the 47 prior tests pass untouched (52 total now).
+- **Deliberately deferred:** equipment-normalized *volume* (e.g. counting a dumbbell as ×2). Applying it would retroactively rewrite historical PR/volume numbers and is ambiguous for one-arm work — it's left for an explicit future opt-in rather than silently changing what you've already logged.
+
 ## v0.11.0 — 2026-09-09 · Remove sets (Roadmap v3, Phase 1)
 - A **"－ Remove set"** action appears next to "＋ Add set" whenever an exercise has more than one set, and removes the last set — the exact mirror of Add. Chosen over a per-row ✕ because the set-row grid (34px / 1fr / 1fr / 44px) already leaves the +/− steppers little room on a 375px phone; a fifth column would cramp the number fields. Swipe-to-delete was rejected too — it fights the iOS back-gesture on the installed PWA.
 - Confirms before removing a set that's already checked done; removes an undone set immediately. **Undo** restores it (toast pattern, same as routine/exercise delete). The control disappears at one set, so an exercise is never left empty (use ✕ to drop the whole movement).

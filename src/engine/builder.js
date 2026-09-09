@@ -4,18 +4,22 @@ var IL=globalThis.IL||(globalThis.IL={});
 if(typeof require==='function'&&!IL.data)require('../data/exercises.js');
 if(typeof require==='function'&&!IL.prog)require('./progression.js');
 const {C,I,EXERCISES,EX,REGIONS,IDEAL_PATS,PAT_RANK,EQUIP_LOAD,regLabel,patLabel,hashId}=IL.data;
-const {lastPerf,nextSets}=IL.prog;
+const {lastPerf,lastModeFor,nextSets,modeOf}=IL.prog;
 
 // Working sets a movement deserves when you've never logged it: main lifts 4, other compounds 3,
 // isolation 3, finishers 2. Reps prefilled at the bottom of the target range.
 function prescribedSets(ex){if(!ex)return 3;if(ex.type===C)return ex.tier===1?4:3;return ex.tier===3?2:3;}
 // With history, the sets are seeded with the pattern-aware progressive-overload prescription
-// (see nextSets in progression.js), not a stale copy of last time.
+// (see nextSets in progression.js), not a stale copy of last time. The modality the user last
+// performed this exercise with is remembered and carried onto the new instance, and the seed pulls
+// from that modality's history so the prescription is like-for-like.
 function seedExercise(id,sessions,excludeId,unit){
-  const ex=EX[id];const lp=lastPerf(sessions||[],id,{excludeId});
-  if(lp&&lp.sets.length)return{id,name:ex?ex.name:id,sets:nextSets(lp.sets,ex,unit).sets.map(s=>({w:s.w,r:s.r,done:false}))};
+  const ex=EX[id];const mode=lastModeFor(sessions,id);
+  const inst={id,name:ex?ex.name:id};if(mode)inst.mode=mode;
+  const lp=lastPerf(sessions||[],id,{excludeId,mode:mode||undefined});
+  if(lp&&lp.sets.length){inst.sets=nextSets(lp.sets,ex,unit).sets.map(s=>({w:s.w,r:s.r,done:false}));return inst;}
   const n=prescribedSets(ex),r=ex?ex.rr[0]:'';
-  return{id,name:ex?ex.name:id,sets:Array.from({length:n},()=>({w:'',r:r,done:false}))};
+  inst.sets=Array.from({length:n},()=>({w:'',r:r,done:false}));return inst;
 }
 // Exercise ids from the most recent completed session that trained this group
 function lastSessionIds(sessions,g){
@@ -189,17 +193,18 @@ function exerciseStreak(sessions,exId){
   }
   return n;
 }
-// Best e1RM (or reps for weightless work) of the last three performances, newest first
-function recentScores(sessions,exId,n){
+// Best e1RM (or reps for weightless work) of the last three performances, newest first. Mode-scoped
+// so alternating equipment doesn't produce a meaningless e1RM sequence.
+function recentScores(sessions,exId,n,mode){
   const out=[];let before;
   for(let i=0;i<(n||3);i++){
-    const lp=lastPerf(sessions,exId,{beforeTs:before});if(!lp)break;
+    const lp=lastPerf(sessions,exId,{beforeTs:before,mode});if(!lp)break;
     out.push(Math.max(...lp.sets.map(s=>s.w>0?e1rm(s.w,s.r):s.r)));before=lp.date;
   }
   return out;
 }
-function isStalled(sessions,exId){const sc=recentScores(sessions,exId,3);return sc.length>=3&&sc[0]<=sc[1]&&sc[1]<=sc[2];}
-function isProgressing(sessions,exId){const lp=lastPerf(sessions,exId);return !!lp&&prescribe(lp.sets,EX[exId],'lb').bumped;}
+function isStalled(sessions,exId,mode){const sc=recentScores(sessions,exId,3,mode);return sc.length>=3&&sc[0]<=sc[1]&&sc[1]<=sc[2];}
+function isProgressing(sessions,exId,mode){const lp=lastPerf(sessions,exId,{mode});return !!lp&&prescribe(lp.sets,EX[exId],'lb').bumped;}
 function planAnchor(ids,g){
   const c=ids.map(id=>EX[id]).filter(e=>e&&e.group===g&&e.tier===1&&(IDEAL_PATS[g]||[]).indexOf(e.pat)>=0);
   return c.sort((a,b)=>perfPriority(b)-perfPriority(a))[0]||null;
@@ -219,9 +224,10 @@ function planWorkout(groups,sessions,seed,opts){
   const plan=opts.fresh?null:findPlan(groups,sessions,opts.now);
   if(!plan)return{ids:buildRecommendation(groups,sessions,seed),mode:'fresh',plan:null,rotation:null,streak:0};
   let ids=plan.exercises.map(e=>e.id).filter(id=>EX[id]);
+  const modeById={};plan.exercises.forEach(e=>{if(EX[e.id])modeById[e.id]=modeOf(e);});
   const anchors=new Set(groups.map(g=>planAnchor(ids,g)).filter(Boolean).map(e=>e.id));
   const cands=ids.filter(id=>!anchors.has(id)).map(id=>{
-    const streak=exerciseStreak(sessions,id),stalled=isStalled(sessions,id),progressing=isProgressing(sessions,id);
+    const m=modeById[id],streak=exerciseStreak(sessions,id),stalled=isStalled(sessions,id,m),progressing=isProgressing(sessions,id,m);
     const stale=streak>=ROTATE_HARD||(streak>=ROTATE_AFTER&&!progressing);
     return{id,streak,pri:stalled?2:stale?1:0};
   }).filter(c=>c.pri>0).sort((a,b)=>b.pri-a.pri||b.streak-a.streak);

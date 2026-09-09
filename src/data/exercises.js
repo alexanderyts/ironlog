@@ -124,6 +124,28 @@ const IDEAL_PATS={Chest:['hpush','iso'],Back:['vpull','hpull'],Shoulders:['vpush
 // Systemic demand of a pattern — drives session ordering (big lifts first)
 const PAT_RANK={squat:6,hinge:6,vpush:4,hpush:4,vpull:4,hpull:4,lunge:3,iso:1};
 const EQUIP_LOAD={Barbell:8,Machine:4,Dumbbell:5,Cable:2,Bodyweight:1,Other:1};
+
+/* ── Equipment modality ──────────────────────────────────────────────────────────────────────────
+   The same movement done with different equipment is a different thing to track: an overhead press
+   is 25 lb/hand with dumbbells but 75 on a Smith machine, and progressive overload is only valid
+   like-for-like. `mode` is an OPTIONAL tag on a logged exercise instance; when absent it's derived
+   from the exercise's fixed `equip` (EQUIP_MODE), so all existing history reads correctly with no
+   migration and the engine's default behavior is unchanged. Progression and PRs compare within
+   (id, mode); the weight field labels itself per mode (perHand → "per dumbbell"); e1rm=false marks
+   loads whose estimated 1RM isn't comparable to a free-weight 1RM (cable/machine stacks), so the PR
+   board shows load, not a bogus 1RM. NOTE: equipment-normalized VOLUME (e.g. dumbbell ×2) is
+   deliberately NOT applied here — doing so would retroactively change historical PR/volume numbers
+   and is ambiguous for unilateral work; it's left for an explicit future opt-in. */
+const MODES={
+ barbell:{label:'Barbell',perHand:false,e1rm:true},
+ dumbbell:{label:'Dumbbell',perHand:true,e1rm:true},
+ smith:{label:'Smith machine',perHand:false,e1rm:true},
+ machine:{label:'Machine',perHand:false,e1rm:false},
+ cable:{label:'Cable',perHand:false,e1rm:false},
+ bodyweight:{label:'Bodyweight',perHand:false,e1rm:true}
+};
+const MODE_ORDER=['barbell','dumbbell','smith','machine','cable','bodyweight'];
+const EQUIP_MODE={Barbell:'barbell',Dumbbell:'dumbbell',Machine:'machine',Cable:'cable',Bodyweight:'bodyweight',Other:'machine'};
 const PUSH_PATS=['hpush','vpush'], PULL_PATS=['hpull','vpull'], LOWER_GROUPS=['Quads','Hamstrings','Glutes','Calves'];
 // Fraction of bodyweight lifted on bodyweight moves (used when a bodyweight is set)
 const BW_FACTOR={'pull-up':1,'chin-up':1,'chest-dip':1,'tricep-dip':1,'push-up':0.65};
@@ -151,4 +173,4 @@ function patLabel(p){return {hpush:'horizontal press',vpush:'overhead press',hpu
 function exampleFor(group,reg){const e=EXERCISES.find(x=>x.group===group&&x.reg===reg&&x.type===C)||EXERCISES.find(x=>x.group===group&&x.reg===reg);return e?e.name:null;}
 function hashId(s){let h=0;for(let i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))>>>0;return h;}
 
-IL.data={C,I,EXERCISES,EX,GROUPS,META,REGIONS,IDEAL_PATS,PAT_RANK,EQUIP_LOAD,PUSH_PATS,PULL_PATS,LOWER_GROUPS,BW_FACTOR,GROUP_ICON,exIcon,regLabel,patLabel,exampleFor,hashId};
+IL.data={C,I,EXERCISES,EX,GROUPS,META,REGIONS,IDEAL_PATS,PAT_RANK,EQUIP_LOAD,MODES,MODE_ORDER,EQUIP_MODE,PUSH_PATS,PULL_PATS,LOWER_GROUPS,BW_FACTOR,GROUP_ICON,exIcon,regLabel,patLabel,exampleFor,hashId};
