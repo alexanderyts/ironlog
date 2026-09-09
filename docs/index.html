@@ -357,8 +357,8 @@ html.standalone .tabbar{bottom:auto;top:calc(var(--screen-h,100vh) - var(--tab-h
 </div>
 
 <script>
-/* Ironlog v0.8.9 · site build · 2026-09-09T13:40:58.606Z */
-var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.8.9",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
+/* Ironlog v0.8.10 · site build · 2026-09-09T17:02:03.464Z */
+var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.8.10",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
 
 /* ===== src/data/exercises.js ===== */
 (function(){'use strict';
@@ -1702,37 +1702,21 @@ let _lastDeficit=-1;
 function syncViewportDeficit(){
   const d=viewportDeficit();
   if(STANDALONE){
+    const de=document.documentElement, portrait=innerWidth<=innerHeight;
     // Bar position is derived from screen.height (constant), not the viewport — see .tabbar CSS
-    document.documentElement.style.setProperty('--screen-h',screen.height+'px');
-    document.documentElement.classList.toggle('standalone',innerWidth<=innerHeight);
+    de.style.setProperty('--screen-h',screen.height+'px');
+    de.classList.toggle('standalone',portrait);
+    // THE trigger for WebKit's launch-time viewport correction (from the v0.8.9 on-device timeline):
+    // the document becoming taller than the short viewport — i.e. scrollable. A one-frame nudge was
+    // not enough; a taller-than-viewport document that PERSISTS clears it within ~40ms. Keeping the
+    // document at least screen-height tall does exactly that in the launch state, and is a no-op
+    // once corrected (viewport == screen height, so nothing becomes scrollable).
+    de.style.minHeight=portrait?screen.height+'px':'';
   }
   if(d===_lastDeficit)return;
   _lastDeficit=d;
   document.documentElement.style.setProperty('--deficit',d+'px');
   vlog('deficit '+d+' inner '+innerHeight);
-}
-/* Try to make WebKit do its correction now, before the user sees anything, rather than on their
-   first tab switch (that's the flicker in v0.8.7: switching tabs scrolls, WebKit corrects, and the
-   bar was offset by a stale 62px until the next check). A real scroll offset change is what
-   triggers it, so make the document scrollable for one frame and scroll 1px and back. */
-function nudgeViewport(){
-  if(!viewportDeficit())return;
-  vlog('nudge scroll');
-  const de=document.documentElement, prev=de.style.minHeight;
-  de.style.minHeight=(innerHeight+4)+'px';
-  window.scrollTo(0,1);
-  requestAnimationFrame(()=>{window.scrollTo(0,0);de.style.minHeight=prev;syncViewportDeficit();});
-}
-/* Stronger kick: rewriting the viewport meta makes WebKit recompute its viewport configuration and
-   push fresh geometry to the UI process — the same path a rotation takes. Adds a no-op parameter
-   for one frame, then restores the original string. */
-function kickViewportMeta(){
-  if(!viewportDeficit())return;
-  const m=document.querySelector('meta[name="viewport"]');if(!m)return;
-  vlog('nudge meta');
-  const c=m.getAttribute('content');
-  m.setAttribute('content',c+',minimum-scale=1');
-  requestAnimationFrame(()=>{m.setAttribute('content',c);syncViewportDeficit();});
 }
 function watchViewport(){
   syncViewportDeficit();
@@ -1746,10 +1730,6 @@ function watchViewport(){
   requestAnimationFrame(frame);
   addEventListener('touchstart',()=>vlog('touch'),{passive:true,once:true});
   addEventListener('load',()=>vlog('load'));
-  nudgeViewport();
-  setTimeout(kickViewportMeta,120);
-  setTimeout(nudgeViewport,400);
-  setTimeout(kickViewportMeta,800);
 }
 function openSettings(){
   const R=state.settings.rest,st=state.settings;
