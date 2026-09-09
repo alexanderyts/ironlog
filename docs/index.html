@@ -26,6 +26,10 @@
   --radius:16px; --radius-sm:11px;
   --safe-b:env(safe-area-inset-bottom,0px);
   --tab-h:64px;
+  /* Set by IL.ui (syncViewportDeficit) in standalone iOS only: how far the layout viewport falls
+     short of the screen at launch (screen.height − innerHeight; measured 62px on an iPhone Pro Max,
+     = the top inset wrongly subtracted from the bottom). 0 everywhere else and after WebKit's flip. */
+  --deficit:0px;
 }
 @media (prefers-color-scheme:dark){
   :root:not([data-theme="light"]){
@@ -103,7 +107,7 @@ h1,h2,h3{margin:0; text-wrap:balance; font-family:"Archivo",system-ui,sans-serif
    the canvas colour (--bg, opaque) so the padding region and the un-paintable strip below it in the
    inset state are indistinguishable. Must stay opaque --bg: a translucent or --surface bar brings
    the launch seam straight back. */
-.tabbar{position:fixed;left:0;right:0;bottom:0;z-index:30;background:var(--bg);border-top:1px solid var(--line);padding-bottom:var(--safe-b)}
+.tabbar{position:fixed;left:0;right:0;bottom:calc(-1 * var(--deficit));z-index:30;background:var(--bg);border-top:1px solid var(--line);padding-bottom:var(--safe-b)}
 .tabbar .row{max-width:520px;margin:0 auto;display:grid;grid-template-columns:repeat(4,1fr)}
 .tab{height:var(--tab-h);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:var(--ink-3);font-size:11px;font-weight:600;letter-spacing:.01em}
 .tab svg{width:23px;height:23px}
@@ -219,10 +223,13 @@ h1,h2,h3{margin:0; text-wrap:balance; font-family:"Archivo",system-ui,sans-serif
 .sess-ex .s{font-family:"IBM Plex Mono";color:var(--ink-3);flex-shrink:0}
 
 /* sheet / modal */
-.scrim{position:fixed;inset:0;z-index:50;background:rgba(10,14,20,.5);opacity:0;pointer-events:none;transition:opacity .2s}
+.scrim{position:fixed;inset:0;bottom:calc(-1 * var(--deficit));z-index:50;background:rgba(10,14,20,.5);opacity:0;pointer-events:none;transition:opacity .2s}
 .scrim.on{opacity:1;pointer-events:auto}
-.sheet{position:fixed;left:0;right:0;bottom:0;max-width:560px;margin:0 auto;z-index:51;background:var(--surface);border-radius:22px 22px 0 0;transform:translateY(101%);transition:transform .28s cubic-bezier(.32,.72,0,1);max-height:90vh;display:flex;flex-direction:column;box-shadow:0 -10px 40px rgba(0,0,0,.2)}
-.sheet.on{transform:translateY(0)}
+/* Closed sheet MUST be visibility:hidden, not just translated off-screen: at launch iOS paints the
+   region below the short layout viewport, and the parked white sheet showed there as a white strip
+   under the tab bar (confirmed by screenshot, v0.8.6). visibility transitions after the slide-out. */
+.sheet{position:fixed;left:0;right:0;bottom:calc(-1 * var(--deficit));max-width:560px;margin:0 auto;z-index:51;background:var(--surface);border-radius:22px 22px 0 0;transform:translateY(101%);visibility:hidden;transition:transform .28s cubic-bezier(.32,.72,0,1),visibility 0s .28s;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 -10px 40px rgba(0,0,0,.2)}
+.sheet.on{transform:translateY(0);visibility:visible;transition:transform .28s cubic-bezier(.32,.72,0,1),visibility 0s}
 .sheet-grab{width:38px;height:4px;border-radius:2px;background:var(--line);margin:10px auto 4px}
 .sheet-head{display:flex;align-items:center;justify-content:space-between;padding:8px 18px 12px;border-bottom:1px solid var(--line)}
 .sheet-head h3{font-size:18px}
@@ -234,7 +241,7 @@ h1,h2,h3{margin:0; text-wrap:balance; font-family:"Archivo",system-ui,sans-serif
 .spacer{height:8px}
 .row-between{display:flex;align-items:center;justify-content:space-between;gap:12px}
 .instr{font-size:14.5px;line-height:1.6;color:var(--ink-2)}
-.toast{position:fixed;left:50%;bottom:calc(84px + var(--safe-b));transform:translateX(-50%) translateY(20px);background:var(--ink);color:var(--bg);padding:11px 18px;border-radius:12px;font-size:14px;font-weight:600;z-index:60;opacity:0;transition:.25s;box-shadow:var(--shadow);pointer-events:none;white-space:nowrap;display:flex;align-items:center;gap:16px;max-width:92vw}
+.toast{position:fixed;left:50%;bottom:calc(84px + var(--safe-b) - var(--deficit));transform:translateX(-50%) translateY(20px);background:var(--ink);color:var(--bg);padding:11px 18px;border-radius:12px;font-size:14px;font-weight:600;z-index:60;opacity:0;transition:.25s;box-shadow:var(--shadow);pointer-events:none;white-space:nowrap;display:flex;align-items:center;gap:16px;max-width:92vw}
 .toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
 .toast.act{pointer-events:auto}
 .toast button{color:var(--accent);font-weight:700;font-size:14px;padding:0;letter-spacing:.02em}
@@ -254,7 +261,7 @@ h1,h2,h3{margin:0; text-wrap:balance; font-family:"Archivo",system-ui,sans-serif
 .routine .ex-ic{width:38px;height:38px}
 .routine .del{margin-left:auto;color:var(--ink-3);width:32px;height:32px;border-radius:8px;display:grid;place-items:center;flex-shrink:0}
 /* rest timer */
-.restbar{position:fixed;left:0;right:0;bottom:calc(74px + var(--safe-b));z-index:40;display:none}
+.restbar{position:fixed;left:0;right:0;bottom:calc(74px + var(--safe-b) - var(--deficit));z-index:40;display:none}
 .restbar.on{display:block}
 .restbar .inner{max-width:520px;margin:0 auto;padding:0 12px}
 .restbar .rcard{background:var(--ink);color:var(--bg);border-radius:14px;padding:9px 12px;display:flex;align-items:center;gap:11px;box-shadow:0 6px 24px rgba(0,0,0,.25)}
@@ -342,8 +349,8 @@ h1,h2,h3{margin:0; text-wrap:balance; font-family:"Archivo",system-ui,sans-serif
 </div>
 
 <script>
-/* Ironlog v0.8.6 · site build · 2026-09-09T13:10:36.130Z */
-var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.8.6",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
+/* Ironlog v0.8.7 · site build · 2026-09-09T13:21:01.728Z */
+var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.8.7",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
 
 /* ===== src/data/exercises.js ===== */
 (function(){'use strict';
@@ -1657,14 +1664,46 @@ function cloudSection(){
 function viewportDiag(){
   try{
     const probe=document.createElement('div');
-    probe.style.cssText='position:fixed;left:-9999px;top:0;visibility:hidden;pointer-events:none;width:1px;height:env(safe-area-inset-bottom,0px);padding-top:env(safe-area-inset-top,0px)';
+    // padding for both, not height: with the global border-box sizing, height would be clamped up
+    // to the padding and read the top inset twice (that's what v0.8.6's "bottom 62" was)
+    probe.style.cssText='position:fixed;left:-9999px;top:0;visibility:hidden;pointer-events:none;width:1px;height:0;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)';
     document.body.appendChild(probe);
     const cs=getComputedStyle(probe);
-    const b=Math.round(parseFloat(cs.height)||0), t=Math.round(parseFloat(cs.paddingTop)||0);
+    const b=Math.round(parseFloat(cs.paddingBottom)||0), t=Math.round(parseFloat(cs.paddingTop)||0);
     probe.remove();
     const vv=window.visualViewport;
-    return `screen ${screen.width}×${screen.height} · inner ${innerWidth}×${innerHeight}`+(vv?` · visual ${Math.round(vv.height)}`:'')+` · inset top ${t} bottom ${b}`;
+    return `screen ${screen.width}×${screen.height} · inner ${innerWidth}×${innerHeight}`+(vv?` · visual ${Math.round(vv.height)}`:'')+` · inset top ${t} bottom ${b} · deficit ${viewportDeficit()}`;
   }catch(e){return '';}
+}
+/* The launch-time viewport bug, handled deterministically. In an installed (standalone) iOS web app
+   the layout viewport comes up short of the screen — measured 62px on an iPhone Pro Max: WebKit
+   subtracts the top inset from the bottom until a later native layout pass (usually the first
+   scroll) corrects it. The region below the short viewport is still painted, so fixed-bottom
+   elements just need to be pushed down by exactly that shortfall (--deficit) to land on the true
+   screen edge; once WebKit corrects itself the shortfall reads 0 and everything is back to normal.
+   Standalone-only on purpose: in a browser tab innerHeight legitimately excludes the toolbars. */
+const STANDALONE=navigator.standalone===true||(window.matchMedia&&matchMedia('(display-mode: standalone)').matches);
+function viewportDeficit(){
+  if(!STANDALONE||innerWidth>innerHeight)return 0;
+  const d=Math.round(screen.height-innerHeight);
+  return d>0&&d<=120?d:0;
+}
+let _lastDeficit=-1;
+function syncViewportDeficit(){
+  const d=viewportDeficit();
+  if(d===_lastDeficit)return;
+  _lastDeficit=d;
+  document.documentElement.style.setProperty('--deficit',d+'px');
+}
+function watchViewport(){
+  syncViewportDeficit();
+  ['resize','orientationchange','pageshow','focus'].forEach(ev=>addEventListener(ev,syncViewportDeficit));
+  document.addEventListener('visibilitychange',syncViewportDeficit);
+  if(window.visualViewport)visualViewport.addEventListener('resize',syncViewportDeficit);
+  // WebKit's correction fires no event we can hook, so poll: tight for the first seconds, then slow.
+  const t0=Date.now();
+  const tick=()=>{syncViewportDeficit();setTimeout(tick,Date.now()-t0<10000?150:1000);};
+  setTimeout(tick,150);
 }
 function openSettings(){
   const R=state.settings.rest,st=state.settings;
@@ -1914,7 +1953,7 @@ function boot(){
   $('#view').addEventListener('click',e=>{if(e.target.closest('[data-vol-info]'))toast('Volume = weight × reps, added up across your working sets');});
   // re-render on cloud changes, but never yank focus from someone typing a weight
   S.onChange(()=>{updateCloud();const a=document.activeElement;if(a&&a.tagName==='INPUT')return;render();});
-  applyTheme();setTab('today');S.initCloud();
+  applyTheme();watchViewport();setTab('today');S.initCloud();
   if(state.justSeeded)setTimeout(()=>toast('Sample data loaded — explore every tab'),600);
 }
 IL.ui={toast,render,setTab,openSettings,boot};

@@ -7,6 +7,10 @@
   --radius:16px; --radius-sm:11px;
   --safe-b:env(safe-area-inset-bottom,0px);
   --tab-h:64px;
+  /* Set by IL.ui (syncViewportDeficit) in standalone iOS only: how far the layout viewport falls
+     short of the screen at launch (screen.height − innerHeight; measured 62px on an iPhone Pro Max,
+     = the top inset wrongly subtracted from the bottom). 0 everywhere else and after WebKit's flip. */
+  --deficit:0px;
 }
 @media (prefers-color-scheme:dark){
   :root:not([data-theme="light"]){
@@ -84,7 +88,7 @@ h1,h2,h3{margin:0; text-wrap:balance; font-family:"Archivo",system-ui,sans-serif
    the canvas colour (--bg, opaque) so the padding region and the un-paintable strip below it in the
    inset state are indistinguishable. Must stay opaque --bg: a translucent or --surface bar brings
    the launch seam straight back. */
-.tabbar{position:fixed;left:0;right:0;bottom:0;z-index:30;background:var(--bg);border-top:1px solid var(--line);padding-bottom:var(--safe-b)}
+.tabbar{position:fixed;left:0;right:0;bottom:calc(-1 * var(--deficit));z-index:30;background:var(--bg);border-top:1px solid var(--line);padding-bottom:var(--safe-b)}
 .tabbar .row{max-width:520px;margin:0 auto;display:grid;grid-template-columns:repeat(4,1fr)}
 .tab{height:var(--tab-h);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:var(--ink-3);font-size:11px;font-weight:600;letter-spacing:.01em}
 .tab svg{width:23px;height:23px}
@@ -200,10 +204,13 @@ h1,h2,h3{margin:0; text-wrap:balance; font-family:"Archivo",system-ui,sans-serif
 .sess-ex .s{font-family:"IBM Plex Mono";color:var(--ink-3);flex-shrink:0}
 
 /* sheet / modal */
-.scrim{position:fixed;inset:0;z-index:50;background:rgba(10,14,20,.5);opacity:0;pointer-events:none;transition:opacity .2s}
+.scrim{position:fixed;inset:0;bottom:calc(-1 * var(--deficit));z-index:50;background:rgba(10,14,20,.5);opacity:0;pointer-events:none;transition:opacity .2s}
 .scrim.on{opacity:1;pointer-events:auto}
-.sheet{position:fixed;left:0;right:0;bottom:0;max-width:560px;margin:0 auto;z-index:51;background:var(--surface);border-radius:22px 22px 0 0;transform:translateY(101%);transition:transform .28s cubic-bezier(.32,.72,0,1);max-height:90vh;display:flex;flex-direction:column;box-shadow:0 -10px 40px rgba(0,0,0,.2)}
-.sheet.on{transform:translateY(0)}
+/* Closed sheet MUST be visibility:hidden, not just translated off-screen: at launch iOS paints the
+   region below the short layout viewport, and the parked white sheet showed there as a white strip
+   under the tab bar (confirmed by screenshot, v0.8.6). visibility transitions after the slide-out. */
+.sheet{position:fixed;left:0;right:0;bottom:calc(-1 * var(--deficit));max-width:560px;margin:0 auto;z-index:51;background:var(--surface);border-radius:22px 22px 0 0;transform:translateY(101%);visibility:hidden;transition:transform .28s cubic-bezier(.32,.72,0,1),visibility 0s .28s;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 -10px 40px rgba(0,0,0,.2)}
+.sheet.on{transform:translateY(0);visibility:visible;transition:transform .28s cubic-bezier(.32,.72,0,1),visibility 0s}
 .sheet-grab{width:38px;height:4px;border-radius:2px;background:var(--line);margin:10px auto 4px}
 .sheet-head{display:flex;align-items:center;justify-content:space-between;padding:8px 18px 12px;border-bottom:1px solid var(--line)}
 .sheet-head h3{font-size:18px}
@@ -215,7 +222,7 @@ h1,h2,h3{margin:0; text-wrap:balance; font-family:"Archivo",system-ui,sans-serif
 .spacer{height:8px}
 .row-between{display:flex;align-items:center;justify-content:space-between;gap:12px}
 .instr{font-size:14.5px;line-height:1.6;color:var(--ink-2)}
-.toast{position:fixed;left:50%;bottom:calc(84px + var(--safe-b));transform:translateX(-50%) translateY(20px);background:var(--ink);color:var(--bg);padding:11px 18px;border-radius:12px;font-size:14px;font-weight:600;z-index:60;opacity:0;transition:.25s;box-shadow:var(--shadow);pointer-events:none;white-space:nowrap;display:flex;align-items:center;gap:16px;max-width:92vw}
+.toast{position:fixed;left:50%;bottom:calc(84px + var(--safe-b) - var(--deficit));transform:translateX(-50%) translateY(20px);background:var(--ink);color:var(--bg);padding:11px 18px;border-radius:12px;font-size:14px;font-weight:600;z-index:60;opacity:0;transition:.25s;box-shadow:var(--shadow);pointer-events:none;white-space:nowrap;display:flex;align-items:center;gap:16px;max-width:92vw}
 .toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
 .toast.act{pointer-events:auto}
 .toast button{color:var(--accent);font-weight:700;font-size:14px;padding:0;letter-spacing:.02em}
@@ -235,7 +242,7 @@ h1,h2,h3{margin:0; text-wrap:balance; font-family:"Archivo",system-ui,sans-serif
 .routine .ex-ic{width:38px;height:38px}
 .routine .del{margin-left:auto;color:var(--ink-3);width:32px;height:32px;border-radius:8px;display:grid;place-items:center;flex-shrink:0}
 /* rest timer */
-.restbar{position:fixed;left:0;right:0;bottom:calc(74px + var(--safe-b));z-index:40;display:none}
+.restbar{position:fixed;left:0;right:0;bottom:calc(74px + var(--safe-b) - var(--deficit));z-index:40;display:none}
 .restbar.on{display:block}
 .restbar .inner{max-width:520px;margin:0 auto;padding:0 12px}
 .restbar .rcard{background:var(--ink);color:var(--bg);border-radius:14px;padding:9px 12px;display:flex;align-items:center;gap:11px;box-shadow:0 6px 24px rgba(0,0,0,.25)}

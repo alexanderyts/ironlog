@@ -435,14 +435,46 @@ function cloudSection(){
 function viewportDiag(){
   try{
     const probe=document.createElement('div');
-    probe.style.cssText='position:fixed;left:-9999px;top:0;visibility:hidden;pointer-events:none;width:1px;height:env(safe-area-inset-bottom,0px);padding-top:env(safe-area-inset-top,0px)';
+    // padding for both, not height: with the global border-box sizing, height would be clamped up
+    // to the padding and read the top inset twice (that's what v0.8.6's "bottom 62" was)
+    probe.style.cssText='position:fixed;left:-9999px;top:0;visibility:hidden;pointer-events:none;width:1px;height:0;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)';
     document.body.appendChild(probe);
     const cs=getComputedStyle(probe);
-    const b=Math.round(parseFloat(cs.height)||0), t=Math.round(parseFloat(cs.paddingTop)||0);
+    const b=Math.round(parseFloat(cs.paddingBottom)||0), t=Math.round(parseFloat(cs.paddingTop)||0);
     probe.remove();
     const vv=window.visualViewport;
-    return `screen ${screen.width}×${screen.height} · inner ${innerWidth}×${innerHeight}`+(vv?` · visual ${Math.round(vv.height)}`:'')+` · inset top ${t} bottom ${b}`;
+    return `screen ${screen.width}×${screen.height} · inner ${innerWidth}×${innerHeight}`+(vv?` · visual ${Math.round(vv.height)}`:'')+` · inset top ${t} bottom ${b} · deficit ${viewportDeficit()}`;
   }catch(e){return '';}
+}
+/* The launch-time viewport bug, handled deterministically. In an installed (standalone) iOS web app
+   the layout viewport comes up short of the screen — measured 62px on an iPhone Pro Max: WebKit
+   subtracts the top inset from the bottom until a later native layout pass (usually the first
+   scroll) corrects it. The region below the short viewport is still painted, so fixed-bottom
+   elements just need to be pushed down by exactly that shortfall (--deficit) to land on the true
+   screen edge; once WebKit corrects itself the shortfall reads 0 and everything is back to normal.
+   Standalone-only on purpose: in a browser tab innerHeight legitimately excludes the toolbars. */
+const STANDALONE=navigator.standalone===true||(window.matchMedia&&matchMedia('(display-mode: standalone)').matches);
+function viewportDeficit(){
+  if(!STANDALONE||innerWidth>innerHeight)return 0;
+  const d=Math.round(screen.height-innerHeight);
+  return d>0&&d<=120?d:0;
+}
+let _lastDeficit=-1;
+function syncViewportDeficit(){
+  const d=viewportDeficit();
+  if(d===_lastDeficit)return;
+  _lastDeficit=d;
+  document.documentElement.style.setProperty('--deficit',d+'px');
+}
+function watchViewport(){
+  syncViewportDeficit();
+  ['resize','orientationchange','pageshow','focus'].forEach(ev=>addEventListener(ev,syncViewportDeficit));
+  document.addEventListener('visibilitychange',syncViewportDeficit);
+  if(window.visualViewport)visualViewport.addEventListener('resize',syncViewportDeficit);
+  // WebKit's correction fires no event we can hook, so poll: tight for the first seconds, then slow.
+  const t0=Date.now();
+  const tick=()=>{syncViewportDeficit();setTimeout(tick,Date.now()-t0<10000?150:1000);};
+  setTimeout(tick,150);
 }
 function openSettings(){
   const R=state.settings.rest,st=state.settings;
@@ -692,7 +724,7 @@ function boot(){
   $('#view').addEventListener('click',e=>{if(e.target.closest('[data-vol-info]'))toast('Volume = weight × reps, added up across your working sets');});
   // re-render on cloud changes, but never yank focus from someone typing a weight
   S.onChange(()=>{updateCloud();const a=document.activeElement;if(a&&a.tagName==='INPUT')return;render();});
-  applyTheme();setTab('today');S.initCloud();
+  applyTheme();watchViewport();setTab('today');S.initCloud();
   if(state.justSeeded)setTimeout(()=>toast('Sample data loaded — explore every tab'),600);
 }
 IL.ui={toast,render,setTab,openSettings,boot};
