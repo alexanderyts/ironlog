@@ -2,6 +2,10 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.6.2 — 2026-09-09
+- Bumped version to force the service worker to refresh cached clients (the Dropbox-key config change in the previous commit didn't bump the version, so the offline cache didn't know to invalidate itself).
+- Moved "Cloud backup" higher in Settings, right under Units, so the Connect Dropbox button doesn't require scrolling past the rest-timer options to find.
+
 ## v0.6.1 — 2026-09-07
 Shareable demo + fixes from reviewing the app with real-looking data.
 - **Demo build** (`dist/demo.html`): no cloud database (so it can be shared publicly), seeded on first open with ~5 weeks of a progressive push/pull/legs rotation, routines and a bodyweight. Each viewer keeps their own copy; Settings has "Reset sample data".
