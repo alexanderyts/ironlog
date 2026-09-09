@@ -3,7 +3,7 @@ var IL=globalThis.IL||(globalThis.IL={});
 if(typeof require==='function'&&!IL.data)require('../data/exercises.js');
 if(typeof require==='function'&&!IL.prog)require('./progression.js');
 const {EX,EXERCISES,REGIONS,IDEAL_PATS,LOWER_GROUPS,MODES,regLabel,patLabel,exampleFor}=IL.data;
-const {DAY,startOfDay,e1rm,isWorking,setLoad,sessionVolume,modeOf}=IL.prog;
+const {DAY,startOfDay,e1rm,isWorking,setLoad,sessionVolume,modeOf,calcStreak}=IL.prog;
 
 const completed=sessions=>sessions.filter(s=>s.completed!==false&&s.exercises.length);
 
@@ -16,20 +16,24 @@ const MIN_COMPARATIVE_SESSIONS=4,MIN_COMPARATIVE_DAYS=10;
 function analyze(sessions,now){
   now=now||Date.now();const winDays=28,weeks=4;
   const done=completed(sessions).filter(s=>s.date>=now-winDays*DAY);
-  const groupSets={},effSets={},pat={hpush:0,vpush:0,hpull:0,vpull:0,hinge:0,squat:0,lunge:0,iso:0},regSeen={},patSeen={};
+  const groupSets={},effSets={},pat={hpush:0,vpush:0,hpull:0,vpull:0,hinge:0,squat:0,lunge:0,iso:0},regSeen={},patSeen={},groupDays={};
   let totalSets=0;
-  done.forEach(s=>s.exercises.forEach(e=>{const ex=EX[e.id];if(!ex)return;const n=e.sets.filter(isWorking).length;if(!n)return;
-    totalSets+=n;groupSets[ex.group]=(groupSets[ex.group]||0)+n;pat[ex.pat]=(pat[ex.pat]||0)+n;
+  done.forEach(s=>{const day=startOfDay(s.date),dayGroups=new Set();
+    s.exercises.forEach(e=>{const ex=EX[e.id];if(!ex)return;const n=e.sets.filter(isWorking).length;if(!n)return;
+    totalSets+=n;groupSets[ex.group]=(groupSets[ex.group]||0)+n;pat[ex.pat]=(pat[ex.pat]||0)+n;dayGroups.add(ex.group);
     // effective volume: a press also trains triceps/shoulders — secondary muscles get half credit
     ex.muscles.forEach((m,i)=>{effSets[m]=(effSets[m]||0)+(i===0||m===ex.group?n:n*0.5);});
-    (regSeen[ex.group]=regSeen[ex.group]||new Set()).add(ex.reg);(patSeen[ex.group]=patSeen[ex.group]||new Set()).add(ex.pat);}));
+    (regSeen[ex.group]=regSeen[ex.group]||new Set()).add(ex.reg);(patSeen[ex.group]=patSeen[ex.group]||new Set()).add(ex.pat);});
+    // how many distinct training DAYS hit each group — for weekly frequency (≥2×/week is better per unit volume)
+    dayGroups.forEach(g=>{(groupDays[g]=groupDays[g]||new Set()).add(day);});});
+  const groupFreq={};Object.keys(groupDays).forEach(g=>groupFreq[g]=groupDays[g].size);
   const push=pat.hpush+pat.vpush,pull=pat.hpull+pat.vpull;
   let upperSets=0,lowerSets=0;Object.entries(groupSets).forEach(([g,n])=>{LOWER_GROUPS.indexOf(g)>=0?lowerSets+=n:upperSets+=n;});
   const perWeek={};Object.entries(groupSets).forEach(([g,n])=>perWeek[g]=(effSets[g]||n)/weeks);
   const dates=done.map(s=>s.date);
   const daySpan=dates.length?Math.round((Math.max(...dates)-Math.min(...dates))/DAY):0;
   const readyForComparative=done.length>=MIN_COMPARATIVE_SESSIONS&&daySpan>=MIN_COMPARATIVE_DAYS;
-  return {sessions:done.length,daySpan,readyForComparative,totalSets,groupSets,effSets,perWeek,push,pull,upperSets,lowerSets,regSeen,patSeen,weeks};
+  return {sessions:done.length,daySpan,readyForComparative,totalSets,groupSets,effSets,perWeek,groupFreq,push,pull,upperSets,lowerSets,regSeen,patSeen,weeks};
 }
 // How many tracked lifts trend up in estimated 1RM over the last 4 weeks
 function progressionStat(sessions,now,bw){
@@ -67,7 +71,14 @@ function buildTips(a,sessions,now,bw){
     // volume landmark applies to major muscles you clearly train (≥4 sets in the window); core/calves have their own norms
     const under=trained.filter(g=>a.groupSets[g]>=4&&g!=='Core'&&g!=='Calves').map(g=>({g,pw:a.perWeek[g]})).filter(x=>x.pw<8).sort((x,y)=>x.pw-y.pw)[0];
     if(under)t.push({lv:'warn',x:`Only ~<b>${under.pw.toFixed(1)}</b> sets/week of ${under.g.toLowerCase()} — aim for <b>10+</b> weekly sets to drive growth.`});
+    // frequency: real weekly volume packed into ~one session grows slower than the same volume over 2 days
+    const lowFreq=trained.filter(g=>g!=='Core'&&g!=='Calves'&&a.groupSets[g]/a.weeks>=6&&(a.groupFreq[g]||0)/a.weeks<1.5)
+      .map(g=>({g,pw:a.groupSets[g]/a.weeks})).sort((x,y)=>y.pw-x.pw)[0];
+    if(lowFreq)t.push({lv:'info',x:`You train ${lowFreq.g.toLowerCase()} hard but about once a week — splitting those <b>~${Math.round(lowFreq.pw)} sets</b> across <b>2 days</b> tends to build a muscle faster than one big session.`});
   }
+  // deload: a mesocycle normally ends in a lighter week. After a long unbroken run, suggest one.
+  const streakWk=calcStreak(sessions,now);
+  if(streakWk>=6)t.push({lv:'info',x:`You've trained <b>${streakWk} weeks</b> straight — a lighter <b>deload</b> week (about half the sets, same weights) lets accumulated fatigue clear so the next block hits harder.`});
   const pr=progressionStat(sessions,now,bw);
   if(pr.n>=2)t.push({lv:pr.up>=pr.n/2?'good':'info',x:`Progression: <b>${pr.up}/${pr.n}</b> of your tracked lifts are trending up in estimated strength this month.${pr.up>=pr.n/2?' Keep it going.':' Lean on the +weight suggestions to push the rest.'}`});
   return t.slice(0,5);   // may be empty — the caller owns empty-state copy (it knows WHY: too little history vs. genuinely nothing to flag)

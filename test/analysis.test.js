@@ -83,3 +83,25 @@ test('weekly volumes returns the requested number of weeks, oldest first',()=>{
   assert.ok(cols[7].v>0||cols[6].v>0,'the recent session lands in the current or previous week');
   assert.ok(cols[0].start<cols[7].start);
 });
+
+test('frequency nudge: real weekly volume packed into ~one session/week',()=>{
+  const now=Date.now();const day=86400000;
+  // Chest trained once a week for 5 weeks, ~8 sets each time (>=6/wk, freq ~1/wk); plus a leg day so legs aren't flagged
+  const hist=[];
+  for(let w=0;w<5;w++){
+    hist.push(session(w*7+1,[['barbell-bench-press',[set(135,8),set(135,8),set(135,8),set(135,8)]],['incline-dumbbell-press',[set(50,10),set(50,10),set(50,10),set(50,10)]]],{now}));
+    hist.push(session(w*7+4,[['back-squat',[set(225,5),set(225,5),set(225,5)]],['romanian-deadlift',[set(185,8),set(185,8),set(185,8)]],['leg-extension',[set(90,12),set(90,12)]]],{now}));
+  }
+  const a=A.analyze(hist,now);
+  assert.ok(a.groupFreq.Chest<=6,'chest hit on ~5 distinct days in the 28d window');
+  const tips=A.buildTips(a,hist,now,0).map(strip);
+  assert.ok(tips.some(x=>/train chest hard but about once a week/i.test(x)),'frequency tip fires: '+JSON.stringify(tips));
+});
+
+test('deload prompt appears only after a long unbroken training streak',()=>{
+  const now=Date.now();
+  const short=[0,1,2].map(w=>session(w*7+1,[['back-squat',[set(225,5)]]],{now}));
+  assert.ok(!A.buildTips(A.analyze(short,now),short,now,0).map(strip).some(x=>/deload/i.test(x)),'no deload at 3 weeks');
+  const long=[];for(let w=0;w<7;w++)long.push(session(w*7+1,[['back-squat',[set(225,5),set(225,5)]]],{now}));
+  assert.ok(A.buildTips(A.analyze(long,now),long,now,0).map(strip).some(x=>/deload/i.test(x)),'deload after 7 straight weeks');
+});

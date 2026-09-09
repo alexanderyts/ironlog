@@ -2,6 +2,15 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.13.0 — 2026-09-09 · Coaching tune-ups (Roadmap v3, Phase 3)
+Two evidence-based, read-only nudges in Coach's Notes — no new logging, no friction.
+- **Frequency:** when a muscle is trained with real weekly volume (~6+ sets/week) but essentially in a single session, suggests splitting it across 2 days — ≥2×/week grows a muscle faster per unit of volume than one big session. Only fires once there's a real multi-session history (`readyForComparative`).
+- **Deload:** after 6+ unbroken training weeks, a gentle prompt to take a lighter week (about half the sets, same weights) so accumulated fatigue clears before the next block — standard mesocycle practice.
+- Engine only (`analyze` now returns `groupFreq`; two tips added to `buildTips`). 2 new tests (54 total).
+- Explicitly still out of scope (protecting fast logging): RIR/effort fields and rep-range changes.
+
+This completes Roadmap v3 (remove sets · equipment modality · coaching tune-ups).
+
 ## v0.12.0 — 2026-09-09 · Equipment modality (Roadmap v3, Phase 2)
 The same movement done with different equipment is now tracked correctly — an overhead press at 25 lb/hand with dumbbells is never compared to 75 on a Smith machine.
 - **A modality chip** (`Barbell ▾`) on each logged exercise opens a six-way picker (barbell · dumbbell · smith · machine · cable · bodyweight). It defaults to the exercise's natural equipment and is **remembered** from last time, so the common case (always barbell bench) never shows a decision — invisible until you need it.
