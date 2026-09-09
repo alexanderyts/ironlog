@@ -2,6 +2,12 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.8.9 — 2026-09-09
+v0.8.8's compositing change did not bring the labels back, which is itself informative: below the short launch viewport WebKit paints only solid layer colours, never real content. So the labels cannot be drawn there; the only fixes are to stop depending on JS timing for the bar's position and to make WebKit's correction happen at boot.
+- **Flicker:** in the installed app the tab bar is now anchored by its *top* to `screen.height` (a constant, exposed as `--screen-h`) rather than to the viewport bottom. Its screen position is identical before and after the correction with no JS in the loop.
+- **Labels / launch state:** a second, stronger boot-time kick — rewriting the viewport meta for one frame, which makes WebKit recompute viewport geometry the way a rotation does — scheduled alongside the scroll nudge at 0/120/400/800ms.
+- **Launch timeline in Settings:** logs the deficit at boot, each nudge, first touch, tab switches and the moment the deficit clears, so the next report shows exactly which event fixes it.
+
 ## v0.8.8 — 2026-09-09
 v0.8.7 confirmed on device: bar in the right place on every tab, `deficit 0` after correction. Two leftovers, both consequences of the launch deficit state:
 - **Tab labels missing on Today at launch.** The icons were drawn but the labels sit below the 894px launch viewport, and only composited layers get painted in that overflow region (which is exactly why the parked sheet, with its `transform`, was visible there). The tab bar and rest bar now carry `transform:translateZ(0)` so they are composited and paint fully below the line.

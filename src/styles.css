@@ -92,6 +92,11 @@ h1,h2,h3{margin:0; text-wrap:balance; font-family:"Archivo",system-ui,sans-serif
    layers get painted in the region below the short launch viewport (v0.8.7 screenshot: icons drawn,
    labels — which fall below the 894px line — missing). */
 .tabbar{position:fixed;left:0;right:0;bottom:calc(-1 * var(--deficit));z-index:30;background:var(--bg);border-top:1px solid var(--line);padding-bottom:var(--safe-b);transform:translateZ(0)}
+/* Installed iOS app (html.standalone, set by IL.ui): anchor the bar by its TOP to screen.height —
+   a constant — instead of to the viewport bottom. Its screen position is then identical before and
+   after WebKit's launch-time viewport correction, with no JS in the loop, so nothing can flicker
+   on the frame the correction lands. (--deficit still drives the sheet/scrim/rest bar/toast.) */
+html.standalone .tabbar{bottom:auto;top:calc(var(--screen-h,100vh) - var(--tab-h) - var(--safe-b) - 1px)}
 .tabbar .row{max-width:520px;margin:0 auto;display:grid;grid-template-columns:repeat(4,1fr)}
 .tab{height:var(--tab-h);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:var(--ink-3);font-size:11px;font-weight:600;letter-spacing:.01em}
 .tab svg{width:23px;height:23px}

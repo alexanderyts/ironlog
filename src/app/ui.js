@@ -60,7 +60,7 @@ let editSession=null,editDirty=false;
 let pickedGroups=new Set();
 let calMonth=new Date().getFullYear()*12+new Date().getMonth(),selDay=null;
 let libQuery='',libGroup='All';
-function setTab(t){currentTab=t;document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===t));render();window.scrollTo(0,0);}
+function setTab(t){vlog('tab '+t);currentTab=t;document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===t));render();window.scrollTo(0,0);}
 function render(){
   const v=$('#view');
   if(currentTab==='today')v.innerHTML=viewToday();
@@ -459,12 +459,20 @@ function viewportDeficit(){
   const d=Math.round(screen.height-innerHeight);
   return d>0&&d<=120?d:0;
 }
+const vpLog=[], vpT0=(window.performance&&performance.now())||Date.now();
+function vlog(m){const t=((window.performance&&performance.now())||Date.now())-vpT0;vpLog.push(Math.round(t)+'ms '+m);if(vpLog.length>14)vpLog.shift();}
 let _lastDeficit=-1;
 function syncViewportDeficit(){
   const d=viewportDeficit();
+  if(STANDALONE){
+    // Bar position is derived from screen.height (constant), not the viewport — see .tabbar CSS
+    document.documentElement.style.setProperty('--screen-h',screen.height+'px');
+    document.documentElement.classList.toggle('standalone',innerWidth<=innerHeight);
+  }
   if(d===_lastDeficit)return;
   _lastDeficit=d;
   document.documentElement.style.setProperty('--deficit',d+'px');
+  vlog('deficit '+d+' inner '+innerHeight);
 }
 /* Try to make WebKit do its correction now, before the user sees anything, rather than on their
    first tab switch (that's the flicker in v0.8.7: switching tabs scrolls, WebKit corrects, and the
@@ -472,10 +480,22 @@ function syncViewportDeficit(){
    triggers it, so make the document scrollable for one frame and scroll 1px and back. */
 function nudgeViewport(){
   if(!viewportDeficit())return;
+  vlog('nudge scroll');
   const de=document.documentElement, prev=de.style.minHeight;
   de.style.minHeight=(innerHeight+4)+'px';
   window.scrollTo(0,1);
   requestAnimationFrame(()=>{window.scrollTo(0,0);de.style.minHeight=prev;syncViewportDeficit();});
+}
+/* Stronger kick: rewriting the viewport meta makes WebKit recompute its viewport configuration and
+   push fresh geometry to the UI process — the same path a rotation takes. Adds a no-op parameter
+   for one frame, then restores the original string. */
+function kickViewportMeta(){
+  if(!viewportDeficit())return;
+  const m=document.querySelector('meta[name="viewport"]');if(!m)return;
+  vlog('nudge meta');
+  const c=m.getAttribute('content');
+  m.setAttribute('content',c+',minimum-scale=1');
+  requestAnimationFrame(()=>{m.setAttribute('content',c);syncViewportDeficit();});
 }
 function watchViewport(){
   syncViewportDeficit();
@@ -487,8 +507,12 @@ function watchViewport(){
   // stale for longer than the frame the correction lands in.
   const frame=()=>{if(!document.hidden)syncViewportDeficit();requestAnimationFrame(frame);};
   requestAnimationFrame(frame);
+  addEventListener('touchstart',()=>vlog('touch'),{passive:true,once:true});
+  addEventListener('load',()=>vlog('load'));
   nudgeViewport();
+  setTimeout(kickViewportMeta,120);
   setTimeout(nudgeViewport,400);
+  setTimeout(kickViewportMeta,800);
 }
 function openSettings(){
   const R=state.settings.rest,st=state.settings;
@@ -516,7 +540,8 @@ function openSettings(){
     <button class="btn ghost block" id="btnExport" style="margin-bottom:10px">⬇ Export a backup file</button>
     <label class="btn ghost block" style="margin-bottom:10px">⬆ Import a backup<input type="file" id="fileImport" accept="application/json" hidden></label>`}
     <div class="dim" style="font-size:12px;text-align:center;margin-top:18px">Ironlog v${APP_VERSION} · ${state.sessions.length} sessions · ${state.routines.length} routines</div>
-    <div class="dim mono" style="font-size:10.5px;text-align:center;margin-top:4px;opacity:.7">${viewportDiag()}</div>`);
+    <div class="dim mono" style="font-size:10.5px;text-align:center;margin-top:4px;opacity:.7">${viewportDiag()}</div>
+    <div class="dim mono" style="font-size:10.5px;text-align:center;margin-top:4px;opacity:.7">${vpLog.join(' · ')}</div>`);
   $('#segUnit').addEventListener('click',e=>{const b=e.target.closest('[data-u]');if(!b)return;const nu=b.dataset.u;if(nu===U())return;
     showConfirm('Switch to '+nu+'?','Every logged weight will be converted so your history and PRs stay accurate.','Convert to '+nu,()=>{convertUnits(U(),nu);openSettings();render();toast('Converted to '+nu);},'primary');});
   $('#segTheme').addEventListener('click',e=>{const b=e.target.closest('[data-t]');if(!b)return;state.settings.theme=b.dataset.t;S.saveSettingsCloud();applyTheme();openSettings();});

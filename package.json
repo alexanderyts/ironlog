@@ -1,6 +1,6 @@
 {
   "name": "ironlog",
-  "version": "0.8.8",
+  "version": "0.8.9",
   "description": "Ironlog — a mobile-first workout tracker with an intelligent workout builder and coaching.",
   "private": true,
   "scripts": {
