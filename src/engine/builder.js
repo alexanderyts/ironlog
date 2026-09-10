@@ -4,7 +4,7 @@ var IL=globalThis.IL||(globalThis.IL={});
 if(typeof require==='function'&&!IL.data)require('../data/exercises.js');
 if(typeof require==='function'&&!IL.prog)require('./progression.js');
 const {C,I,EXERCISES,EX,REGIONS,IDEAL_PATS,PAT_RANK,EQUIP_LOAD,regLabel,patLabel,hashId}=IL.data;
-const {lastPerf,lastModeFor,nextSets,modeOf}=IL.prog;
+const {lastPerf,lastModeFor,nextSets,deloadSets,modeOf}=IL.prog;
 
 // Working sets a movement deserves when you've never logged it: main lifts 4, other compounds 3,
 // isolation 3, finishers 2. Reps prefilled at the bottom of the target range.
@@ -13,12 +13,14 @@ function prescribedSets(ex){if(!ex)return 3;if(ex.type===C)return ex.tier===1?4:
 // (see nextSets in progression.js), not a stale copy of last time. The modality the user last
 // performed this exercise with is remembered and carried onto the new instance, and the seed pulls
 // from that modality's history so the prescription is like-for-like.
-function seedExercise(id,sessions,excludeId,unit){
+function seedExercise(id,sessions,excludeId,unit,deload){
   const ex=EX[id];const mode=lastModeFor(sessions,id);
   const inst={id,name:ex?ex.name:id};if(mode)inst.mode=mode;
   const lp=lastPerf(sessions||[],id,{excludeId,mode:mode||undefined});
-  if(lp&&lp.sets.length){inst.sets=nextSets(lp.sets,ex,unit).sets.map(s=>({w:s.w,r:s.r,done:false}));return inst;}
-  const n=prescribedSets(ex),r=ex?ex.rr[0]:'';
+  if(lp&&lp.sets.length){
+    const sets=deload?deloadSets(lp.sets,ex,unit):nextSets(lp.sets,ex,unit).sets;
+    inst.sets=sets.map(s=>({w:s.w,r:s.r,done:false}));return inst;}
+  const n=prescribedSets(ex),r=ex?(deload?ex.rr[1]:ex.rr[0]):'';
   inst.sets=Array.from({length:n},()=>({w:'',r:r,done:false}));return inst;
 }
 // Exercise ids from the most recent completed session that trained this group
@@ -175,6 +177,7 @@ function findPlan(groups,sessions,now){
   now=now||Date.now();const want=new Set(groups);
   for(const s of sessions||[]){
     if(s.completed===false||!s.exercises.length)continue;
+    if(s.deload)continue;   // resume the real plan, not a recovery detour
     if(now-s.date>CONTINUE_DAYS*86400000)break;
     const sg=sessionGroups(s);
     if(![...want].every(g=>sg[g]))continue;
@@ -188,6 +191,7 @@ function exerciseStreak(sessions,exId){
   const ex=EX[exId];if(!ex)return 0;let n=0;
   for(const s of sessions||[]){
     if(s.completed===false)continue;
+    if(s.deload)continue;   // deloads are transparent to staleness/rotation
     if(!s.exercises.some(e=>EX[e.id]&&EX[e.id].group===ex.group))continue;
     if(s.exercises.some(e=>e.id===exId))n++;else break;
   }

@@ -38,7 +38,7 @@ function analyze(sessions,now){
 // How many tracked lifts trend up in estimated 1RM over the last 4 weeks
 function progressionStat(sessions,now,bw){
   now=now||Date.now();
-  const done=completed(sessions).filter(s=>s.date>=now-28*DAY).sort((x,y)=>x.date-y.date);
+  const done=completed(sessions).filter(s=>!s.deload&&s.date>=now-28*DAY).sort((x,y)=>x.date-y.date);
   const byEx={};
   done.forEach(s=>s.exercises.forEach(e=>{const best=Math.max(0,...e.sets.filter(isWorking).map(st=>e1rm(setLoad(e.id,st.w,bw),+st.r||0)));if(best)(byEx[e.id]=byEx[e.id]||[]).push(best);}));
   let n=0,up=0;Object.values(byEx).forEach(arr=>{if(arr.length>=2){n++;if(arr[arr.length-1]>arr[0])up++;}});
@@ -63,6 +63,16 @@ function buildTips(a,sessions,now,bw){
     // upper has twice the muscle groups, so ~2:1 is normal (push/pull/legs); flag only a real skew
     if(a.upperSets+a.lowerSets>=8&&a.lowerSets*3<=a.upperSets)t.push({lv:'warn',x:`Legs are undertrained — <b>${a.lowerSets}</b> lower-body sets vs <b>${a.upperSets}</b> upper. Add a squat or hinge day.`});
   }
+  // deload/recovery — placed high because recovery is time-sensitive: acknowledge a recent deload,
+  // else prompt one after a long unbroken run (fatigue/joint stress clears, then overload resumes).
+  const lastDeload=completed(sessions).filter(s=>s.deload).sort((x,y)=>y.date-x.date)[0];
+  const sinceDeload=lastDeload?Math.round((now-lastDeload.date)/DAY):Infinity;
+  if(sinceDeload<=14){
+    t.push({lv:'good',x:`You took a <b>deload</b> ${sinceDeload<=7?'this week':'recently'} — smart. Recovery is where the last block's work turns into growth; ease back to full loads once you feel fresh.`});
+  }else{
+    const streakWk=calcStreak(sessions,now);
+    if(streakWk>=6)t.push({lv:'info',x:`You've trained <b>${streakWk} weeks</b> straight — a lighter <b>deload</b> (about 60% loads, full range, focus on the stretch) lets accumulated fatigue and joint stress clear so the next block hits harder.`});
+  }
   const gaps=[];
   trained.forEach(g=>{const seen=a.regSeen[g]||new Set();(REGIONS[g]||[]).forEach(r=>{if(!seen.has(r)){const ex=exampleFor(g,r);if(ex)gaps.push({lv:'info',prio:gapPrio(g,r),x:`You train ${g.toLowerCase()} but skip <b>${regLabel(g,r)}</b>. Try <b>${ex}</b>.`});}});});
   trained.forEach(g=>{const seen=a.patSeen[g]||new Set();(IDEAL_PATS[g]||[]).forEach(p=>{if(!seen.has(p)){const ex=EXERCISES.find(x=>x.group===g&&x.pat===p&&x.tier<=2)||EXERCISES.find(x=>x.group===g&&x.pat===p);if(ex)gaps.push({lv:'info',prio:patPrio(g,p),x:`Your ${g.toLowerCase()} work has no <b>${p==='iso'?'isolation':patLabel(p)}</b> movement — pair it with <b>${ex.name}</b> for complete development.`});}});});
@@ -76,9 +86,6 @@ function buildTips(a,sessions,now,bw){
       .map(g=>({g,pw:a.groupSets[g]/a.weeks})).sort((x,y)=>y.pw-x.pw)[0];
     if(lowFreq)t.push({lv:'info',x:`You train ${lowFreq.g.toLowerCase()} hard but about once a week — splitting those <b>~${Math.round(lowFreq.pw)} sets</b> across <b>2 days</b> tends to build a muscle faster than one big session.`});
   }
-  // deload: a mesocycle normally ends in a lighter week. After a long unbroken run, suggest one.
-  const streakWk=calcStreak(sessions,now);
-  if(streakWk>=6)t.push({lv:'info',x:`You've trained <b>${streakWk} weeks</b> straight — a lighter <b>deload</b> week (about half the sets, same weights) lets accumulated fatigue clear so the next block hits harder.`});
   const pr=progressionStat(sessions,now,bw);
   if(pr.n>=2)t.push({lv:pr.up>=pr.n/2?'good':'info',x:`Progression: <b>${pr.up}/${pr.n}</b> of your tracked lifts are trending up in estimated strength this month.${pr.up>=pr.n/2?' Keep it going.':' Lean on the +weight suggestions to push the rest.'}`});
   return t.slice(0,5);   // may be empty — the caller owns empty-state copy (it knows WHY: too little history vs. genuinely nothing to flag)
@@ -88,12 +95,12 @@ function buildTips(a,sessions,now,bw){
 // is meaningful (barbell/smith/bodyweight) — cable/machine stacks show load instead of a bogus 1RM.
 function personalRecords(sessions,bw,limit){
   const best={};
-  completed(sessions).forEach(s=>s.exercises.forEach(e=>{const mode=modeOf(e);e.sets.forEach(st=>{
+  completed(sessions).forEach(s=>{if(s.deload)return;s.exercises.forEach(e=>{const mode=modeOf(e);e.sets.forEach(st=>{
     if(!isWorking(st))return;const w=setLoad(e.id,st.w,bw),r=+st.r||0;if(!w||!r)return;
     const est=e1rm(w,r);const ex=EX[e.id];const key=e.id+':'+mode;
     const showEst=!!ex&&ex.type==='compound'&&!!(MODES[mode]&&MODES[mode].e1rm);
     if(!best[key]||est>best[key].est)best[key]={id:e.id,mode,w:+st.w||0,load:w,r,est,name:ex?ex.name:e.name,date:s.date,compound:!!ex&&ex.type==='compound',showEst,bodyweight:mode==='bodyweight'};
-  })}));
+  })})});
   // e1RM-comparable lifts first (by e1RM); the rest after, by load
   return Object.values(best).sort((a,b)=>(b.showEst-a.showEst)||(a.showEst?b.est-a.est:b.load-a.load)).slice(0,limit||8);
 }

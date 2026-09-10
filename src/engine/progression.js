@@ -35,6 +35,7 @@ function lastPerf(sessions,exId,opts){
   opts=opts||{};
   for(const s of sessions){
     if(s.completed===false)continue;
+    if(s.deload&&!opts.includeDeload)continue;   // a deload is a recovery detour, not a progression data point
     if(opts.beforeTs&&s.date>=opts.beforeTs)continue;
     if(opts.excludeId&&s.id===opts.excludeId)continue;
     const e=s.exercises.find(x=>x.id===exId&&(!opts.mode||modeOf(x)===opts.mode)&&x.sets.some(isWorking));
@@ -121,6 +122,15 @@ function nextSets(last,ex,unit){
   return{sets,bumped:true,pattern:p.pattern,anchor:p.anchor,short:0,under:false,weighted,newTop};
 }
 
+/* Deload prescription: intentionally lighter loads for a recovery session (see the research note in
+   ui.js openDeload). ~60% of last real working weight, rounded to the plate grid, reps at the top of
+   the range — light enough to move well shy of failure with a focus on full range and the stretch.
+   Bodyweight moves stay bodyweight (just do easy, controlled reps). Because lastPerf skips deloads,
+   this pulls from the last REAL session, and the deload itself never becomes a progression anchor. */
+function deloadSets(last,ex,unit){
+  const hi=ex?ex.rr[1]:12,inc=unitIncrement(unit||'lb');
+  return last.map(s=>{const w=+s.w||0;const dw=w>0?Math.max(inc,Math.round(w*0.6/inc)*inc):0;return{w:dw,r:hi};});
+}
 // Progressive-overload suggestion for an exercise. kind: 'new' | 'weight' | 'match' | 'reps'
 // 'weight' means the prescription (`next`) already carries the bump; the text explains it.
 function suggestion(sessions,exId,opts){
@@ -166,5 +176,5 @@ function calcStreak(sessions,now){
   return n;
 }
 
-IL.prog={DAY,startOfDay,e1rm,isWorking,setLoad,sessionVolume,sessionSets,fmtVol,modeOf,lastPerf,lastModeFor,setPattern,fmtPerf,nextSets,suggestion,unitIncrement,convertWeight,convertSessions,calcStreak};
+IL.prog={DAY,startOfDay,e1rm,isWorking,setLoad,sessionVolume,sessionSets,fmtVol,modeOf,lastPerf,lastModeFor,setPattern,fmtPerf,nextSets,deloadSets,suggestion,unitIncrement,convertWeight,convertSessions,calcStreak};
 if(typeof module!=='undefined')module.exports=IL.prog;

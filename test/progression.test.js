@@ -102,7 +102,9 @@ test('unit conversion: lb → kg → lb is exact; kg → lb → kg within a tent
 });
 
 test('streak counts consecutive training weeks and tolerates an untrained current week',()=>{
-  const now=Date.now();
+  // Pinned to a fixed mid-week day (Wed) so week-boundary math is deterministic — "8 days ago" is
+  // reliably the previous week. With a live Date.now() this flakes when today IS the week boundary.
+  const now=new Date(2026,8,9,12,0,0).getTime();
   const w=7*86400000;
   assert.equal(P.calcStreak([],now),0);
   const hist=[session(1,[['crunch',[set(0,20)]]],{now}),session(8,[['crunch',[set(0,20)]]],{now}),session(15,[['crunch',[set(0,20)]]],{now})];

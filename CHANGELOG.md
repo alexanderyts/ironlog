@@ -2,6 +2,13 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.14.0 — 2026-09-10 · Deload / recovery sessions
+Sore or beat up but still want to move? Build a proper recovery session — and the algorithm treats it as recovery, not a setback.
+- **A "Deload / recovery session" toggle** on the New-workout screen. With it on, the built (or blank) workout is seeded at **~60% of your last real loads**, reps at the top of the range, with an on-screen coach note: full range, focus on the stretch, stop 3–4 reps shy of failure. (Grounded in the fitness–fatigue model: a brief drop in load lets accumulated muscular *and joint/connective-tissue* fatigue clear while fitness is retained, so overload can resume — standard mesocycle practice, and light long-length work keeps a stretch-mediated stimulus.)
+- **Invisible to progression, by design.** A deload never sets a PR, never counts as a stall or regression, and never becomes a progression baseline. `lastPerf`/`suggestion`/PRs/stall-detection/`planWorkout`/`progressionStat` all skip deloads — so your **next real session resumes from your last real one**, and a deload is a transparent pause, not a reset.
+- **Recovery shows up in the report.** Deload sessions are badged in history and the active view, still count toward your streak/consistency and volume, and Coach's Notes **acknowledges a recent deload** ("smart — recovery is where the work turns into growth") instead of nagging you to take one; the deload *prompt* now also resets for two weeks after you take one.
+- Engine: `deloadSets` (progression.js), deload-aware `seedExercise`/`findPlan`/`exerciseStreak` (builder.js), deload-excluded PRs/progression + recovery-aware coach tip (analysis.js). 7 new tests (60 total). Also pinned a calendar-fragile streak test to a fixed date.
+
 ## v0.13.0 — 2026-09-09 · Coaching tune-ups (Roadmap v3, Phase 3)
 Two evidence-based, read-only nudges in Coach's Notes — no new logging, no friction.
 - **Frequency:** when a muscle is trained with real weekly volume (~6+ sets/week) but essentially in a single session, suggests splitting it across 2 days — ≥2×/week grows a muscle faster per unit of volume than one big session. Only fires once there's a real multi-session history (`readyForComparative`).

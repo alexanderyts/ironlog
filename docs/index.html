@@ -198,6 +198,7 @@ html.standalone .tabbar{bottom:auto;top:calc(var(--screen-h,100vh) - var(--tab-h
 .modelist{display:flex;flex-direction:column;gap:2px}
 .modeopt{display:flex;align-items:center;gap:10px;text-align:left;padding:12px 12px;border-radius:12px}
 .modeopt.on{background:var(--accent-soft)}
+.deload-badge{display:inline-block;vertical-align:middle;font-size:11px;font-weight:700;letter-spacing:.02em;color:var(--good);background:var(--good-soft);padding:2px 8px;border-radius:8px;margin-left:6px}
 
 /* Stats */
 .statgrid{display:grid;grid-template-columns:1fr 1fr;gap:11px}
@@ -362,8 +363,8 @@ html.standalone .tabbar{bottom:auto;top:calc(var(--screen-h,100vh) - var(--tab-h
 </div>
 
 <script>
-/* Ironlog v0.13.0 · site build · 2026-09-09T18:03:55.865Z */
-var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.13.0",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
+/* Ironlog v0.14.0 · site build · 2026-09-10T18:46:11.048Z */
+var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.14.0",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
 
 /* ===== src/data/exercises.js ===== */
 (function(){'use strict';
@@ -585,6 +586,7 @@ function lastPerf(sessions,exId,opts){
   opts=opts||{};
   for(const s of sessions){
     if(s.completed===false)continue;
+    if(s.deload&&!opts.includeDeload)continue;   // a deload is a recovery detour, not a progression data point
     if(opts.beforeTs&&s.date>=opts.beforeTs)continue;
     if(opts.excludeId&&s.id===opts.excludeId)continue;
     const e=s.exercises.find(x=>x.id===exId&&(!opts.mode||modeOf(x)===opts.mode)&&x.sets.some(isWorking));
@@ -671,6 +673,15 @@ function nextSets(last,ex,unit){
   return{sets,bumped:true,pattern:p.pattern,anchor:p.anchor,short:0,under:false,weighted,newTop};
 }
 
+/* Deload prescription: intentionally lighter loads for a recovery session (see the research note in
+   ui.js openDeload). ~60% of last real working weight, rounded to the plate grid, reps at the top of
+   the range — light enough to move well shy of failure with a focus on full range and the stretch.
+   Bodyweight moves stay bodyweight (just do easy, controlled reps). Because lastPerf skips deloads,
+   this pulls from the last REAL session, and the deload itself never becomes a progression anchor. */
+function deloadSets(last,ex,unit){
+  const hi=ex?ex.rr[1]:12,inc=unitIncrement(unit||'lb');
+  return last.map(s=>{const w=+s.w||0;const dw=w>0?Math.max(inc,Math.round(w*0.6/inc)*inc):0;return{w:dw,r:hi};});
+}
 // Progressive-overload suggestion for an exercise. kind: 'new' | 'weight' | 'match' | 'reps'
 // 'weight' means the prescription (`next`) already carries the bump; the text explains it.
 function suggestion(sessions,exId,opts){
@@ -716,7 +727,7 @@ function calcStreak(sessions,now){
   return n;
 }
 
-IL.prog={DAY,startOfDay,e1rm,isWorking,setLoad,sessionVolume,sessionSets,fmtVol,modeOf,lastPerf,lastModeFor,setPattern,fmtPerf,nextSets,suggestion,unitIncrement,convertWeight,convertSessions,calcStreak};
+IL.prog={DAY,startOfDay,e1rm,isWorking,setLoad,sessionVolume,sessionSets,fmtVol,modeOf,lastPerf,lastModeFor,setPattern,fmtPerf,nextSets,deloadSets,suggestion,unitIncrement,convertWeight,convertSessions,calcStreak};
 if(typeof module!=='undefined')module.exports=IL.prog;
 
 })();
@@ -757,7 +768,7 @@ var IL=globalThis.IL||(globalThis.IL={});
 if(typeof require==='function'&&!IL.data)require('../data/exercises.js');
 if(typeof require==='function'&&!IL.prog)require('./progression.js');
 const {C,I,EXERCISES,EX,REGIONS,IDEAL_PATS,PAT_RANK,EQUIP_LOAD,regLabel,patLabel,hashId}=IL.data;
-const {lastPerf,lastModeFor,nextSets,modeOf}=IL.prog;
+const {lastPerf,lastModeFor,nextSets,deloadSets,modeOf}=IL.prog;
 
 // Working sets a movement deserves when you've never logged it: main lifts 4, other compounds 3,
 // isolation 3, finishers 2. Reps prefilled at the bottom of the target range.
@@ -766,12 +777,14 @@ function prescribedSets(ex){if(!ex)return 3;if(ex.type===C)return ex.tier===1?4:
 // (see nextSets in progression.js), not a stale copy of last time. The modality the user last
 // performed this exercise with is remembered and carried onto the new instance, and the seed pulls
 // from that modality's history so the prescription is like-for-like.
-function seedExercise(id,sessions,excludeId,unit){
+function seedExercise(id,sessions,excludeId,unit,deload){
   const ex=EX[id];const mode=lastModeFor(sessions,id);
   const inst={id,name:ex?ex.name:id};if(mode)inst.mode=mode;
   const lp=lastPerf(sessions||[],id,{excludeId,mode:mode||undefined});
-  if(lp&&lp.sets.length){inst.sets=nextSets(lp.sets,ex,unit).sets.map(s=>({w:s.w,r:s.r,done:false}));return inst;}
-  const n=prescribedSets(ex),r=ex?ex.rr[0]:'';
+  if(lp&&lp.sets.length){
+    const sets=deload?deloadSets(lp.sets,ex,unit):nextSets(lp.sets,ex,unit).sets;
+    inst.sets=sets.map(s=>({w:s.w,r:s.r,done:false}));return inst;}
+  const n=prescribedSets(ex),r=ex?(deload?ex.rr[1]:ex.rr[0]):'';
   inst.sets=Array.from({length:n},()=>({w:'',r:r,done:false}));return inst;
 }
 // Exercise ids from the most recent completed session that trained this group
@@ -928,6 +941,7 @@ function findPlan(groups,sessions,now){
   now=now||Date.now();const want=new Set(groups);
   for(const s of sessions||[]){
     if(s.completed===false||!s.exercises.length)continue;
+    if(s.deload)continue;   // resume the real plan, not a recovery detour
     if(now-s.date>CONTINUE_DAYS*86400000)break;
     const sg=sessionGroups(s);
     if(![...want].every(g=>sg[g]))continue;
@@ -941,6 +955,7 @@ function exerciseStreak(sessions,exId){
   const ex=EX[exId];if(!ex)return 0;let n=0;
   for(const s of sessions||[]){
     if(s.completed===false)continue;
+    if(s.deload)continue;   // deloads are transparent to staleness/rotation
     if(!s.exercises.some(e=>EX[e.id]&&EX[e.id].group===ex.group))continue;
     if(s.exercises.some(e=>e.id===exId))n++;else break;
   }
@@ -1041,7 +1056,7 @@ function analyze(sessions,now){
 // How many tracked lifts trend up in estimated 1RM over the last 4 weeks
 function progressionStat(sessions,now,bw){
   now=now||Date.now();
-  const done=completed(sessions).filter(s=>s.date>=now-28*DAY).sort((x,y)=>x.date-y.date);
+  const done=completed(sessions).filter(s=>!s.deload&&s.date>=now-28*DAY).sort((x,y)=>x.date-y.date);
   const byEx={};
   done.forEach(s=>s.exercises.forEach(e=>{const best=Math.max(0,...e.sets.filter(isWorking).map(st=>e1rm(setLoad(e.id,st.w,bw),+st.r||0)));if(best)(byEx[e.id]=byEx[e.id]||[]).push(best);}));
   let n=0,up=0;Object.values(byEx).forEach(arr=>{if(arr.length>=2){n++;if(arr[arr.length-1]>arr[0])up++;}});
@@ -1066,6 +1081,16 @@ function buildTips(a,sessions,now,bw){
     // upper has twice the muscle groups, so ~2:1 is normal (push/pull/legs); flag only a real skew
     if(a.upperSets+a.lowerSets>=8&&a.lowerSets*3<=a.upperSets)t.push({lv:'warn',x:`Legs are undertrained — <b>${a.lowerSets}</b> lower-body sets vs <b>${a.upperSets}</b> upper. Add a squat or hinge day.`});
   }
+  // deload/recovery — placed high because recovery is time-sensitive: acknowledge a recent deload,
+  // else prompt one after a long unbroken run (fatigue/joint stress clears, then overload resumes).
+  const lastDeload=completed(sessions).filter(s=>s.deload).sort((x,y)=>y.date-x.date)[0];
+  const sinceDeload=lastDeload?Math.round((now-lastDeload.date)/DAY):Infinity;
+  if(sinceDeload<=14){
+    t.push({lv:'good',x:`You took a <b>deload</b> ${sinceDeload<=7?'this week':'recently'} — smart. Recovery is where the last block's work turns into growth; ease back to full loads once you feel fresh.`});
+  }else{
+    const streakWk=calcStreak(sessions,now);
+    if(streakWk>=6)t.push({lv:'info',x:`You've trained <b>${streakWk} weeks</b> straight — a lighter <b>deload</b> (about 60% loads, full range, focus on the stretch) lets accumulated fatigue and joint stress clear so the next block hits harder.`});
+  }
   const gaps=[];
   trained.forEach(g=>{const seen=a.regSeen[g]||new Set();(REGIONS[g]||[]).forEach(r=>{if(!seen.has(r)){const ex=exampleFor(g,r);if(ex)gaps.push({lv:'info',prio:gapPrio(g,r),x:`You train ${g.toLowerCase()} but skip <b>${regLabel(g,r)}</b>. Try <b>${ex}</b>.`});}});});
   trained.forEach(g=>{const seen=a.patSeen[g]||new Set();(IDEAL_PATS[g]||[]).forEach(p=>{if(!seen.has(p)){const ex=EXERCISES.find(x=>x.group===g&&x.pat===p&&x.tier<=2)||EXERCISES.find(x=>x.group===g&&x.pat===p);if(ex)gaps.push({lv:'info',prio:patPrio(g,p),x:`Your ${g.toLowerCase()} work has no <b>${p==='iso'?'isolation':patLabel(p)}</b> movement — pair it with <b>${ex.name}</b> for complete development.`});}});});
@@ -1079,9 +1104,6 @@ function buildTips(a,sessions,now,bw){
       .map(g=>({g,pw:a.groupSets[g]/a.weeks})).sort((x,y)=>y.pw-x.pw)[0];
     if(lowFreq)t.push({lv:'info',x:`You train ${lowFreq.g.toLowerCase()} hard but about once a week — splitting those <b>~${Math.round(lowFreq.pw)} sets</b> across <b>2 days</b> tends to build a muscle faster than one big session.`});
   }
-  // deload: a mesocycle normally ends in a lighter week. After a long unbroken run, suggest one.
-  const streakWk=calcStreak(sessions,now);
-  if(streakWk>=6)t.push({lv:'info',x:`You've trained <b>${streakWk} weeks</b> straight — a lighter <b>deload</b> week (about half the sets, same weights) lets accumulated fatigue clear so the next block hits harder.`});
   const pr=progressionStat(sessions,now,bw);
   if(pr.n>=2)t.push({lv:pr.up>=pr.n/2?'good':'info',x:`Progression: <b>${pr.up}/${pr.n}</b> of your tracked lifts are trending up in estimated strength this month.${pr.up>=pr.n/2?' Keep it going.':' Lean on the +weight suggestions to push the rest.'}`});
   return t.slice(0,5);   // may be empty — the caller owns empty-state copy (it knows WHY: too little history vs. genuinely nothing to flag)
@@ -1091,12 +1113,12 @@ function buildTips(a,sessions,now,bw){
 // is meaningful (barbell/smith/bodyweight) — cable/machine stacks show load instead of a bogus 1RM.
 function personalRecords(sessions,bw,limit){
   const best={};
-  completed(sessions).forEach(s=>s.exercises.forEach(e=>{const mode=modeOf(e);e.sets.forEach(st=>{
+  completed(sessions).forEach(s=>{if(s.deload)return;s.exercises.forEach(e=>{const mode=modeOf(e);e.sets.forEach(st=>{
     if(!isWorking(st))return;const w=setLoad(e.id,st.w,bw),r=+st.r||0;if(!w||!r)return;
     const est=e1rm(w,r);const ex=EX[e.id];const key=e.id+':'+mode;
     const showEst=!!ex&&ex.type==='compound'&&!!(MODES[mode]&&MODES[mode].e1rm);
     if(!best[key]||est>best[key].est)best[key]={id:e.id,mode,w:+st.w||0,load:w,r,est,name:ex?ex.name:e.name,date:s.date,compound:!!ex&&ex.type==='compound',showEst,bodyweight:mode==='bodyweight'};
-  })}));
+  })})});
   // e1RM-comparable lifts first (by e1RM); the rest after, by load
   return Object.values(best).sort((a,b)=>(b.showEst-a.showEst)||(a.showEst?b.est-a.est:b.load-a.load)).slice(0,limit||8);
 }
@@ -1531,6 +1553,7 @@ let currentTab='today';
 let todayScreen='home';          // 'home' | 'start' | 'active' | 'edit'
 let editSession=null,editDirty=false;
 let pickedGroups=new Set();
+let deloadPicked=false;
 let calMonth=new Date().getFullYear()*12+new Date().getMonth(),selDay=null;
 let libQuery='',libGroup='All';
 function setTab(t){vlog('tab '+t);currentTab=t;document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===t));render();window.scrollTo(0,0);}
@@ -1599,6 +1622,7 @@ function startWorkoutView(){
     </div>
     <div class="eyebrow" style="margin:22px 2px 10px">Target muscle groups</div>
     <div class="chips" id="groupPick">${GROUPS.map(g=>`<button class="chip ${pickedGroups.has(g)?'on':''}" data-g="${g}">${g}</button>`).join('')}</div>
+    <div class="card settingrow" style="margin:18px 0 0;padding:14px 15px"><div><div style="font-weight:600">Deload / recovery session</div><div class="dim" style="font-size:12.5px">Sore or beat up? Build it ~60% lighter — full range, focus on the stretch. Won't count against your progress or PRs.</div></div><button class="sw ${deloadPicked?'on':''}" id="deloadToggle" aria-label="Deload session"></button></div>
     <div class="spacer"></div><div class="spacer"></div>
     <div id="buildBtns">${buildButtons()}</div>
     <div style="height:10px"></div>
@@ -1636,8 +1660,8 @@ function recentTemplates(){
       <span class="ex-add" style="background:var(--surface-2)">↻</span></button>`).join('');
 }
 const SCHEMA=1;
-function newSession(exIds){return{id:S.uid(),schema:SCHEMA,date:Date.now(),updatedAt:Date.now(),completed:false,exercises:(exIds||[]).map(id=>B.seedExercise(id,state.sessions,null,U()))};}
-function startSession(exIds,msg){S.setActive(newSession(exIds));todayScreen='active';render();if(msg)toast(msg);}
+function newSession(exIds,deload){const s={id:S.uid(),schema:SCHEMA,date:Date.now(),updatedAt:Date.now(),completed:false,exercises:(exIds||[]).map(id=>B.seedExercise(id,state.sessions,null,U(),deload))};if(deload)s.deload=true;return s;}
+function startSession(exIds,msg,deload){S.setActive(newSession(exIds,deload));todayScreen='active';render();if(msg)toast(msg);}
 // Equipment picker for a logged exercise. Changing it re-scopes progression/PRs to that modality
 // (see modeOf/lastPerf); entered sets are kept (you're relabelling how it was done, not clearing it).
 // The choice is stored only when it differs from the exercise's native equipment, so data stays clean.
@@ -1653,10 +1677,12 @@ function openModePicker(ei){
     persistCur();closeSheet();render();toast(MODES[m].label);}));
 }
 function buildAndStart(fresh){
-  const p=B.planWorkout([...pickedGroups],state.sessions,null,{fresh});pickedGroups.clear();
+  const dl=deloadPicked;
+  const p=B.planWorkout([...pickedGroups],state.sessions,null,{fresh});pickedGroups.clear();deloadPicked=false;
   let msg='Workout built — adjust anything';
-  if(p.mode==='continue')msg=p.rotation?`Plan continued · swapped ${EX[p.rotation.from].name} → ${EX[p.rotation.to].name} (${p.rotation.why})`:'Plan continued — weights progressed from last time';
-  startSession(p.ids,msg);
+  if(dl)msg='Deload built — lighter loads, focus on the stretch';
+  else if(p.mode==='continue')msg=p.rotation?`Plan continued · swapped ${EX[p.rotation.from].name} → ${EX[p.rotation.to].name} (${p.rotation.why})`:'Plan continued — weights progressed from last time';
+  startSession(p.ids,msg,dl);
 }
 
 /* ---------------- session editor (live workout or editing a past one) ---------------- */
@@ -1667,7 +1693,8 @@ function editorView(s,mode){
     <div class="topbar"><button class="backbtn" id="btnBackHome">${ICON_BACK} ${edit?'Cancel':'Home'}</button>
       ${edit?'':'<button class="linkbtn dim" id="btnDiscard">Discard</button>'}</div>
     <div style="padding:0 2px 2px"><div class="eyebrow">${edit?'Editing · '+fmtDate(s.date):'Workout in progress · saves automatically'}</div>
-      <h2 style="font-size:23px;margin-top:4px">${new Date(s.date).toLocaleDateString(undefined,{weekday:'long'})}'s session</h2></div>
+      <h2 style="font-size:23px;margin-top:4px">${new Date(s.date).toLocaleDateString(undefined,{weekday:'long'})}'s session${s.deload?' <span class="deload-badge">Deload</span>':''}</h2></div>
+    ${s.deload?`<div class="card" style="margin:0 0 14px;padding:12px 14px;background:var(--good-soft);border:1px solid color-mix(in srgb,var(--good) 30%,transparent)"><div style="font-weight:600;color:var(--good);font-size:13.5px">🌿 Recovery session</div><div class="dim" style="font-size:12.5px;margin-top:3px">Lighter loads on purpose — take each rep through a full range, feel the stretch, and stop 3–4 reps shy of failure. This won't affect your progression or PRs.</div></div>`:''}
     <div class="statgrid" style="margin:14px 0 18px">
       <div class="card stat"><div class="k">Working sets</div><div class="v mono">${sets}</div></div>
       <div class="card stat"><div class="k">${volLabel()}</div><div class="v mono">${fmtVol(vol)}<small>${U()}</small></div></div>
@@ -1695,7 +1722,9 @@ function topSuggestionHTML(){
 }
 function logExercise(s,e,ei,mode){
   const ex=EX[e.id];let sugg='';const emode=modeOf(e);
-  if(mode==='active'){
+  if(mode==='active'&&s.deload){
+    sugg=`<div class="sugg match" style="color:var(--good);background:var(--good-soft)"><span>🌿 Recovery — lighter on purpose, own the stretch</span></div>`;
+  }else if(mode==='active'){
     const sg=P.suggestion(state.sessions,e.id,{unit:U(),activeDate:s.date,activeId:s.id,mode:emode});
     if(sg.lp){const w=sg.kind==='weight';
       // The prescription is already in the set rows; offer a one-tap revert until a set is done
@@ -1766,7 +1795,7 @@ function sessionList(done){
 }
 function sessCard(s){
   return `<div class="card sess" data-sess="${s.id}">
-    <div class="sess-top"><div class="sess-date">${relDay(s.date)}</div><span class="pill accent">${s.exercises.length} exercise${s.exercises.length!==1?'s':''}</span></div>
+    <div class="sess-top"><div class="sess-date">${relDay(s.date)}${s.deload?' <span class="deload-badge">Deload</span>':''}</div><span class="pill accent">${s.exercises.length} exercise${s.exercises.length!==1?'s':''}</span></div>
     <div class="sess-meta"><span class="muted">Volume <b>${fmtVol(volOf(s))} ${U()}</b></span><span class="muted">Sets <b>${setsOf(s)}</b></span></div>
     <div class="sess-ex">${s.exercises.slice(0,4).map(e=>{const best=e.sets.filter(P.isWorking);const top=best.length?Math.max(...best.map(x=>+x.w||0)):0;
       return `<div><span>${esc(EX[e.id]?EX[e.id].name:e.name)}</span><span class="s">${best.length}×${best.length?best[0].r:0} · ${top}${U()}</span></div>`;}).join('')}
@@ -2162,7 +2191,8 @@ function bind(){
   const gp=$('#groupPick');if(gp)gp.addEventListener('click',e=>{const b=e.target.closest('[data-g]');if(!b)return;const g=b.dataset.g;pickedGroups.has(g)?pickedGroups.delete(g):pickedGroups.add(g);b.classList.toggle('on');
     const bb=$('#buildBtns');if(bb){bb.innerHTML=buildButtons();bindBuild();}});
   bindBuild();
-  bindClick('#btnBlank',()=>startSession([]));
+  bindClick('#btnBlank',()=>{const dl=deloadPicked;deloadPicked=false;startSession([],dl?'Deload — lighter loads, focus on the stretch':null,dl);});
+  bindClick('#deloadToggle',()=>{deloadPicked=!deloadPicked;const b=$('#deloadToggle');if(b)b.classList.toggle('on',deloadPicked);});
   v.querySelectorAll('[data-repeat]').forEach(b=>b.addEventListener('click',()=>{const s=state.sessions.find(x=>x.id===b.dataset.repeat);if(s)startSession(s.exercises.map(e=>e.id),'Loaded — weights prefilled from history');}));
   v.querySelectorAll('[data-routine]').forEach(el=>el.addEventListener('click',e=>{
     if(e.target.closest('[data-delroutine]'))return;

@@ -59,6 +59,7 @@ let currentTab='today';
 let todayScreen='home';          // 'home' | 'start' | 'active' | 'edit'
 let editSession=null,editDirty=false;
 let pickedGroups=new Set();
+let deloadPicked=false;
 let calMonth=new Date().getFullYear()*12+new Date().getMonth(),selDay=null;
 let libQuery='',libGroup='All';
 function setTab(t){vlog('tab '+t);currentTab=t;document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===t));render();window.scrollTo(0,0);}
@@ -127,6 +128,7 @@ function startWorkoutView(){
     </div>
     <div class="eyebrow" style="margin:22px 2px 10px">Target muscle groups</div>
     <div class="chips" id="groupPick">${GROUPS.map(g=>`<button class="chip ${pickedGroups.has(g)?'on':''}" data-g="${g}">${g}</button>`).join('')}</div>
+    <div class="card settingrow" style="margin:18px 0 0;padding:14px 15px"><div><div style="font-weight:600">Deload / recovery session</div><div class="dim" style="font-size:12.5px">Sore or beat up? Build it ~60% lighter — full range, focus on the stretch. Won't count against your progress or PRs.</div></div><button class="sw ${deloadPicked?'on':''}" id="deloadToggle" aria-label="Deload session"></button></div>
     <div class="spacer"></div><div class="spacer"></div>
     <div id="buildBtns">${buildButtons()}</div>
     <div style="height:10px"></div>
@@ -164,8 +166,8 @@ function recentTemplates(){
       <span class="ex-add" style="background:var(--surface-2)">↻</span></button>`).join('');
 }
 const SCHEMA=1;
-function newSession(exIds){return{id:S.uid(),schema:SCHEMA,date:Date.now(),updatedAt:Date.now(),completed:false,exercises:(exIds||[]).map(id=>B.seedExercise(id,state.sessions,null,U()))};}
-function startSession(exIds,msg){S.setActive(newSession(exIds));todayScreen='active';render();if(msg)toast(msg);}
+function newSession(exIds,deload){const s={id:S.uid(),schema:SCHEMA,date:Date.now(),updatedAt:Date.now(),completed:false,exercises:(exIds||[]).map(id=>B.seedExercise(id,state.sessions,null,U(),deload))};if(deload)s.deload=true;return s;}
+function startSession(exIds,msg,deload){S.setActive(newSession(exIds,deload));todayScreen='active';render();if(msg)toast(msg);}
 // Equipment picker for a logged exercise. Changing it re-scopes progression/PRs to that modality
 // (see modeOf/lastPerf); entered sets are kept (you're relabelling how it was done, not clearing it).
 // The choice is stored only when it differs from the exercise's native equipment, so data stays clean.
@@ -181,10 +183,12 @@ function openModePicker(ei){
     persistCur();closeSheet();render();toast(MODES[m].label);}));
 }
 function buildAndStart(fresh){
-  const p=B.planWorkout([...pickedGroups],state.sessions,null,{fresh});pickedGroups.clear();
+  const dl=deloadPicked;
+  const p=B.planWorkout([...pickedGroups],state.sessions,null,{fresh});pickedGroups.clear();deloadPicked=false;
   let msg='Workout built — adjust anything';
-  if(p.mode==='continue')msg=p.rotation?`Plan continued · swapped ${EX[p.rotation.from].name} → ${EX[p.rotation.to].name} (${p.rotation.why})`:'Plan continued — weights progressed from last time';
-  startSession(p.ids,msg);
+  if(dl)msg='Deload built — lighter loads, focus on the stretch';
+  else if(p.mode==='continue')msg=p.rotation?`Plan continued · swapped ${EX[p.rotation.from].name} → ${EX[p.rotation.to].name} (${p.rotation.why})`:'Plan continued — weights progressed from last time';
+  startSession(p.ids,msg,dl);
 }
 
 /* ---------------- session editor (live workout or editing a past one) ---------------- */
@@ -195,7 +199,8 @@ function editorView(s,mode){
     <div class="topbar"><button class="backbtn" id="btnBackHome">${ICON_BACK} ${edit?'Cancel':'Home'}</button>
       ${edit?'':'<button class="linkbtn dim" id="btnDiscard">Discard</button>'}</div>
     <div style="padding:0 2px 2px"><div class="eyebrow">${edit?'Editing · '+fmtDate(s.date):'Workout in progress · saves automatically'}</div>
-      <h2 style="font-size:23px;margin-top:4px">${new Date(s.date).toLocaleDateString(undefined,{weekday:'long'})}'s session</h2></div>
+      <h2 style="font-size:23px;margin-top:4px">${new Date(s.date).toLocaleDateString(undefined,{weekday:'long'})}'s session${s.deload?' <span class="deload-badge">Deload</span>':''}</h2></div>
+    ${s.deload?`<div class="card" style="margin:0 0 14px;padding:12px 14px;background:var(--good-soft);border:1px solid color-mix(in srgb,var(--good) 30%,transparent)"><div style="font-weight:600;color:var(--good);font-size:13.5px">🌿 Recovery session</div><div class="dim" style="font-size:12.5px;margin-top:3px">Lighter loads on purpose — take each rep through a full range, feel the stretch, and stop 3–4 reps shy of failure. This won't affect your progression or PRs.</div></div>`:''}
     <div class="statgrid" style="margin:14px 0 18px">
       <div class="card stat"><div class="k">Working sets</div><div class="v mono">${sets}</div></div>
       <div class="card stat"><div class="k">${volLabel()}</div><div class="v mono">${fmtVol(vol)}<small>${U()}</small></div></div>
@@ -223,7 +228,9 @@ function topSuggestionHTML(){
 }
 function logExercise(s,e,ei,mode){
   const ex=EX[e.id];let sugg='';const emode=modeOf(e);
-  if(mode==='active'){
+  if(mode==='active'&&s.deload){
+    sugg=`<div class="sugg match" style="color:var(--good);background:var(--good-soft)"><span>🌿 Recovery — lighter on purpose, own the stretch</span></div>`;
+  }else if(mode==='active'){
     const sg=P.suggestion(state.sessions,e.id,{unit:U(),activeDate:s.date,activeId:s.id,mode:emode});
     if(sg.lp){const w=sg.kind==='weight';
       // The prescription is already in the set rows; offer a one-tap revert until a set is done
@@ -294,7 +301,7 @@ function sessionList(done){
 }
 function sessCard(s){
   return `<div class="card sess" data-sess="${s.id}">
-    <div class="sess-top"><div class="sess-date">${relDay(s.date)}</div><span class="pill accent">${s.exercises.length} exercise${s.exercises.length!==1?'s':''}</span></div>
+    <div class="sess-top"><div class="sess-date">${relDay(s.date)}${s.deload?' <span class="deload-badge">Deload</span>':''}</div><span class="pill accent">${s.exercises.length} exercise${s.exercises.length!==1?'s':''}</span></div>
     <div class="sess-meta"><span class="muted">Volume <b>${fmtVol(volOf(s))} ${U()}</b></span><span class="muted">Sets <b>${setsOf(s)}</b></span></div>
     <div class="sess-ex">${s.exercises.slice(0,4).map(e=>{const best=e.sets.filter(P.isWorking);const top=best.length?Math.max(...best.map(x=>+x.w||0)):0;
       return `<div><span>${esc(EX[e.id]?EX[e.id].name:e.name)}</span><span class="s">${best.length}×${best.length?best[0].r:0} · ${top}${U()}</span></div>`;}).join('')}
@@ -690,7 +697,8 @@ function bind(){
   const gp=$('#groupPick');if(gp)gp.addEventListener('click',e=>{const b=e.target.closest('[data-g]');if(!b)return;const g=b.dataset.g;pickedGroups.has(g)?pickedGroups.delete(g):pickedGroups.add(g);b.classList.toggle('on');
     const bb=$('#buildBtns');if(bb){bb.innerHTML=buildButtons();bindBuild();}});
   bindBuild();
-  bindClick('#btnBlank',()=>startSession([]));
+  bindClick('#btnBlank',()=>{const dl=deloadPicked;deloadPicked=false;startSession([],dl?'Deload — lighter loads, focus on the stretch':null,dl);});
+  bindClick('#deloadToggle',()=>{deloadPicked=!deloadPicked;const b=$('#deloadToggle');if(b)b.classList.toggle('on',deloadPicked);});
   v.querySelectorAll('[data-repeat]').forEach(b=>b.addEventListener('click',()=>{const s=state.sessions.find(x=>x.id===b.dataset.repeat);if(s)startSession(s.exercises.map(e=>e.id),'Loaded — weights prefilled from history');}));
   v.querySelectorAll('[data-routine]').forEach(el=>el.addEventListener('click',e=>{
     if(e.target.closest('[data-delroutine]'))return;
