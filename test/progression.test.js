@@ -126,3 +126,29 @@ test('e1rm and fmtVol',()=>{
   assert.equal(P.fmtVol(142000),'142k');
   assert.equal(P.fmtVol(2500000),'2.5M');
 });
+
+test('exerciseSeries: best-set e1RM per real session, oldest→newest, deloads excluded',()=>{
+  const now=Date.now();
+  const hist=[
+    session(2,[['back-squat',[set(245,5),set(245,3)]]],{now}),
+    Object.assign(session(5,[['back-squat',[set(135,10)]]],{now}),{deload:true}),   // deload skipped
+    session(12,[['back-squat',[set(225,5)]]],{now})
+  ];
+  const s=P.exerciseSeries(hist,'back-squat',{});
+  assert.equal(s.length,2,'deload excluded');
+  assert.ok(s[0].date<s[1].date,'oldest first');
+  assert.equal(s[0].est,P.e1rm(225,5));
+  assert.equal(s[1].est,P.e1rm(245,5),'takes the best set of the session');
+});
+
+test('bestE1rmBefore: all-time best for live PR detection, per mode, ignoring deloads',()=>{
+  const now=Date.now();
+  const hist=[
+    session(3,[['barbell-bench-press',[set(185,5)]]],{now}),
+    session(10,[['barbell-bench-press',[set(200,3)]]],{now})
+  ];
+  const best=P.bestE1rmBefore(hist,'barbell-bench-press',{});
+  assert.equal(best,Math.max(P.e1rm(185,5),P.e1rm(200,3)));
+  // a heavier future set would beat it (PR); mode filter isolates a different modality
+  assert.equal(P.bestE1rmBefore(hist,'barbell-bench-press',{mode:'dumbbell'}),0,'no dumbbell history → 0');
+});

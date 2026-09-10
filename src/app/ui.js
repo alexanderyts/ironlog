@@ -227,7 +227,13 @@ function topSuggestionHTML(){
     <span style="text-align:left;min-width:0"><span style="font-weight:700;display:block">Suggested: ${esc(EX[s.id].name)}</span><span class="dim" style="font-size:12.5px">${esc(s.why)}</span></span></button>`;
 }
 function logExercise(s,e,ei,mode){
-  const ex=EX[e.id];let sugg='';const emode=modeOf(e);
+  const ex=EX[e.id];let sugg='',prLine='';const emode=modeOf(e);
+  if(mode==='active'&&!s.deload){
+    // Live PR recognition: the session's best working set beating this lift's all-time best (same mode)
+    const histBest=P.bestE1rmBefore(state.sessions,e.id,{mode:emode,bw:bw(),excludeId:s.id});
+    if(histBest>0){let best=0,bs=null;e.sets.forEach(st=>{if(st.warm||!P.isWorking(st))return;const est=P.e1rm(P.setLoad(e.id,st.w,bw()),+st.r||0);if((+st.r)&&est>best){best=est;bs=st;}});
+      if(bs&&best>histBest)prLine=`<div class="sugg" style="color:var(--good);background:var(--good-soft)"><span>★ New PR — ${bs.w}${U()}${MODES[emode]&&MODES[emode].perHand?'/ea':''} × ${bs.r} <span class="dim">est ${Math.round(best)}${U()}</span></span></div>`;}
+  }
   if(mode==='active'&&s.deload){
     sugg=`<div class="sugg match" style="color:var(--good);background:var(--good-soft)"><span>🌿 Recovery — lighter on purpose, own the stretch</span></div>`;
   }else if(mode==='active'){
@@ -246,7 +252,7 @@ function logExercise(s,e,ei,mode){
       <button class="sheet-x" data-delex="${ei}" aria-label="Remove exercise">✕</button>
     </div>
     <button class="modechip" data-mode="${ei}" aria-label="Change equipment">${esc(MODES[emode]?MODES[emode].label:emode)} ▾</button>
-    ${sugg}
+    ${prLine}${sugg}
     <div class="setgrid">
       <div class="set-hdr"><div>Set</div><div>${whdr}</div><div>Reps</div><div></div></div>
       ${e.sets.map((st,si)=>setRow(st,ei,si)).join('')}
@@ -347,7 +353,7 @@ function viewProgress(){
     <div class="eyebrow" style="margin:24px 2px 10px">Weekly volume · last 8 weeks</div>
     <div class="card" style="padding:14px 12px 10px">${volumeChart()}</div>
     <div class="eyebrow" style="margin:24px 2px 10px">Personal records</div>
-    <div class="card list">${prList()}</div>
+    <div class="card list" id="prCard">${prList()}</div>
     ${muscleBreakdown(mo)}
   </div>`;
 }
@@ -363,7 +369,7 @@ function prList(){
   // show the modality only when it isn't the exercise's native equipment (so a Smith/cable variant
   // is distinguishable from the default; ordinary PRs stay uncluttered)
   const modeTag=p=>{const ex=EX[p.id];const native=ex&&EQUIP_MODE[ex.equip];return p.mode&&p.mode!==native?` <span class="pill" style="font-size:10px;padding:1px 7px">${esc(MODES[p.mode].label)}</span>`:'';};
-  return arr.map(p=>`<div class="ex-row"><div style="flex:1;min-width:0"><div class="ex-name">${esc(p.name)}${modeTag(p)}</div>
+  return arr.map(p=>`<div class="ex-row" data-openex="${p.id}" style="cursor:pointer"><div style="flex:1;min-width:0"><div class="ex-name">${esc(p.name)}${modeTag(p)}</div>
     <div class="ex-sub">Best set ${setStr(p)}</div></div>
     <div style="text-align:right">${p.showEst?`<div class="mono" style="font-weight:700;font-size:16px">${p.est}<span class="dim" style="font-size:11px"> ${U()} e1RM</span></div>`:`<div class="mono dim" style="font-weight:600;font-size:13px">${p.load}${U()}</div>`}</div></div>`).join('');
 }
@@ -409,6 +415,26 @@ function muscleBreakdown(mo){
 }
 
 /* ---------------- sheets ---------------- */
+// Compact SVG line of a lift's best-set estimated 1RM over its recent sessions, with the delta.
+function trendCard(id){
+  const dmode=P.lastModeFor(state.sessions,id)||undefined;
+  const series=P.exerciseSeries(state.sessions,id,{mode:dmode,bw:bw(),limit:10});
+  if(series.length<2)return '';   // need at least two sessions to show a trend
+  const vals=series.map(p=>p.est),min=Math.min(...vals),max=Math.max(...vals),range=max-min||1;
+  const W=280,H=46,pad=5;
+  const pts=series.map((p,i)=>[pad+(W-2*pad)*(series.length===1?0:i/(series.length-1)),pad+(H-2*pad)*(1-(p.est-min)/range)]);
+  const d=pts.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1)).join(' ');
+  const last=pts[pts.length-1],delta=Math.round(vals[vals.length-1]-vals[0]);
+  const col=delta>0?'var(--good)':delta<0?'var(--warn)':'var(--ink-3)';
+  const arrow=delta>0?'▲ +'+delta:delta<0?'▼ '+Math.abs(delta):'— flat';
+  return `<div class="card" style="padding:14px 15px;margin:0 0 12px">
+    <div class="row-between" style="margin-bottom:9px"><span class="eyebrow">Progress · est. 1RM</span>
+      <span class="mono" style="font-weight:700;color:${col}">${vals[vals.length-1]}${U()} <span style="font-size:12px">${arrow}</span></span></div>
+    <svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" preserveAspectRatio="none" style="display:block;overflow:visible">
+      <path d="${d}" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
+      <circle cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="3.5" fill="var(--accent)"/></svg>
+    <div class="dim" style="font-size:11.5px;margin-top:7px">Best set each session · last ${series.length}</div></div>`;
+}
 function exerciseDetail(id){
   const e=EX[id];const lp=P.lastPerf(state.sessions,id,{excludeId:state.active&&state.active.id});
   const target=cur();const inWorkout=target&&target.exercises.some(x=>x.id===id);
@@ -417,6 +443,7 @@ function exerciseDetail(id){
       <div><div class="mono dim" style="font-size:12px">${e.equip} · ${e.type}${e.tier===1?' · foundational lift':''}</div>
       <div class="chips" style="margin-top:6px">${e.muscles.map(m=>`<span class="pill">${m}</span>`).join('')}</div></div></div>
     <p class="instr">${esc(e.instr)}</p>
+    ${trendCard(id)}
     <div class="card" style="padding:12px 15px;margin:16px 0">
       <div class="row-between"><span class="eyebrow">Target rep range</span><span class="mono" style="font-weight:600">${e.rr[0]}–${e.rr[1]}</span></div>
       ${lp?`<div class="row-between" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line)"><span class="eyebrow">Last time</span><span class="mono" style="font-weight:600">${esc(P.fmtPerf(lp.sets,U()))}</span></div>`:''}
@@ -661,12 +688,37 @@ function cleanSets(s){
   s.exercises.forEach(e=>{e.sets=e.sets.filter(st=>st.done||+st.w).map(st=>Object.assign(st,{done:true}));});
   s.exercises=s.exercises.filter(e=>e.sets.length);
 }
+// Recap of a just-finished session, computed BEFORE it's saved (so history = prior sessions).
+function workoutSummary(s){
+  const prs=[];
+  s.exercises.forEach(e=>{const emode=modeOf(e);const histBest=P.bestE1rmBefore(state.sessions,e.id,{mode:emode,bw:bw(),excludeId:s.id});if(histBest<=0)return;
+    let best=0,bs=null;e.sets.forEach(st=>{if(st.warm||!P.isWorking(st))return;const est=P.e1rm(P.setLoad(e.id,st.w,bw()),+st.r||0);if((+st.r)&&est>best){best=est;bs=st;}});
+    if(bs&&best>histBest)prs.push({name:EX[e.id]?EX[e.id].name:e.name,w:bs.w,r:bs.r,perHand:MODES[emode]&&MODES[emode].perHand});});
+  return {sets:setsOf(s),vol:volOf(s),prs,deload:!!s.deload};
+}
+function showSummary(sm){
+  let body=`<div class="statgrid" style="margin:2px 0 14px">
+      <div class="card stat"><div class="k">Working sets</div><div class="v mono">${sm.sets}</div></div>
+      <div class="card stat"><div class="k">Volume</div><div class="v mono">${fmtVol(sm.vol)}<small>${U()}</small></div></div></div>`;
+  if(sm.deload){
+    body+=`<div class="card" style="padding:14px 15px;background:var(--good-soft);border:1px solid color-mix(in srgb,var(--good) 30%,transparent)"><div style="color:var(--good);font-weight:600;font-size:13.5px">🌿 Recovery in the bank</div><div class="dim" style="font-size:12.5px;margin-top:3px">Fatigue's clearing — ease back to full loads when you feel fresh. This won't affect your progression.</div></div>`;
+  }else if(sm.prs.length){
+    body+=`<div class="eyebrow" style="margin:2px 2px 8px">🎉 New personal record${sm.prs.length>1?'s':''}</div>
+      <div class="card list">${sm.prs.map(p=>`<div class="ex-row"><span style="color:var(--good);font-size:18px;flex-shrink:0">★</span><div style="flex:1;min-width:0"><div class="ex-name">${esc(p.name)}</div><div class="ex-sub">${p.w}${U()}${p.perHand?'/ea':''} × ${p.r}</div></div></div>`).join('')}</div>`;
+  }else{
+    body+=`<div class="dim" style="font-size:13.5px;line-height:1.5;padding:0 2px">Logged and saved. Consistency is what moves the numbers — every session counts.</div>`;
+  }
+  body+=`<button class="btn primary block" id="sumDone" style="margin-top:16px">Done</button>`;
+  openSheet(sm.deload?'Recovery logged 🌿':(sm.prs.length?'New PR! 💪':'Workout complete 💪'),body);
+  const d=$('#sumDone');if(d)d.addEventListener('click',()=>{closeSheet();setTab('history');});
+}
 function finishWorkout(){
   const s=state.active;cleanSets(s);
   if(!s.exercises.length){toast('Log at least one set first');return;}
+  const sm=workoutSummary(s);
   s.completed=true;s.updatedAt=Date.now();
   S.upsertSession(s,false);state.active=null;S.persistActive();todayScreen='home';
-  toast('Workout saved 💪');setTab('history');
+  render();showSummary(sm);
 }
 function startEdit(s){editSession=JSON.parse(JSON.stringify(s));editDirty=false;todayScreen='edit';setTab('today');}
 function finishEdit(){
@@ -722,6 +774,8 @@ function bind(){
   if(cal)cal.addEventListener('click',e=>{const c=e.target.closest('[data-day]');if(!c)return;const d=+c.dataset.day;selDay=selDay===d?null:d;render();});
   v.querySelectorAll('[data-mon]').forEach(b=>b.addEventListener('click',()=>{calMonth+=+b.dataset.mon;selDay=null;render();}));
   if(sl)sl.addEventListener('click',e=>{const c=e.target.closest('[data-sess]');if(c)openSessionDetail(c.dataset.sess);});
+  // progress: PR rows open the lift's detail (with its progress trend)
+  const prc=$('#prCard');if(prc)prc.addEventListener('click',e=>{const r=e.target.closest('[data-openex]');if(r)openSheet(EX[r.dataset.openex].name,exerciseDetail(r.dataset.openex));});
   // library
   const ls=$('#libSearch');if(ls)ls.addEventListener('input',()=>{libQuery=ls.value;const pos=ls.selectionStart;render();const n=$('#libSearch');if(n){n.focus();n.setSelectionRange(pos,pos);}});
   v.querySelectorAll('[data-lg]').forEach(b=>b.addEventListener('click',()=>{libGroup=b.dataset.lg;render();}));

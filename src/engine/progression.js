@@ -43,6 +43,35 @@ function lastPerf(sessions,exId,opts){
   }
   return null;
 }
+// Every performance of an exercise (optionally one modality), oldest→newest, for a progress trend:
+// the best working set of each real (non-deload) session, as estimated 1RM. opts: {mode, bw, limit}
+function exerciseSeries(sessions,exId,opts){
+  opts=opts||{};const bw=opts.bw||0,out=[];
+  for(const s of sessions||[]){
+    if(s.completed===false||s.deload)continue;
+    const e=s.exercises.find(x=>x.id===exId&&(!opts.mode||modeOf(x)===opts.mode));
+    if(!e)continue;
+    let best=0,w=0,r=0;
+    e.sets.forEach(st=>{if(!isWorking(st))return;const est=e1rm(setLoad(exId,st.w,bw),+st.r||0);if(est>best){best=est;w=+st.w||0;r=+st.r||0;}});
+    if(best>0)out.push({date:s.date,est:best,w,r});
+  }
+  out.sort((a,b)=>a.date-b.date);
+  return opts.limit?out.slice(-opts.limit):out;
+}
+// Best estimated 1RM for an exercise+mode across real sessions strictly before beforeTs (for live PR
+// detection). opts: {mode, bw, beforeTs, excludeId}
+function bestE1rmBefore(sessions,exId,opts){
+  opts=opts||{};const bw=opts.bw||0;let best=0;
+  for(const s of sessions||[]){
+    if(s.completed===false||s.deload)continue;
+    if(opts.excludeId&&s.id===opts.excludeId)continue;
+    if(opts.beforeTs&&s.date>=opts.beforeTs)continue;
+    const e=s.exercises.find(x=>x.id===exId&&(!opts.mode||modeOf(x)===opts.mode));
+    if(!e)continue;
+    e.sets.forEach(st=>{if(!isWorking(st))return;const est=e1rm(setLoad(exId,st.w,bw),+st.r||0);if(est>best)best=est;});
+  }
+  return best;
+}
 // The modality used the last time this exercise was logged (for "remembering" the user's choice);
 // null if it's never been logged or was logged in its default mode.
 function lastModeFor(sessions,exId){
@@ -176,5 +205,5 @@ function calcStreak(sessions,now){
   return n;
 }
 
-IL.prog={DAY,startOfDay,e1rm,isWorking,setLoad,sessionVolume,sessionSets,fmtVol,modeOf,lastPerf,lastModeFor,setPattern,fmtPerf,nextSets,deloadSets,suggestion,unitIncrement,convertWeight,convertSessions,calcStreak};
+IL.prog={DAY,startOfDay,e1rm,isWorking,setLoad,sessionVolume,sessionSets,fmtVol,modeOf,lastPerf,lastModeFor,exerciseSeries,bestE1rmBefore,setPattern,fmtPerf,nextSets,deloadSets,suggestion,unitIncrement,convertWeight,convertSessions,calcStreak};
 if(typeof module!=='undefined')module.exports=IL.prog;

@@ -2,6 +2,13 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.15.0 — 2026-09-10 · Progress you can see
+Three upgrades to the feedback loop — all from data you already log, no new taps.
+- **Per-lift progress trend.** Every exercise's detail sheet now shows a compact sparkline of its best-set estimated 1RM over recent sessions, with the delta (▲ +25 lb) — so "am I getting stronger on bench?" has a one-glance answer. Personal-record rows on the Progress tab are now tappable to open it. Scoped to the lift's current equipment mode, deloads excluded (`exerciseSeries`).
+- **Live PR recognition.** Complete a set that beats your all-time best for that lift (same equipment) and a green **★ New PR** line appears right there while you train (`bestE1rmBefore`) — no more PRs quietly slipping into a list unnoticed.
+- **Post-workout summary.** Finishing a workout now shows a recap — working sets, volume, and any new PRs — instead of a bare toast (a deload shows a recovery-framed version). A little "here's what you just did" to close the loop.
+- Engine: `exerciseSeries` + `bestE1rmBefore` (progression.js). 2 new tests (62 total).
+
 ## v0.14.0 — 2026-09-10 · Deload / recovery sessions
 Sore or beat up but still want to move? Build a proper recovery session — and the algorithm treats it as recovery, not a setback.
 - **A "Deload / recovery session" toggle** on the New-workout screen. With it on, the built (or blank) workout is seeded at **~60% of your last real loads**, reps at the top of the range, with an on-screen coach note: full range, focus on the stretch, stop 3–4 reps shy of failure. (Grounded in the fitness–fatigue model: a brief drop in load lets accumulated muscular *and joint/connective-tissue* fatigue clear while fitness is retained, so overload can resume — standard mesocycle practice, and light long-length work keeps a stretch-mediated stimulus.)
