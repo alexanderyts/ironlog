@@ -2,6 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-HymCtkW13rKzXY7FffsyetWNFPLlvxsrv5UZRo2Zx/4=' 'sha256-EkxoJS/XfnHAg4Tv4KlM2HO15VAwse2HF4NYsW84Gss='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'">
+<meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Ironlog</title>
 <meta name="description" content="Ironlog — a smart, fast workout tracker.">
@@ -363,8 +365,8 @@ html.standalone .tabbar{bottom:auto;top:calc(var(--screen-h,100vh) - var(--tab-h
 </div>
 
 <script>
-/* Ironlog v0.15.0 · site build · 2026-09-10T18:59:32.136Z */
-var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.15.0",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
+/* Ironlog v0.16.0 · site build · 2026-09-11T02:28:16.123Z */
+var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.16.0",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
 
 /* ===== src/data/exercises.js ===== */
 (function(){'use strict';
@@ -1212,13 +1214,52 @@ function exportPayload(st,version){
   return {app:'ironlog',format:2,version:version||'',exported:new Date().toISOString(),
     settings:st.settings,sessions:st.sessions,routines:st.routines||[],deleted:st.deleted||{},active:st.active||null};
 }
+/* ── Import sanitization: the trust boundary for file imports and cloud (Dropbox/DB) snapshots ──────
+   Backups are UNTRUSTED input (a shared file, a synced blob, another viewer of a shared artifact).
+   Every record is rebuilt field-by-field from a whitelist with each value type-coerced. Two payoffs:
+   (1) the UI renders numbers as numbers and short strings as strings, so a crafted value like
+       w:'"><img onerror=…>' can't survive to inject into markup, and (2) because we only ever assign
+   known literal keys to fresh objects, this is structurally immune to prototype pollution
+   (__proto__/constructor keys in the JSON are simply never copied). Escaping in the views and the CSP
+   are defense-in-depth on top of this. */
+const MAX_STR=120, MAX_ARR=2000, MAX_SETS=100, MAX_EX=60;
+function sStr(v,max){return typeof v==='string'?v.slice(0,max||MAX_STR):'';}
+function sId(v){return (typeof v==='string'?v:'').replace(/[^A-Za-z0-9_:.-]/g,'').slice(0,64);}
+function sNum(v){const n=typeof v==='number'?v:(typeof v==='string'&&v.trim()!==''?+v:NaN);return Number.isFinite(n)?n:0;}
+function sNumBlank(v){if(v===''||v==null)return '';const n=+v;return Number.isFinite(n)?n:'';}
+function sArr(v,max){return Array.isArray(v)?v.slice(0,max||MAX_ARR):[];}
+const rid=p=>p+Math.random().toString(36).slice(2,9);
+
+function cleanSet(st){st=st&&typeof st==='object'?st:{};const o={w:sNumBlank(st.w),r:sNumBlank(st.r),done:!!st.done};if(st.warm)o.warm=true;return o;}
+function cleanExercise(e){e=e&&typeof e==='object'?e:{};const o={id:sId(e.id),name:sStr(e.name),sets:sArr(e.sets,MAX_SETS).map(cleanSet)};if(e.mode)o.mode=sId(e.mode);return o;}
+function cleanSession(s){s=s&&typeof s==='object'?s:{};const o={id:sId(s.id)||rid('imp'),schema:sNum(s.schema)||1,date:sNum(s.date)||Date.now(),updatedAt:sNum(s.updatedAt)||sNum(s.date)||Date.now(),completed:s.completed!==false,exercises:sArr(s.exercises,MAX_EX).map(cleanExercise)};if(s.deload)o.deload=true;return o;}
+function cleanRoutine(r){r=r&&typeof r==='object'?r:{};return {id:sId(r.id)||rid('r'),name:sStr(r.name),exIds:sArr(r.exIds,MAX_EX).map(sId).filter(Boolean),updatedAt:sNum(r.updatedAt)||Date.now()};}
+function cleanSettings(o){if(!o||typeof o!=='object')return null;
+  const s={settingsUpdatedAt:sNum(o.settingsUpdatedAt)};
+  if(o.unit==='kg'||o.unit==='lb')s.unit=o.unit;
+  if(o.theme==='system'||o.theme==='light'||o.theme==='dark')s.theme=o.theme;
+  s.bodyweight=Math.max(0,Math.min(2000,sNum(o.bodyweight)));
+  const r=o.rest&&typeof o.rest==='object'?o.rest:{};
+  s.rest={auto:r.auto!==false,sound:r.sound!==false,notify:!!r.notify,
+    compound:Math.max(0,Math.min(3600,sNum(r.compound)||120)),isolation:Math.max(0,Math.min(3600,sNum(r.isolation)||75))};
+  return s;
+}
+const DANGER_KEY=/^(__proto__|constructor|prototype)$/;
+function cleanDeleted(o){const out=Object.create(null);if(o&&typeof o==='object')Object.keys(o).forEach(k=>{if(DANGER_KEY.test(k))return;const key=sId(k),at=sNum(o[k]);if(key&&!DANGER_KEY.test(key)&&at)out[key]=at;});return out;}
+
 function parseImport(json){
   const d=typeof json==='string'?JSON.parse(json):json;
-  if(!d||!Array.isArray(d.sessions))throw new Error('Not an Ironlog backup');
-  return {settings:d.settings||null,sessions:d.sessions,routines:Array.isArray(d.routines)?d.routines:[],deleted:d.deleted||{},active:d.active||null};
+  if(!d||typeof d!=='object'||!Array.isArray(d.sessions))throw new Error('Not an Ironlog backup');
+  return {
+    settings:cleanSettings(d.settings),
+    sessions:sArr(d.sessions).map(cleanSession),
+    routines:sArr(d.routines).map(cleanRoutine),
+    deleted:cleanDeleted(d.deleted),
+    active:(d.active&&typeof d.active==='object')?cleanSession(d.active):null
+  };
 }
 
-IL.sync={mergeSessions,applyTombstones,pruneTombstones,exportPayload,parseImport,TOMB_KEEP};
+IL.sync={mergeSessions,applyTombstones,pruneTombstones,exportPayload,parseImport,cleanSession,cleanRoutine,cleanSettings,TOMB_KEEP};
 if(typeof module!=='undefined')module.exports=IL.sync;
 
 })();
@@ -1307,7 +1348,7 @@ IL.dropbox={isConfigured,isConnected,connect,disconnect,handleRedirect,getMetada
 //   dropbox   → one JSON file in the user's Dropbox app folder (standalone / GitHub Pages build)
 //   none      → on-device only
 var IL=globalThis.IL||(globalThis.IL={});
-const {mergeSessions,applyTombstones,pruneTombstones,exportPayload,parseImport}=IL.sync;
+const {mergeSessions,applyTombstones,pruneTombstones,exportPayload,parseImport,cleanSession,cleanRoutine,cleanSettings}=IL.sync;
 const CFG=IL.config||{};
 
 const LS={sessions:'il_sessions',active:'il_active',settings:'il_settings',dirty:'il_dirty',routines:'il_routines',deleted:'il_deleted',dbxRev:'il_dbx_rev'};
@@ -1426,15 +1467,15 @@ function artifactAdapter(){
   const A={name:'artifact',
     async init(){
       db=await claude.use('db');if(!db)return false;
-      try{const snap=await db.doc('settings/app').get();if(snap.exists){const rs=snap.data();
-        if((rs.settingsUpdatedAt||0)>(state.settings.settingsUpdatedAt||0)){state.settings=Object.assign(state.settings,rs);state.settings.rest=Object.assign({auto:true,sound:true,notify:false,compound:120,isolation:75},state.settings.rest||{});saveSettings();}
+      try{const snap=await db.doc('settings/app').get();if(snap.exists){const rs=cleanSettings(snap.data())||{};
+        if((rs.settingsUpdatedAt||0)>(state.settings.settingsUpdatedAt||0)){state.settings=Object.assign(state.settings,rs);saveSettings();}
         else if((state.settings.settingsUpdatedAt||0)>(rs.settingsUpdatedAt||0))A.pushSettings();}}catch(e){}
-      try{const snap=await db.doc('active/current').get();if(snap.exists){const ra=snap.data();
-        if(ra&&ra.id&&(!state.active||(ra.updatedAt||0)>(state.active.updatedAt||0))){state.active=ra;saveActive();}
+      try{const snap=await db.doc('active/current').get();if(snap.exists){const raw=snap.data();const ra=raw&&raw.id?cleanSession(raw):null;
+        if(ra&&(!state.active||(ra.updatedAt||0)>(state.active.updatedAt||0))){state.active=ra;saveActive();}
         else if(state.active)A.pushActive();}else if(state.active)A.pushActive();}catch(e){}
       await A.flush();
       db.collection('sessions').onSnapshot(qs=>{
-        const remote=[];qs.docs.forEach(d=>{const data=d.data();if(data){data.id=d.id;remote.push(data);}});
+        const remote=[];qs.docs.forEach(d=>{const data=d.data();if(data){data.id=d.id;remote.push(cleanSession(data));}});
         const t=applyTombstones(state.sessions,state.deleted,{});
         const m=mergeSessions(state.sessions,remote,state.deleted);
         // sessions we deleted locally but the cloud still has → delete there too
@@ -1443,7 +1484,7 @@ function artifactAdapter(){
         state.lastSync=Date.now();emit();
       },()=>{});
       db.collection('routines').onSnapshot(qs=>{
-        const remote=[];qs.docs.forEach(d=>{const data=d.data();if(data){data.id=d.id;remote.push(data);}});
+        const remote=[];qs.docs.forEach(d=>{const data=d.data();if(data){data.id=d.id;remote.push(cleanRoutine(data));}});
         const m=mergeSessions(state.routines,remote,{});
         remote.forEach(r=>{if(state.deleted['r:'+r.id])db.doc('routines/'+r.id).delete().catch(()=>{});});
         if(m.changedLocal){state.routines=m.merged.filter(r=>!state.deleted['r:'+r.id]).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));saveRoutines();emit();}
@@ -1546,7 +1587,7 @@ const setsOf=s=>P.sessionSets(s);
 function volLabel(label){return `<span data-vol-info style="cursor:pointer">${label||'Volume'} <span class="dim" style="font-weight:400">ⓘ</span></span>`;}
 const completedSessions=()=>state.sessions.filter(s=>s.completed!==false&&s.exercises.length);
 const ICON_BACK='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>';
-function demoURL(id){const e=EX[id];return 'https://www.youtube.com/results?search_query='+encodeURIComponent('how to '+e.name+' proper form technique');}
+function demoURL(id){const e=EX[id];if(!e)return 'https://www.youtube.com/';return 'https://www.youtube.com/results?search_query='+encodeURIComponent('how to '+e.name+' proper form technique');}
 
 let toastT=null;
 function toast(msg,action){
@@ -1587,12 +1628,22 @@ let calMonth=new Date().getFullYear()*12+new Date().getMonth(),selDay=null;
 let libQuery='',libGroup='All';
 function setTab(t){vlog('tab '+t);currentTab=t;document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===t));render();window.scrollTo(0,0);}
 function render(){
-  const v=$('#view');
-  if(currentTab==='today')v.innerHTML=viewToday();
-  else if(currentTab==='history')v.innerHTML=viewHistory();
-  else if(currentTab==='library')v.innerHTML=viewLibrary();
-  else if(currentTab==='progress')v.innerHTML=viewProgress();
-  bind();updateCloud();
+  const v=$('#view');if(!v)return;
+  // Error boundary: one malformed record must never white-screen the whole app. On failure, show a
+  // recoverable message instead of a blank page (the data is still safe in storage).
+  try{
+    if(currentTab==='today')v.innerHTML=viewToday();
+    else if(currentTab==='history')v.innerHTML=viewHistory();
+    else if(currentTab==='library')v.innerHTML=viewLibrary();
+    else if(currentTab==='progress')v.innerHTML=viewProgress();
+    bind();updateCloud();
+  }catch(err){
+    try{console.error('render failed',err);}catch(e){}
+    v.innerHTML='<div class="wrap" style="padding:40px 16px;text-align:center"><h2 style="font-size:20px">Something went wrong</h2>'
+      +'<p class="muted" style="margin:10px 0 18px">Your data is safe. Try reloading — if a tab keeps failing, tell us what you were doing.</p>'
+      +'<button class="btn primary" id="ilReload" style="display:inline-block">Reload</button></div>';
+    const rb=v.querySelector('#ilReload');if(rb)rb.onclick=()=>location.reload();   // JS handler (no inline on* — CSP-safe)
+  }
 }
 // current session being edited on the Today tab (the live workout or a past one)
 const cur=()=>todayScreen==='edit'?editSession:state.active;
@@ -1685,7 +1736,7 @@ function recentTemplates(){
   if(!last.length)return'';
   return `<div class="eyebrow" style="margin:26px 2px 10px">Repeat a recent session</div>`+
     last.map(s=>`<button class="btn ghost block" style="justify-content:space-between;margin-bottom:9px;height:auto;padding:13px 16px" data-repeat="${s.id}">
-      <span style="text-align:left"><span style="font-weight:700;display:block">${relDay(s.date)}</span><span class="dim" style="font-size:13px;font-weight:500">${s.exercises.map(e=>EX[e.id]?EX[e.id].name:e.name).slice(0,3).join(' · ')}${s.exercises.length>3?' +'+(s.exercises.length-3):''}</span></span>
+      <span style="text-align:left"><span style="font-weight:700;display:block">${relDay(s.date)}</span><span class="dim" style="font-size:13px;font-weight:500">${esc(s.exercises.map(e=>EX[e.id]?EX[e.id].name:e.name).slice(0,3).join(' · '))}${s.exercises.length>3?' +'+(s.exercises.length-3):''}</span></span>
       <span class="ex-add" style="background:var(--surface-2)">↻</span></button>`).join('');
 }
 const SCHEMA=1;
@@ -1783,7 +1834,7 @@ function logExercise(s,e,ei,mode){
     <div class="set-actions">
       <button class="linkbtn" data-addset="${ei}">＋ Add set</button>
       ${e.sets.length>1?`<button class="linkbtn" data-delset="${ei}">－ Remove set</button>`:''}
-      <a class="linkbtn dim" href="${demoURL(e.id)}" target="_blank" rel="noopener" style="margin-left:auto;text-decoration:none">▶ Watch demo</a>
+      <a class="linkbtn dim" href="${demoURL(e.id)}" target="_blank" rel="noopener noreferrer" style="margin-left:auto;text-decoration:none">▶ Watch demo</a>
     </div>
     ${ei===0?'<div class="hint">Tip: tap a set number to mark it a warm-up (kept out of PRs and volume).</div>':''}
   </div>`;
@@ -1971,7 +2022,7 @@ function exerciseDetail(id){
       <div class="row-between"><span class="eyebrow">Target rep range</span><span class="mono" style="font-weight:600">${e.rr[0]}–${e.rr[1]}</span></div>
       ${lp?`<div class="row-between" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line)"><span class="eyebrow">Last time</span><span class="mono" style="font-weight:600">${esc(P.fmtPerf(lp.sets,U()))}</span></div>`:''}
     </div>
-    <a class="btn ghost block" href="${demoURL(id)}" target="_blank" rel="noopener" style="margin-bottom:10px;text-decoration:none">▶ Watch a demo video</a>
+    <a class="btn ghost block" href="${demoURL(id)}" target="_blank" rel="noopener noreferrer" style="margin-bottom:10px;text-decoration:none">▶ Watch a demo video</a>
     <button class="btn primary block" data-addto="${id}">${inWorkout?'✓ Already in this workout':'＋ Add to '+(todayScreen==='edit'?'this session':'today’s workout')}</button>`;
 }
 function openAddExercise(){
@@ -2116,7 +2167,9 @@ function openSettings(){
     <div class="eyebrow" style="margin-bottom:10px">Your data</div>
     <button class="btn ghost block" id="btnExport" style="margin-bottom:10px">⬇ Export a backup file</button>
     <label class="btn ghost block" style="margin-bottom:10px">⬆ Import a backup<input type="file" id="fileImport" accept="application/json" hidden></label>`}
-    <div class="dim" style="font-size:12px;text-align:center;margin-top:18px">Ironlog v${APP_VERSION} · ${state.sessions.length} sessions · ${state.routines.length} routines</div>
+    <div style="height:18px"></div>
+    <div class="dim" style="font-size:11.5px;line-height:1.55;text-align:center;padding:0 6px">Ironlog offers general fitness information, not medical advice. Warm up, use a weight you can control, and stop if something hurts. Consult a qualified professional before starting a program — you train at your own risk.</div>
+    <div class="dim" style="font-size:12px;text-align:center;margin-top:16px">Ironlog v${APP_VERSION} · ${state.sessions.length} sessions · ${state.routines.length} routines</div>
     <div class="dim mono" style="font-size:10.5px;text-align:center;margin-top:4px;opacity:.7">${viewportDiag()}</div>
     <div class="dim mono" style="font-size:10.5px;text-align:center;margin-top:4px;opacity:.7">${vpLog.join(' · ')}</div>`);
   $('#segUnit').addEventListener('click',e=>{const b=e.target.closest('[data-u]');if(!b)return;const nu=b.dataset.u;if(nu===U())return;
@@ -2384,7 +2437,13 @@ function boot(){
   if(state.justSeeded)setTimeout(()=>toast('Sample data loaded — explore every tab'),600);
 }
 IL.ui={toast,render,setTab,openSettings,boot};
-boot();
+// Last-resort guards: a runtime error in an event handler or a rejected promise should degrade
+// quietly, never blank the screen or surface a raw stack to the user.
+try{
+  window.addEventListener('error',e=>{try{console.error('runtime error',e.error||e.message);}catch(_){}});
+  window.addEventListener('unhandledrejection',e=>{try{console.error('unhandled rejection',e.reason);}catch(_){}});
+}catch(e){}
+try{boot();}catch(err){try{console.error('boot failed',err);}catch(e){}}
 
 })();
 

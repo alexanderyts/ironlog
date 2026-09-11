@@ -3,7 +3,7 @@
 //   dropbox   → one JSON file in the user's Dropbox app folder (standalone / GitHub Pages build)
 //   none      → on-device only
 var IL=globalThis.IL||(globalThis.IL={});
-const {mergeSessions,applyTombstones,pruneTombstones,exportPayload,parseImport}=IL.sync;
+const {mergeSessions,applyTombstones,pruneTombstones,exportPayload,parseImport,cleanSession,cleanRoutine,cleanSettings}=IL.sync;
 const CFG=IL.config||{};
 
 const LS={sessions:'il_sessions',active:'il_active',settings:'il_settings',dirty:'il_dirty',routines:'il_routines',deleted:'il_deleted',dbxRev:'il_dbx_rev'};
@@ -122,15 +122,15 @@ function artifactAdapter(){
   const A={name:'artifact',
     async init(){
       db=await claude.use('db');if(!db)return false;
-      try{const snap=await db.doc('settings/app').get();if(snap.exists){const rs=snap.data();
-        if((rs.settingsUpdatedAt||0)>(state.settings.settingsUpdatedAt||0)){state.settings=Object.assign(state.settings,rs);state.settings.rest=Object.assign({auto:true,sound:true,notify:false,compound:120,isolation:75},state.settings.rest||{});saveSettings();}
+      try{const snap=await db.doc('settings/app').get();if(snap.exists){const rs=cleanSettings(snap.data())||{};
+        if((rs.settingsUpdatedAt||0)>(state.settings.settingsUpdatedAt||0)){state.settings=Object.assign(state.settings,rs);saveSettings();}
         else if((state.settings.settingsUpdatedAt||0)>(rs.settingsUpdatedAt||0))A.pushSettings();}}catch(e){}
-      try{const snap=await db.doc('active/current').get();if(snap.exists){const ra=snap.data();
-        if(ra&&ra.id&&(!state.active||(ra.updatedAt||0)>(state.active.updatedAt||0))){state.active=ra;saveActive();}
+      try{const snap=await db.doc('active/current').get();if(snap.exists){const raw=snap.data();const ra=raw&&raw.id?cleanSession(raw):null;
+        if(ra&&(!state.active||(ra.updatedAt||0)>(state.active.updatedAt||0))){state.active=ra;saveActive();}
         else if(state.active)A.pushActive();}else if(state.active)A.pushActive();}catch(e){}
       await A.flush();
       db.collection('sessions').onSnapshot(qs=>{
-        const remote=[];qs.docs.forEach(d=>{const data=d.data();if(data){data.id=d.id;remote.push(data);}});
+        const remote=[];qs.docs.forEach(d=>{const data=d.data();if(data){data.id=d.id;remote.push(cleanSession(data));}});
         const t=applyTombstones(state.sessions,state.deleted,{});
         const m=mergeSessions(state.sessions,remote,state.deleted);
         // sessions we deleted locally but the cloud still has → delete there too
@@ -139,7 +139,7 @@ function artifactAdapter(){
         state.lastSync=Date.now();emit();
       },()=>{});
       db.collection('routines').onSnapshot(qs=>{
-        const remote=[];qs.docs.forEach(d=>{const data=d.data();if(data){data.id=d.id;remote.push(data);}});
+        const remote=[];qs.docs.forEach(d=>{const data=d.data();if(data){data.id=d.id;remote.push(cleanRoutine(data));}});
         const m=mergeSessions(state.routines,remote,{});
         remote.forEach(r=>{if(state.deleted['r:'+r.id])db.doc('routines/'+r.id).delete().catch(()=>{});});
         if(m.changedLocal){state.routines=m.merged.filter(r=>!state.deleted['r:'+r.id]).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));saveRoutines();emit();}

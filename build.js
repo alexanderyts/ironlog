@@ -1,7 +1,8 @@
 // Build: assembles src/ into
 //   dist/app.html  — single-file Claude Artifact (cloud DB backend)
 //   docs/          — standalone site for GitHub Pages (Dropbox backend, offline service worker, icons)
-const fs=require('fs'),path=require('path'),zlib=require('zlib');
+const fs=require('fs'),path=require('path'),zlib=require('zlib'),crypto=require('crypto');
+const b64sha=s=>crypto.createHash('sha256').update(s,'utf8').digest('base64');
 const root=__dirname,pkg=require('./package.json');
 const cfg=fs.existsSync(path.join(root,'config.json'))?JSON.parse(fs.readFileSync(path.join(root,'config.json'),'utf8')):{};
 const read=p=>fs.readFileSync(path.join(root,p),'utf8');
@@ -25,10 +26,29 @@ const demo=`<title>Ironlog Demo</title>\n${FONTS}\n<style>\n${css}\n</style>\n${
 
 // --- Standalone site ---
 const SW_REG=`if('serviceWorker' in navigator&&location.hostname!=='localhost'){navigator.serviceWorker.register('./sw.js').then(reg=>{reg.addEventListener('updatefound',()=>{const nw=reg.installing;if(!nw)return;nw.addEventListener('statechange',()=>{if(nw.state==='installed'&&navigator.serviceWorker.controller&&IL.ui)IL.ui.toast('Update ready',{label:'Reload',fn:()=>location.reload()});});});}).catch(()=>{});}`;
+// Inline-script contents, hashed EXACTLY as they appear between the <script> tags so a strict CSP
+// (no 'unsafe-inline' for scripts) still lets the app's own code run while blocking any injected
+// inline handler (onerror=, onload=, …) — the primary XSS payload for rendered untrusted data.
+const siteScript='\n'+bundle('site')+'\n';
+const CSP=[
+  "default-src 'none'",
+  "script-src 'sha256-"+b64sha(siteScript)+"' 'sha256-"+b64sha(SW_REG)+"'",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "font-src 'self' https://fonts.gstatic.com",
+  "img-src 'self' data:",
+  "connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com",
+  "manifest-src 'self'",
+  "worker-src 'self'",
+  "base-uri 'none'",
+  "form-action 'none'",
+  "frame-ancestors 'none'"
+].join('; ');
 const site=`<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="${CSP}">
+<meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Ironlog</title>
 <meta name="description" content="Ironlog — a smart, fast workout tracker.">
@@ -49,9 +69,7 @@ ${css}
 </head>
 <body>
 ${body}
-<script>
-${bundle('site')}
-</script>
+<script>${siteScript}</script>
 <script>${SW_REG}</script>
 </body>
 </html>

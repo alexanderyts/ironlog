@@ -23,7 +23,7 @@ const setsOf=s=>P.sessionSets(s);
 function volLabel(label){return `<span data-vol-info style="cursor:pointer">${label||'Volume'} <span class="dim" style="font-weight:400">ⓘ</span></span>`;}
 const completedSessions=()=>state.sessions.filter(s=>s.completed!==false&&s.exercises.length);
 const ICON_BACK='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>';
-function demoURL(id){const e=EX[id];return 'https://www.youtube.com/results?search_query='+encodeURIComponent('how to '+e.name+' proper form technique');}
+function demoURL(id){const e=EX[id];if(!e)return 'https://www.youtube.com/';return 'https://www.youtube.com/results?search_query='+encodeURIComponent('how to '+e.name+' proper form technique');}
 
 let toastT=null;
 function toast(msg,action){
@@ -64,12 +64,22 @@ let calMonth=new Date().getFullYear()*12+new Date().getMonth(),selDay=null;
 let libQuery='',libGroup='All';
 function setTab(t){vlog('tab '+t);currentTab=t;document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===t));render();window.scrollTo(0,0);}
 function render(){
-  const v=$('#view');
-  if(currentTab==='today')v.innerHTML=viewToday();
-  else if(currentTab==='history')v.innerHTML=viewHistory();
-  else if(currentTab==='library')v.innerHTML=viewLibrary();
-  else if(currentTab==='progress')v.innerHTML=viewProgress();
-  bind();updateCloud();
+  const v=$('#view');if(!v)return;
+  // Error boundary: one malformed record must never white-screen the whole app. On failure, show a
+  // recoverable message instead of a blank page (the data is still safe in storage).
+  try{
+    if(currentTab==='today')v.innerHTML=viewToday();
+    else if(currentTab==='history')v.innerHTML=viewHistory();
+    else if(currentTab==='library')v.innerHTML=viewLibrary();
+    else if(currentTab==='progress')v.innerHTML=viewProgress();
+    bind();updateCloud();
+  }catch(err){
+    try{console.error('render failed',err);}catch(e){}
+    v.innerHTML='<div class="wrap" style="padding:40px 16px;text-align:center"><h2 style="font-size:20px">Something went wrong</h2>'
+      +'<p class="muted" style="margin:10px 0 18px">Your data is safe. Try reloading — if a tab keeps failing, tell us what you were doing.</p>'
+      +'<button class="btn primary" id="ilReload" style="display:inline-block">Reload</button></div>';
+    const rb=v.querySelector('#ilReload');if(rb)rb.onclick=()=>location.reload();   // JS handler (no inline on* — CSP-safe)
+  }
 }
 // current session being edited on the Today tab (the live workout or a past one)
 const cur=()=>todayScreen==='edit'?editSession:state.active;
@@ -162,7 +172,7 @@ function recentTemplates(){
   if(!last.length)return'';
   return `<div class="eyebrow" style="margin:26px 2px 10px">Repeat a recent session</div>`+
     last.map(s=>`<button class="btn ghost block" style="justify-content:space-between;margin-bottom:9px;height:auto;padding:13px 16px" data-repeat="${s.id}">
-      <span style="text-align:left"><span style="font-weight:700;display:block">${relDay(s.date)}</span><span class="dim" style="font-size:13px;font-weight:500">${s.exercises.map(e=>EX[e.id]?EX[e.id].name:e.name).slice(0,3).join(' · ')}${s.exercises.length>3?' +'+(s.exercises.length-3):''}</span></span>
+      <span style="text-align:left"><span style="font-weight:700;display:block">${relDay(s.date)}</span><span class="dim" style="font-size:13px;font-weight:500">${esc(s.exercises.map(e=>EX[e.id]?EX[e.id].name:e.name).slice(0,3).join(' · '))}${s.exercises.length>3?' +'+(s.exercises.length-3):''}</span></span>
       <span class="ex-add" style="background:var(--surface-2)">↻</span></button>`).join('');
 }
 const SCHEMA=1;
@@ -260,7 +270,7 @@ function logExercise(s,e,ei,mode){
     <div class="set-actions">
       <button class="linkbtn" data-addset="${ei}">＋ Add set</button>
       ${e.sets.length>1?`<button class="linkbtn" data-delset="${ei}">－ Remove set</button>`:''}
-      <a class="linkbtn dim" href="${demoURL(e.id)}" target="_blank" rel="noopener" style="margin-left:auto;text-decoration:none">▶ Watch demo</a>
+      <a class="linkbtn dim" href="${demoURL(e.id)}" target="_blank" rel="noopener noreferrer" style="margin-left:auto;text-decoration:none">▶ Watch demo</a>
     </div>
     ${ei===0?'<div class="hint">Tip: tap a set number to mark it a warm-up (kept out of PRs and volume).</div>':''}
   </div>`;
@@ -448,7 +458,7 @@ function exerciseDetail(id){
       <div class="row-between"><span class="eyebrow">Target rep range</span><span class="mono" style="font-weight:600">${e.rr[0]}–${e.rr[1]}</span></div>
       ${lp?`<div class="row-between" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line)"><span class="eyebrow">Last time</span><span class="mono" style="font-weight:600">${esc(P.fmtPerf(lp.sets,U()))}</span></div>`:''}
     </div>
-    <a class="btn ghost block" href="${demoURL(id)}" target="_blank" rel="noopener" style="margin-bottom:10px;text-decoration:none">▶ Watch a demo video</a>
+    <a class="btn ghost block" href="${demoURL(id)}" target="_blank" rel="noopener noreferrer" style="margin-bottom:10px;text-decoration:none">▶ Watch a demo video</a>
     <button class="btn primary block" data-addto="${id}">${inWorkout?'✓ Already in this workout':'＋ Add to '+(todayScreen==='edit'?'this session':'today’s workout')}</button>`;
 }
 function openAddExercise(){
@@ -593,7 +603,9 @@ function openSettings(){
     <div class="eyebrow" style="margin-bottom:10px">Your data</div>
     <button class="btn ghost block" id="btnExport" style="margin-bottom:10px">⬇ Export a backup file</button>
     <label class="btn ghost block" style="margin-bottom:10px">⬆ Import a backup<input type="file" id="fileImport" accept="application/json" hidden></label>`}
-    <div class="dim" style="font-size:12px;text-align:center;margin-top:18px">Ironlog v${APP_VERSION} · ${state.sessions.length} sessions · ${state.routines.length} routines</div>
+    <div style="height:18px"></div>
+    <div class="dim" style="font-size:11.5px;line-height:1.55;text-align:center;padding:0 6px">Ironlog offers general fitness information, not medical advice. Warm up, use a weight you can control, and stop if something hurts. Consult a qualified professional before starting a program — you train at your own risk.</div>
+    <div class="dim" style="font-size:12px;text-align:center;margin-top:16px">Ironlog v${APP_VERSION} · ${state.sessions.length} sessions · ${state.routines.length} routines</div>
     <div class="dim mono" style="font-size:10.5px;text-align:center;margin-top:4px;opacity:.7">${viewportDiag()}</div>
     <div class="dim mono" style="font-size:10.5px;text-align:center;margin-top:4px;opacity:.7">${vpLog.join(' · ')}</div>`);
   $('#segUnit').addEventListener('click',e=>{const b=e.target.closest('[data-u]');if(!b)return;const nu=b.dataset.u;if(nu===U())return;
@@ -861,4 +873,10 @@ function boot(){
   if(state.justSeeded)setTimeout(()=>toast('Sample data loaded — explore every tab'),600);
 }
 IL.ui={toast,render,setTab,openSettings,boot};
-boot();
+// Last-resort guards: a runtime error in an event handler or a rejected promise should degrade
+// quietly, never blank the screen or surface a raw stack to the user.
+try{
+  window.addEventListener('error',e=>{try{console.error('runtime error',e.error||e.message);}catch(_){}});
+  window.addEventListener('unhandledrejection',e=>{try{console.error('unhandled rejection',e.reason);}catch(_){}});
+}catch(e){}
+try{boot();}catch(err){try{console.error('boot failed',err);}catch(e){}}

@@ -2,6 +2,16 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.16.0 — 2026-09-10 · Security hardening
+A defense-in-depth pass ahead of a possible store release. No user-facing feature change.
+- **Import/sync sanitization (the big one).** All untrusted input — file imports, Dropbox downloads, and the Claude artifact database — is now rebuilt field-by-field from a strict whitelist with every value type-coerced (`cleanSession`/`cleanRoutine`/`cleanSettings` in sync.js). This means a crafted backup can't smuggle HTML/attribute-injection through a "numeric" field, and it's structurally immune to **prototype pollution** (`__proto__`/`constructor` keys are never copied). Also caps array sizes to prevent a malicious file from ballooning memory.
+- **Strict Content-Security-Policy** on the site build: `default-src 'none'`, inline scripts pinned by **SHA-256 hash** (no `'unsafe-inline'` for scripts), so even if some untrusted string ever reached the DOM, an injected inline handler (`onerror=`, `onload=`) can't execute. `connect-src` locked to Dropbox's API hosts only.
+- **`no-referrer` policy** so the OAuth `code` on the Dropbox return can't leak to the font CDN via `Referer`.
+- **Error boundaries** — a bad record can no longer white-screen the app; `render()`/`boot()` degrade to a "Something went wrong · Reload" state with your data intact, plus global `error`/`unhandledrejection` handlers.
+- Escaping fix (a recent-session label rendered a name unescaped — CSP already blocked it, now escaped too), `demoURL` crash-guarded for unknown ids, external links get `rel="noopener noreferrer"`.
+- **Fitness disclaimer** added in Settings ("general fitness information, not medical advice… train at your own risk") to reduce liability.
+- Verified with malicious-import tests in-browser: injection payloads neutralized, no prototype pollution, app boots cleanly under CSP. 62 tests pass.
+
 ## v0.15.0 — 2026-09-10 · Progress you can see
 Three upgrades to the feedback loop — all from data you already log, no new taps.
 - **Per-lift progress trend.** Every exercise's detail sheet now shows a compact sparkline of its best-set estimated 1RM over recent sessions, with the delta (▲ +25 lb) — so "am I getting stronger on bench?" has a one-glance answer. Personal-record rows on the Progress tab are now tappable to open it. Scoped to the lift's current equipment mode, deloads excluded (`exerciseSeries`).
