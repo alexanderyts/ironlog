@@ -38,7 +38,7 @@ test('lastModeFor remembers the last explicit modality',()=>{
   assert.equal(P.lastModeFor(hist,'overhead-press'),'smith');
   assert.equal(P.lastModeFor(hist,'back-squat'),null,'never logged → null');
   // seedExercise carries the remembered mode onto the new instance
-  assert.equal(B.seedExercise('overhead-press',hist,null,'lb').mode,'smith');
+  assert.equal(B.seedExercise('overhead-press',hist,{unit:'lb'}).mode,'smith');
 });
 
 test('PRs are tracked separately per modality',()=>{

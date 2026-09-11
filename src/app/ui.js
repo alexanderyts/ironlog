@@ -154,8 +154,15 @@ function startWorkoutView(){
 // builder.js) and says so, so "continue" is the obvious default and "fresh" a deliberate choice.
 const ICON_BUILD='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2 2M16.4 16.4l2 2M18.4 5.6l-2 2M7.6 16.4l-2 2"/><circle cx="12" cy="12" r="3.2"/></svg>';
 function buildButtons(){
+  const dl=draft.deload;
   const plan=draft.groups.size?B.findPlan([...draft.groups],state.sessions):null;
-  if(!plan)return `<button class="btn primary block" id="btnRecommend" data-action="build" style="height:56px;font-size:16px">${ICON_BUILD} Build me a workout</button>`;
+  if(!plan)return `<button class="btn primary block" id="btnRecommend" data-action="build" style="height:56px;font-size:16px">${ICON_BUILD} ${dl?'Build me a deload':'Build me a workout'}</button>`;
+  // On a deload we continue the SAME plan lighter — no "Session N" progression framing.
+  if(dl)return `<button class="btn primary block" id="btnRecommend" data-action="build" style="height:auto;padding:12px 16px;font-size:16px;flex-direction:column;gap:2px">
+      <span style="display:flex;align-items:center;gap:8px">🌿 Deload this plan</span>
+      <span style="font-size:12.5px;font-weight:500;opacity:.85">${plan.exercises.length} exercises from ${relDay(plan.date).toLowerCase()} · lighter loads</span></button>
+    <div style="height:8px"></div>
+    <button class="btn ghost block" id="btnFresh" data-action="buildFresh">Build a fresh deload instead</button>`;
   const wk=Math.min(...plan.exercises.map(e=>B.exerciseStreak(state.sessions,e.id)))+1;
   return `<button class="btn primary block" id="btnRecommend" data-action="build" style="height:auto;padding:12px 16px;font-size:16px;flex-direction:column;gap:2px">
       <span style="display:flex;align-items:center;gap:8px">${ICON_BUILD} Continue your plan</span>
@@ -181,7 +188,7 @@ function recentTemplates(){
       <span class="ex-add" style="background:var(--surface-2)">↻</span></button>`).join('');
 }
 const SCHEMA=1;
-function newSession(exIds,deload,volumeBump){const s={id:S.uid(),schema:SCHEMA,date:Date.now(),updatedAt:Date.now(),completed:false,exercises:(exIds||[]).map(id=>B.seedExercise(id,state.sessions,null,U(),deload,volumeBump&&volumeBump.indexOf(id)>=0))};if(deload)s.deload=true;return s;}
+function newSession(exIds,deload,volumeBump){const s={id:S.uid(),schema:SCHEMA,date:Date.now(),updatedAt:Date.now(),completed:false,exercises:(exIds||[]).map(id=>B.seedExercise(id,state.sessions,{unit:U(),deload,extraSet:volumeBump&&volumeBump.indexOf(id)>=0}))};if(deload)s.deload=true;return s;}
 // The ONLY way a workout begins. spec: {ids, deload, msg, volumeBump, source}. Every start path —
 // build / blank / repeat / routine / history-repeat — routes through here, so the draft reset (and,
 // from Phase 1, the discard guard) live in one place instead of at each call site.
@@ -216,11 +223,12 @@ function openModePicker(ei){
 }
 function buildAndStart(fresh){
   const dl=draft.deload;
-  // Coach's findings feed the builder (Phase C) — but never on a deload (recovery isn't the time to add volume/coverage).
-  const hints=dl?null:A.buildHints(state.sessions,Date.now(),bw());
-  const p=B.planWorkout([...draft.groups],state.sessions,null,{fresh,hints});
+  // Coach's findings feed the builder (Phase C). The engine ignores them on a deload (recovery isn't
+  // the time to add volume/coverage), so we always pass them and let planWorkout decide.
+  const hints=A.buildHints(state.sessions,Date.now(),bw());
+  const p=B.planWorkout([...draft.groups],state.sessions,null,{fresh,hints,deload:dl});
   let msg='Workout built — adjust anything';
-  if(dl)msg='Deload built — lighter loads, focus on the stretch';
+  if(p.deload)msg=p.mode==='continue'?'Deload — same plan, lighter loads, focus on the stretch':'Deload built — lighter loads, focus on the stretch';
   else if(p.mode==='continue'){
     const gapAdd=(p.reactions||[]).find(r=>r.type==='gap-add');
     if(p.rotation&&p.rotation.anchor)msg=`Swapped ${EX[p.rotation.from].name} → ${EX[p.rotation.to].name} — it stalled through a deload`;
@@ -229,7 +237,7 @@ function buildAndStart(fresh){
     else if(p.volumeBump&&p.volumeBump.length)msg='Plan continued · +1 set where your volume was low';
     else msg='Plan continued — weights progressed from last time';
   }
-  startSession({ids:p.ids,msg,deload:dl,volumeBump:p.volumeBump,source:'build'});
+  startSession({ids:p.ids,msg,deload:p.deload,volumeBump:p.volumeBump,source:'build'});
 }
 // Reaction 1: a one-tap nudge toward the muscles the coach says are light or unbalanced this week.
 function coachNudge(){
@@ -722,7 +730,7 @@ function addExerciseToCur(id){
   if(todayScreen!=='edit'&&!state.active){S.setActive(newSession([]));}
   const t=cur();
   if(t.exercises.some(x=>x.id===id)){toast('Already added');return;}
-  t.exercises.push(B.seedExercise(id,state.sessions,t.id,U()));
+  t.exercises.push(B.seedExercise(id,state.sessions,{excludeId:t.id,unit:U()}));
   persistCur();if(todayScreen!=='edit')todayScreen='active';
   if(currentTab!=='today')setTab('today');else render();
   toast(EX[id].name+' added');
@@ -819,7 +827,7 @@ const ACTIONS={
   buildFresh:()=>buildAndStart(true),
   coachNudge:el=>{draft.groups=new Set(el.dataset.groups.split(','));render();},
   blank:()=>startSession({ids:[],msg:draft.deload?'Deload — lighter loads, focus on the stretch':null,deload:draft.deload,source:'blank'}),
-  deloadToggle:el=>{draft.deload=!draft.deload;el.classList.toggle('on',draft.deload);}
+  deloadToggle:el=>{draft.deload=!draft.deload;el.classList.toggle('on',draft.deload);refreshBuildBtns();}
 };
 function bind(){
   const v=$('#view');
@@ -829,10 +837,10 @@ function bind(){
   });}
   const gp=$('#groupPick');if(gp)gp.addEventListener('click',e=>{const b=e.target.closest('[data-g]');if(!b)return;const g=b.dataset.g;draft.groups.has(g)?draft.groups.delete(g):draft.groups.add(g);b.classList.toggle('on');
     refreshBuildBtns();});
-  v.querySelectorAll('[data-repeat]').forEach(b=>b.addEventListener('click',()=>{const s=state.sessions.find(x=>x.id===b.dataset.repeat);if(s)startSession({ids:s.exercises.map(e=>e.id),msg:'Loaded — weights prefilled from history',source:'repeat'});}));
+  v.querySelectorAll('[data-repeat]').forEach(b=>b.addEventListener('click',()=>{const s=state.sessions.find(x=>x.id===b.dataset.repeat);if(s)startSession({ids:s.exercises.map(e=>e.id),msg:draft.deload?'Deload — same exercises, lighter loads':'Loaded — weights prefilled from history',deload:draft.deload,source:'repeat'});}));
   v.querySelectorAll('[data-routine]').forEach(el=>el.addEventListener('click',e=>{
     if(e.target.closest('[data-delroutine]'))return;
-    const r=state.routines.find(x=>x.id===el.dataset.routine);if(r)startSession({ids:r.exIds,msg:r.name+' loaded',source:'routine'});}));
+    const r=state.routines.find(x=>x.id===el.dataset.routine);if(r)startSession({ids:r.exIds,msg:draft.deload?r.name+' — deload (lighter loads)':r.name+' loaded',deload:draft.deload,source:'routine'});}));
   v.querySelectorAll('[data-delroutine]').forEach(b=>b.addEventListener('click',()=>{
     const r=state.routines.find(x=>x.id===b.dataset.delroutine);if(!r)return;
     showConfirm('Delete routine?',r.name+' will be removed.','Delete',()=>{const copy=Object.assign({},r);S.deleteRoutine(r.id);render();toast('Routine deleted',{label:'Undo',fn:()=>{S.saveRoutine(copy);render();}});});}));

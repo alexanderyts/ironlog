@@ -2,6 +2,13 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.25.0 — 2026-09-11 · Deload actually deloads (Roadmap v5, Phase 3)
+Fixes the reported bug where turning on "Deload" still built a normal, progressed workout. Browser-verified.
+- **A deload now continues your exact plan, just lighter.** Before, the deload toggle never reached the workout builder, so on a continued plan it still showed "Session N," could swap an exercise out, and (via Repeat / Routine) even pre-filled *heavier* progressed weights. Now a deload keeps the same exercises, cuts the load to ~60%, caps each exercise at 3 sets, and makes no swaps or additions — from every start button. (builder.js `planWorkout` honours `opts.deload`; `seedExercise` caps deload sets at 3.)
+- The build button now reads "🌿 Deload this plan" (not "Session N") and offers "Build a fresh deload instead," updating live when you flip the toggle.
+- Repeat and Routine now respect the deload toggle too.
+- Internal: `seedExercise` moved to an options argument (tidier call sites).
+
 ## v0.24.0 — 2026-09-11 · Streak counts real weeks (Roadmap v5, Phase 2)
 - **Your streak now counts real Monday-to-Sunday weeks.** Before, the week boundary fell mid-week (between Wednesday and Thursday), so three sessions on Tuesday–Thursday could show as a "2-week streak." Now it's correctly 1 week. This also fixes an hour of drift in the weekly-volume chart around daylight-saving changes. (progression.js: `weekIndex`/`weekStart`, local Monday-start, replacing the epoch-week math in calcStreak, the coach's phrasing rotation, and weeklyVolumes.)
 - Note: the Home "This week" tile is a rolling last-7-days count and is unchanged — it can differ from the streak's calendar week, which is expected.

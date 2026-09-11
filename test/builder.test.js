@@ -91,7 +91,7 @@ test('set prescription: main lifts 4, other compounds 3, isolation 3, finishers 
   assert.equal(B.seedExercise('lateral-raise',[]).sets.length,3);
   assert.equal(B.seedExercise('dumbbell-fly',[]).sets.length,2);
   const hist=[session(2,[['back-squat',[set(225,5),set(225,5)]]])];
-  assert.deepEqual(B.seedExercise('back-squat',hist).sets.map(s=>[s.w,s.r]),[[225,5],[225,5]]);
+  assert.deepEqual(B.seedExercise('back-squat',hist,{}).sets.map(s=>[s.w,s.r]),[[225,5],[225,5]]);
 });
 
 test('complementary suggestions fill region/pattern gaps within the workout\'s own muscles',()=>{

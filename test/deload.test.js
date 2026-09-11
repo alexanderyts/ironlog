@@ -1,7 +1,44 @@
 const test=require('node:test'),assert=require('node:assert/strict');
-const {IL,session,set}=require('./load.js');
+const {IL,session,set,history}=require('./load.js');
 const P=IL.prog,B=IL.builder,A=IL.analysis,{EX}=IL.data;
 const dl=(daysAgo,exs,now)=>session(daysAgo,exs,{now,deload:true});
+
+test('a deload continues the plan verbatim — no rotation/anchor-swap/gap-add/bump (Phase 3)',()=>{
+  const now=Date.now();
+  const benchDay=d=>session(d,[['barbell-bench-press',[set(185,5),set(185,5)]],['cable-crossover',[set(40,12)]]],{now});
+  const stalled=[7,14,21,28,35].map(benchDay);
+  const withDeload=history(...stalled,session(10,[['barbell-bench-press',[set(185,5)]],['cable-crossover',[set(40,12)]]],{now,deload:true}));
+  // control: without the flag, a stalled anchor + recent deload triggers an anchor swap
+  const normal=B.planWorkout(['Chest'],withDeload,2,{now});
+  assert.ok(normal.rotation&&normal.rotation.anchor,'control swaps the stalled anchor');
+  // with the deload flag: same history, zero structural change
+  const d=B.planWorkout(['Chest'],withDeload,2,{now,deload:true});
+  assert.equal(d.deload,true);
+  assert.equal(d.mode,'continue','still continues the plan');
+  assert.equal(d.rotation,null,'no rotation on a deload');
+  assert.deepEqual(d.reactions,[],'no reactions on a deload');
+  assert.deepEqual(d.volumeBump,[],'no volume bump on a deload');
+});
+
+test('hints (undertrained/gaps) are ignored on a deload (Phase 3)',()=>{
+  const now=Date.now();
+  const hist=[];for(let w=0;w<4;w++)hist.push(session(w*7+2,[['barbell-bench-press',[set(135,6)]]],{now}));
+  const hints={undertrained:['Chest'],gaps:[],imbalance:null,legsLow:false,suggestGroups:[]};
+  const normal=B.planWorkout(['Chest'],hist,1,{now,hints});
+  assert.ok(normal.volumeBump.length>0,'control: undertrained chest gets a volume bump');
+  const d=B.planWorkout(['Chest'],hist,1,{now,hints,deload:true});
+  assert.deepEqual(d.volumeBump,[],'deload adds no volume');
+  assert.deepEqual(d.reactions,[],'deload runs no reactions');
+});
+
+test('deload seeding caps at 3 sets, and cuts the load (Phase 3)',()=>{
+  const now=Date.now();
+  const hist=[session(3,[['barbell-bench-press',[set(135,6),set(135,6),set(135,6),set(135,6),set(135,6)]]],{now})];
+  assert.equal(B.seedExercise('barbell-bench-press',hist,{unit:'lb'}).sets.length,5,'normal keeps all 5 sets');
+  const d=B.seedExercise('barbell-bench-press',hist,{unit:'lb',deload:true});
+  assert.equal(d.sets.length,3,'deload caps at 3 sets');
+  assert.ok(d.sets[0].w<135,'deload load is lighter');
+});
 
 test('deloadSets: ~60% of last real load, rounded to the plate grid, reps at the top of the range',()=>{
   const ex=EX['barbell-bench-press']; // rr 5–8
@@ -39,8 +76,8 @@ test('deloads never set PRs and never count as a regression in the progression s
 
 test('seedExercise builds a lighter deload from the last real session',()=>{
   const hist=[session(3,[['back-squat',[set(250,5),set(250,5)]]])];
-  const normal=B.seedExercise('back-squat',hist,null,'lb',false).sets.map(s=>s.w);
-  const deload=B.seedExercise('back-squat',hist,null,'lb',true).sets.map(s=>s.w);
+  const normal=B.seedExercise('back-squat',hist,{unit:'lb'}).sets.map(s=>s.w);
+  const deload=B.seedExercise('back-squat',hist,{unit:'lb',deload:true}).sets.map(s=>s.w);
   assert.ok(deload.every(w=>w<normal[0]),'deload weights are lighter than the progressed weights');
   assert.deepEqual(deload,[150,150]);
 });

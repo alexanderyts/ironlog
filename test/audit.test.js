@@ -54,9 +54,9 @@ test('VOLUME CEILINGS: bump only below the threshold, capped, never on a deload'
   assert.ok(!hints.undertrained.includes('Chest'),'well-trained chest is not undertrained');
   // per-exercise ceiling holds and a deload never gets an extra set
   const many=[session(2,[['barbell-bench-press',[set(1,1),set(1,1),set(1,1),set(1,1),set(1,1)]]],{now})];
-  assert.equal(B.seedExercise('barbell-bench-press',many,null,'lb',false,true).sets.length,B.MAX_SETS_PER_EX,'capped');
-  assert.equal(B.seedExercise('barbell-bench-press',many,null,'lb',true,true).sets.length<=B.MAX_SETS_PER_EX,true,'deload never overshoots');
-  const dl=B.seedExercise('romanian-deadlift',[session(2,[['romanian-deadlift',[set(100,8),set(100,8)]]],{now})],null,'lb',true,true);
+  assert.equal(B.seedExercise('barbell-bench-press',many,{unit:'lb',extraSet:true}).sets.length,B.MAX_SETS_PER_EX,'capped');
+  assert.equal(B.seedExercise('barbell-bench-press',many,{unit:'lb',deload:true,extraSet:true}).sets.length<=B.MAX_SETS_PER_EX,true,'deload never overshoots');
+  const dl=B.seedExercise('romanian-deadlift',[session(2,[['romanian-deadlift',[set(100,8),set(100,8)]]],{now})],{unit:'lb',deload:true,extraSet:true});
   assert.equal(dl.sets.length,2,'deload ignores the extra-set request');
 });
 

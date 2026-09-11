@@ -34,10 +34,10 @@ test('reaction — undertrained group earns +1 set, capped (Phase C)',()=>{
   const p=B.planWorkout(['Hamstrings','Chest'],hist,2,{now,hints});
   assert.ok(p.volumeBump.some(id=>EX[id].group==='Hamstrings'),'a hamstrings exercise is bumped');
   // seedExercise honours the bump and the per-exercise ceiling
-  const base=B.seedExercise('romanian-deadlift',hist,null,'lb',false,false).sets.length;
-  assert.equal(B.seedExercise('romanian-deadlift',hist,null,'lb',false,true).sets.length,base+1,'+1 set');
+  const base=B.seedExercise('romanian-deadlift',hist,{unit:'lb'}).sets.length;
+  assert.equal(B.seedExercise('romanian-deadlift',hist,{unit:'lb',extraSet:true}).sets.length,base+1,'+1 set');
   const many=[session(2,[['romanian-deadlift',[set(1,1),set(1,1),set(1,1),set(1,1),set(1,1)]]],{now})];
-  assert.equal(B.seedExercise('romanian-deadlift',many,null,'lb',false,true).sets.length,B.MAX_SETS_PER_EX,'capped at the ceiling');
+  assert.equal(B.seedExercise('romanian-deadlift',many,{unit:'lb',extraSet:true}).sets.length,B.MAX_SETS_PER_EX,'capped at the ceiling');
 });
 
 test('reaction — a flagged gap never triggers a rotation, and results are stable across seeds (Phase C)',()=>{

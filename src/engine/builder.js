@@ -15,13 +15,15 @@ function prescribedSets(ex){if(!ex)return 3;if(ex.type===C)return ex.tier===1?4:
 // from that modality's history so the prescription is like-for-like.
 // extraSet (Phase C volume bump) duplicates the last set once, capped at MAX_SETS_PER_EX. Never on a
 // deload (a deload reduces work) — the caller already excludes deloads from volumeBump.
-function seedExercise(id,sessions,excludeId,unit,deload,extraSet){
+function seedExercise(id,sessions,opts){
+  opts=opts||{};const {excludeId,unit,deload,extraSet}=opts;
   const ex=EX[id];const mode=lastModeFor(sessions,id);
   const inst={id,name:ex?ex.name:id};if(mode)inst.mode=mode;
   const lp=lastPerf(sessions||[],id,{excludeId,mode:mode||undefined});
   let sets;
   if(lp&&lp.sets.length)sets=(deload?deloadSets(lp.sets,ex,unit):nextSets(lp.sets,ex,unit).sets).map(s=>({w:s.w,r:s.r,done:false}));
   else{const n=prescribedSets(ex),r=ex?(deload?ex.rr[1]:ex.rr[0]):'';sets=Array.from({length:n},()=>({w:'',r:r,done:false}));}
+  if(deload&&sets.length>DELOAD_MAX_SETS)sets=sets.slice(0,DELOAD_MAX_SETS);   // a deload cuts volume as well as load
   if(extraSet&&!deload&&sets.length&&sets.length<MAX_SETS_PER_EX){const last=sets[sets.length-1];sets.push({w:last.w,r:last.r,done:false});}
   inst.sets=sets;return inst;
 }
@@ -184,7 +186,7 @@ function complementSuggestions(chosenIds,limit){
      • Exposure is measured in WEEKS (exerciseTenure), which normalizes by frequency: 8 sessions at
        2×/week and 4 at 1×/week are both "4 weeks" of the same movement — a high-frequency lifter is
        never churned by a raw session counter (the bug this phase fixes). */
-const CONTINUE_DAYS=10,STALL_MIN_DAYS=14,ANCHOR_STALL_WEEKS=3,ANCHOR_DELOAD_DAYS=21,MAX_SESSION_EX=7,MAX_SETS_PER_EX=5;
+const CONTINUE_DAYS=10,STALL_MIN_DAYS=14,ANCHOR_STALL_WEEKS=3,ANCHOR_DELOAD_DAYS=21,MAX_SESSION_EX=7,MAX_SETS_PER_EX=5,DELOAD_MAX_SETS=3;
 const WEEK=7*DAY;
 const {e1rm}=IL.prog;
 
@@ -277,10 +279,14 @@ function planWorkout(groups,sessions,seed,opts){
   opts=opts||{};sessions=sessions||[];
   groups=groups&&groups.length?groups.slice():['Chest','Back'];
   seed=seed==null?Math.floor(Math.random()*997):seed;
-  const hints=opts.hints,reactions=[],volumeBump=[];
+  const deload=!!opts.deload;
+  const hints=deload?null:opts.hints,reactions=[],volumeBump=[];   // a deload never adds volume/coverage
   const plan=opts.fresh?null:findPlan(groups,sessions,opts.now);
-  if(!plan)return{ids:buildRecommendation(groups,sessions,seed,hints),mode:'fresh',plan:null,rotation:null,streak:0,reactions,volumeBump};
+  if(!plan)return{ids:buildRecommendation(groups,sessions,seed,hints),mode:'fresh',plan:null,rotation:null,streak:0,reactions,volumeBump,deload};
   let ids=plan.exercises.map(e=>e.id).filter(id=>EX[id]);
+  // A deload CONTINUES the plan verbatim — same exercises, just lighter (seedExercise cuts load and
+  // volume). Zero structural changes: no stall check, rotation, anchor swap, gap-add or volume bump.
+  if(deload)return{ids:orderByFatigue(capHeavyAxial(ids),groups[0]),mode:'continue',plan,rotation:null,streak:0,reactions,volumeBump,deload:true};
   const modeById={};plan.exercises.forEach(e=>{if(EX[e.id])modeById[e.id]=modeOf(e);});
   const anchors=new Set(groups.map(g=>planAnchor(ids,g)).filter(Boolean).map(e=>e.id));
   let rotation=null;
@@ -318,7 +324,7 @@ function planWorkout(groups,sessions,seed,opts){
     });
   }
   const streak=Math.min(...ids.filter(id=>!rotation||id!==rotation.to).map(id=>exerciseStreak(sessions,id)));
-  return{ids:orderByFatigue(capHeavyAxial(ids),groups[0]),mode:'continue',plan,rotation,streak:isFinite(streak)?streak:0,reactions,volumeBump};
+  return{ids:orderByFatigue(capHeavyAxial(ids),groups[0]),mode:'continue',plan,rotation,streak:isFinite(streak)?streak:0,reactions,volumeBump,deload:false};
 }
 
 IL.builder={prescribedSets,seedExercise,lastSessionIds,perfPriority,orderByFatigue,isHeavyAxial,capHeavyAxial,pickForGroup,buildRecommendation,complementSuggestions,

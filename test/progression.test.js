@@ -105,8 +105,8 @@ test('fmtPerf describes flat and ramped work differently',()=>{
 test('seedExercise seeds the prescription, not a stale copy of last time',()=>{
   const B=IL.builder;
   const hist=[session(2,[['barbell-bench-press',[set(135,8),set(135,8)]]])];
-  assert.deepEqual(B.seedExercise('barbell-bench-press',hist,null,'lb').sets,[{w:140,r:5,done:false},{w:140,r:5,done:false}]);
-  assert.equal(B.seedExercise('deadlift',hist,null,'lb').sets.length,4,'no history: prescribed set count');
+  assert.deepEqual(B.seedExercise('barbell-bench-press',hist,{unit:'lb'}).sets,[{w:140,r:5,done:false},{w:140,r:5,done:false}]);
+  assert.equal(B.seedExercise('deadlift',hist,{unit:'lb'}).sets.length,4,'no history: prescribed set count');
 });
 
 test('unit conversion: lb → kg → lb is exact; kg → lb → kg within a tenth',()=>{
