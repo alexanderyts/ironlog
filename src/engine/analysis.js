@@ -3,8 +3,10 @@ var IL=globalThis.IL||(globalThis.IL={});
 if(typeof require==='function'&&!IL.data)require('../data/exercises.js');
 if(typeof require==='function'&&!IL.prog)require('./progression.js');
 const {EX,EXERCISES,REGIONS,IDEAL_PATS,LOWER_GROUPS,MODES,regLabel,patLabel,exampleFor,hashId}=IL.data;
-const {DAY,startOfDay,e1rm,isWorking,setLoad,sessionVolume,modeOf,calcStreak}=IL.prog;
+const {DAY,startOfDay,e1rm,isWorking,setLoad,sessionVolume,modeOf,calcStreak,real}=IL.prog;
 
+// completed() INCLUDES deloads on purpose — volume/frequency/PR-window analysis wants everything the
+// user actually did. Progression-only scans use real() (completed AND not a deload) instead.
 const completed=sessions=>sessions.filter(s=>s.completed!==false&&s.exercises.length);
 
 // A comparative judgment ("you press more than you pull", "legs are undertrained") needs a real
@@ -40,7 +42,7 @@ function analyze(sessions,now){
 // How many tracked lifts trend up in estimated 1RM over the last 4 weeks
 function progressionStat(sessions,now,bw){
   now=now||Date.now();
-  const done=completed(sessions).filter(s=>!s.deload&&s.date>=now-28*DAY&&s.date<now).sort((x,y)=>x.date-y.date);
+  const done=real(sessions).filter(s=>s.date>=now-28*DAY&&s.date<now).sort((x,y)=>x.date-y.date);
   const byEx={};
   done.forEach(s=>s.exercises.forEach(e=>{const best=Math.max(0,...e.sets.filter(isWorking).map(st=>e1rm(setLoad(e.id,st.w,bw),+st.r||0)));if(best)(byEx[e.id]=byEx[e.id]||[]).push(best);}));
   let n=0,up=0;Object.values(byEx).forEach(arr=>{if(arr.length>=2){n++;if(arr[arr.length-1]>arr[0])up++;}});
@@ -221,7 +223,7 @@ function buildHints(sessions,now,bw){
 // is meaningful (barbell/smith/bodyweight) — cable/machine stacks show load instead of a bogus 1RM.
 function personalRecords(sessions,bw,limit){
   const best={};
-  completed(sessions).forEach(s=>{if(s.deload)return;s.exercises.forEach(e=>{const mode=modeOf(e);e.sets.forEach(st=>{
+  real(sessions).forEach(s=>{s.exercises.forEach(e=>{const mode=modeOf(e);e.sets.forEach(st=>{
     if(!isWorking(st))return;const w=setLoad(e.id,st.w,bw),r=+st.r||0;if(!w||!r)return;
     const est=e1rm(w,r);const ex=EX[e.id];const key=e.id+':'+mode;
     const showEst=!!ex&&ex.type==='compound'&&!!(MODES[mode]&&MODES[mode].e1rm);

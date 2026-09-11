@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-xnL4R+P7p1nNRFWcK2/3XFGZzU6n+7scPrW5I+wOHHM=' 'sha256-EkxoJS/XfnHAg4Tv4KlM2HO15VAwse2HF4NYsW84Gss='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-v/elV0/WJYRBOu26xP0yfQyhOJD7ukYTiNDt/vzy7eg=' 'sha256-EkxoJS/XfnHAg4Tv4KlM2HO15VAwse2HF4NYsW84Gss='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Ironlog</title>
@@ -365,8 +365,8 @@ html.standalone .tabbar{bottom:auto;top:calc(var(--screen-h,100vh) - var(--tab-h
 </div>
 
 <script>
-/* Ironlog v0.22.1 · site build */
-var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.22.1",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
+/* Ironlog v0.22.2 · site build */
+var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.22.2",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
 
 /* ===== src/data/exercises.js ===== */
 (function(){'use strict';
@@ -636,9 +636,15 @@ function fmtVol(v){
   return (v/1000000).toFixed(1)+'M';
 }
 
+// The sessions that count toward PROGRESSION: completed, and not a deload (a deload is a recovery
+// detour, invisible to overload). Order is preserved (callers rely on newest-first). This is the one
+// predicate every progression/history scan shares — change it here, not in nine places.
+const real=sessions=>(sessions||[]).filter(s=>s.completed!==false&&!s.deload);
+
 // Most recent completed performance of an exercise. opts: {beforeTs, excludeId, mode}
 // When `mode` is given, only instances performed with that modality match — so progression compares
 // like-for-like (25 lb dumbbells never chase a 75 lb Smith). Omit mode to match regardless.
+// (Keeps its own loop rather than real() so opts.includeDeload can reach a deload when asked.)
 function lastPerf(sessions,exId,opts){
   opts=opts||{};
   for(const s of sessions){
@@ -655,8 +661,7 @@ function lastPerf(sessions,exId,opts){
 // the best working set of each real (non-deload) session, as estimated 1RM. opts: {mode, bw, limit}
 function exerciseSeries(sessions,exId,opts){
   opts=opts||{};const bw=opts.bw||0,out=[];
-  for(const s of sessions||[]){
-    if(s.completed===false||s.deload)continue;
+  for(const s of real(sessions)){
     const e=s.exercises.find(x=>x.id===exId&&(!opts.mode||modeOf(x)===opts.mode));
     if(!e)continue;
     let best=0,w=0,r=0;
@@ -670,8 +675,7 @@ function exerciseSeries(sessions,exId,opts){
 // detection). opts: {mode, bw, beforeTs, excludeId}
 function bestE1rmBefore(sessions,exId,opts){
   opts=opts||{};const bw=opts.bw||0;let best=0;
-  for(const s of sessions||[]){
-    if(s.completed===false||s.deload)continue;
+  for(const s of real(sessions)){
     if(opts.excludeId&&s.id===opts.excludeId)continue;
     if(opts.beforeTs&&s.date>=opts.beforeTs)continue;
     const e=s.exercises.find(x=>x.id===exId&&(!opts.mode||modeOf(x)===opts.mode));
@@ -681,7 +685,8 @@ function bestE1rmBefore(sessions,exId,opts){
   return best;
 }
 // The modality used the last time this exercise was logged (for "remembering" the user's choice);
-// null if it's never been logged or was logged in its default mode.
+// null if it's never been logged or was logged in its default mode. Intentionally NOT real(): a
+// deload still tells you which equipment you last reached for.
 function lastModeFor(sessions,exId){
   for(const s of sessions||[]){
     if(s.completed===false)continue;
@@ -813,7 +818,7 @@ function calcStreak(sessions,now){
   return n;
 }
 
-IL.prog={DAY,startOfDay,e1rm,isWorking,setLoad,sessionVolume,sessionSets,fmtVol,modeOf,lastPerf,lastModeFor,exerciseSeries,bestE1rmBefore,setPattern,fmtPerf,nextSets,deloadSets,suggestion,unitIncrement,convertWeight,convertSessions,calcStreak};
+IL.prog={DAY,startOfDay,e1rm,isWorking,setLoad,sessionVolume,sessionSets,fmtVol,modeOf,real,lastPerf,lastModeFor,exerciseSeries,bestE1rmBefore,setPattern,fmtPerf,nextSets,deloadSets,suggestion,unitIncrement,convertWeight,convertSessions,calcStreak};
 if(typeof module!=='undefined')module.exports=IL.prog;
 
 })();
@@ -854,7 +859,7 @@ var IL=globalThis.IL||(globalThis.IL={});
 if(typeof require==='function'&&!IL.data)require('../data/exercises.js');
 if(typeof require==='function'&&!IL.prog)require('./progression.js');
 const {C,I,EXERCISES,EX,REGIONS,IDEAL_PATS,PAT_RANK,EQUIP_LOAD,LONG_LENGTH,regLabel,patLabel,hashId}=IL.data;
-const {lastPerf,lastModeFor,nextSets,deloadSets,modeOf}=IL.prog;
+const {lastPerf,lastModeFor,nextSets,deloadSets,modeOf,real,DAY}=IL.prog;
 
 // Working sets a movement deserves when you've never logged it: main lifts 4, other compounds 3,
 // isolation 3, finishers 2. Reps prefilled at the bottom of the target range.
@@ -1035,18 +1040,17 @@ function complementSuggestions(chosenIds,limit){
        2×/week and 4 at 1×/week are both "4 weeks" of the same movement — a high-frequency lifter is
        never churned by a raw session counter (the bug this phase fixes). */
 const CONTINUE_DAYS=10,STALL_MIN_DAYS=14,ANCHOR_STALL_WEEKS=3,ANCHOR_DELOAD_DAYS=21,MAX_SESSION_EX=7,MAX_SETS_PER_EX=5;
-const WEEK=7*86400000;
-const {e1rm,nextSets:prescribe}=IL.prog;
+const WEEK=7*DAY;
+const {e1rm}=IL.prog;
 
 function sessionGroups(s){const g={};s.exercises.forEach(e=>{const x=EX[e.id];if(x)g[x.group]=(g[x.group]||0)+1;});return g;}
 // The most recent completed session (within the window) that trained exactly these groups —
 // tolerating one incidental add-on exercise from another group.
 function findPlan(groups,sessions,now){
   now=now||Date.now();const want=new Set(groups);
-  for(const s of sessions||[]){
-    if(s.completed===false||!s.exercises.length)continue;
-    if(s.deload)continue;   // resume the real plan, not a recovery detour
-    if(now-s.date>CONTINUE_DAYS*86400000)break;
+  for(const s of real(sessions)){          // completed, non-deload — resume the real plan
+    if(!s.exercises.length)continue;
+    if(now-s.date>CONTINUE_DAYS*DAY)break;
     const sg=sessionGroups(s);
     if(![...want].every(g=>sg[g]))continue;
     if(Object.keys(sg).some(g=>!want.has(g)&&sg[g]>1))continue;
@@ -1060,8 +1064,7 @@ function findPlan(groups,sessions,now){
 function exerciseTenure(sessions,exId){
   const ex=EX[exId];if(!ex)return{sessions:0,weeks:0};
   let n=0,newest=0,oldest=0;
-  for(const s of sessions||[]){
-    if(s.completed===false||s.deload)continue;
+  for(const s of real(sessions)){
     if(!s.exercises.some(e=>EX[e.id]&&EX[e.id].group===ex.group))continue;
     if(s.exercises.some(e=>e.id===exId)){if(!n)newest=s.date;oldest=s.date;n++;}else break;
   }
@@ -1086,15 +1089,14 @@ function recentPerfs(sessions,exId,n,mode){
 function isStalled(sessions,exId,mode){
   const p=recentPerfs(sessions,exId,8,mode);
   if(p.length<3)return false;
-  const cutoff=p[0].date-STALL_MIN_DAYS*86400000;
+  const cutoff=p[0].date-STALL_MIN_DAYS*DAY;
   const recent=p.filter(x=>x.date>cutoff),old=p.filter(x=>x.date<=cutoff);
   if(!recent.length||!old.length)return false;   // not enough calendar span yet
   return Math.max(...recent.map(x=>x.score))<=Math.max(...old.map(x=>x.score));
 }
-function isProgressing(sessions,exId,mode){const lp=lastPerf(sessions,exId,{mode});return !!lp&&prescribe(lp.sets,EX[exId],'lb').bumped;}
 // A deload taken within `days` (that the user tried, so a still-stalled anchor is genuinely stuck).
 function recentDeload(sessions,now,days){
-  now=now||Date.now();const cut=now-(days||ANCHOR_DELOAD_DAYS)*86400000;
+  now=now||Date.now();const cut=now-(days||ANCHOR_DELOAD_DAYS)*DAY;
   return (sessions||[]).some(s=>s.deload&&s.completed!==false&&s.date>=cut&&s.date<now);
 }
 function planAnchor(ids,g){
@@ -1175,7 +1177,7 @@ function planWorkout(groups,sessions,seed,opts){
 }
 
 IL.builder={prescribedSets,seedExercise,lastSessionIds,perfPriority,orderByFatigue,isHeavyAxial,capHeavyAxial,pickForGroup,buildRecommendation,complementSuggestions,
-  CONTINUE_DAYS,STALL_MIN_DAYS,ANCHOR_STALL_WEEKS,ANCHOR_DELOAD_DAYS,MAX_SESSION_EX,MAX_SETS_PER_EX,findPlan,exerciseTenure,exerciseStreak,isStalled,isProgressing,recentDeload,planAnchor,replacementFor,anchorVariation,fillsGap,gapFillExercise,planWorkout};
+  CONTINUE_DAYS,STALL_MIN_DAYS,ANCHOR_STALL_WEEKS,ANCHOR_DELOAD_DAYS,MAX_SESSION_EX,MAX_SETS_PER_EX,findPlan,exerciseTenure,exerciseStreak,isStalled,recentDeload,planAnchor,replacementFor,anchorVariation,fillsGap,gapFillExercise,planWorkout};
 if(typeof module!=='undefined')module.exports=IL.builder;
 
 })();
@@ -1187,8 +1189,10 @@ var IL=globalThis.IL||(globalThis.IL={});
 if(typeof require==='function'&&!IL.data)require('../data/exercises.js');
 if(typeof require==='function'&&!IL.prog)require('./progression.js');
 const {EX,EXERCISES,REGIONS,IDEAL_PATS,LOWER_GROUPS,MODES,regLabel,patLabel,exampleFor,hashId}=IL.data;
-const {DAY,startOfDay,e1rm,isWorking,setLoad,sessionVolume,modeOf,calcStreak}=IL.prog;
+const {DAY,startOfDay,e1rm,isWorking,setLoad,sessionVolume,modeOf,calcStreak,real}=IL.prog;
 
+// completed() INCLUDES deloads on purpose — volume/frequency/PR-window analysis wants everything the
+// user actually did. Progression-only scans use real() (completed AND not a deload) instead.
 const completed=sessions=>sessions.filter(s=>s.completed!==false&&s.exercises.length);
 
 // A comparative judgment ("you press more than you pull", "legs are undertrained") needs a real
@@ -1224,7 +1228,7 @@ function analyze(sessions,now){
 // How many tracked lifts trend up in estimated 1RM over the last 4 weeks
 function progressionStat(sessions,now,bw){
   now=now||Date.now();
-  const done=completed(sessions).filter(s=>!s.deload&&s.date>=now-28*DAY&&s.date<now).sort((x,y)=>x.date-y.date);
+  const done=real(sessions).filter(s=>s.date>=now-28*DAY&&s.date<now).sort((x,y)=>x.date-y.date);
   const byEx={};
   done.forEach(s=>s.exercises.forEach(e=>{const best=Math.max(0,...e.sets.filter(isWorking).map(st=>e1rm(setLoad(e.id,st.w,bw),+st.r||0)));if(best)(byEx[e.id]=byEx[e.id]||[]).push(best);}));
   let n=0,up=0;Object.values(byEx).forEach(arr=>{if(arr.length>=2){n++;if(arr[arr.length-1]>arr[0])up++;}});
@@ -1405,7 +1409,7 @@ function buildHints(sessions,now,bw){
 // is meaningful (barbell/smith/bodyweight) — cable/machine stacks show load instead of a bogus 1RM.
 function personalRecords(sessions,bw,limit){
   const best={};
-  completed(sessions).forEach(s=>{if(s.deload)return;s.exercises.forEach(e=>{const mode=modeOf(e);e.sets.forEach(st=>{
+  real(sessions).forEach(s=>{s.exercises.forEach(e=>{const mode=modeOf(e);e.sets.forEach(st=>{
     if(!isWorking(st))return;const w=setLoad(e.id,st.w,bw),r=+st.r||0;if(!w||!r)return;
     const est=e1rm(w,r);const ex=EX[e.id];const key=e.id+':'+mode;
     const showEst=!!ex&&ex.type==='compound'&&!!(MODES[mode]&&MODES[mode].e1rm);

@@ -28,9 +28,15 @@ function fmtVol(v){
   return (v/1000000).toFixed(1)+'M';
 }
 
+// The sessions that count toward PROGRESSION: completed, and not a deload (a deload is a recovery
+// detour, invisible to overload). Order is preserved (callers rely on newest-first). This is the one
+// predicate every progression/history scan shares — change it here, not in nine places.
+const real=sessions=>(sessions||[]).filter(s=>s.completed!==false&&!s.deload);
+
 // Most recent completed performance of an exercise. opts: {beforeTs, excludeId, mode}
 // When `mode` is given, only instances performed with that modality match — so progression compares
 // like-for-like (25 lb dumbbells never chase a 75 lb Smith). Omit mode to match regardless.
+// (Keeps its own loop rather than real() so opts.includeDeload can reach a deload when asked.)
 function lastPerf(sessions,exId,opts){
   opts=opts||{};
   for(const s of sessions){
@@ -47,8 +53,7 @@ function lastPerf(sessions,exId,opts){
 // the best working set of each real (non-deload) session, as estimated 1RM. opts: {mode, bw, limit}
 function exerciseSeries(sessions,exId,opts){
   opts=opts||{};const bw=opts.bw||0,out=[];
-  for(const s of sessions||[]){
-    if(s.completed===false||s.deload)continue;
+  for(const s of real(sessions)){
     const e=s.exercises.find(x=>x.id===exId&&(!opts.mode||modeOf(x)===opts.mode));
     if(!e)continue;
     let best=0,w=0,r=0;
@@ -62,8 +67,7 @@ function exerciseSeries(sessions,exId,opts){
 // detection). opts: {mode, bw, beforeTs, excludeId}
 function bestE1rmBefore(sessions,exId,opts){
   opts=opts||{};const bw=opts.bw||0;let best=0;
-  for(const s of sessions||[]){
-    if(s.completed===false||s.deload)continue;
+  for(const s of real(sessions)){
     if(opts.excludeId&&s.id===opts.excludeId)continue;
     if(opts.beforeTs&&s.date>=opts.beforeTs)continue;
     const e=s.exercises.find(x=>x.id===exId&&(!opts.mode||modeOf(x)===opts.mode));
@@ -73,7 +77,8 @@ function bestE1rmBefore(sessions,exId,opts){
   return best;
 }
 // The modality used the last time this exercise was logged (for "remembering" the user's choice);
-// null if it's never been logged or was logged in its default mode.
+// null if it's never been logged or was logged in its default mode. Intentionally NOT real(): a
+// deload still tells you which equipment you last reached for.
 function lastModeFor(sessions,exId){
   for(const s of sessions||[]){
     if(s.completed===false)continue;
@@ -205,5 +210,5 @@ function calcStreak(sessions,now){
   return n;
 }
 
-IL.prog={DAY,startOfDay,e1rm,isWorking,setLoad,sessionVolume,sessionSets,fmtVol,modeOf,lastPerf,lastModeFor,exerciseSeries,bestE1rmBefore,setPattern,fmtPerf,nextSets,deloadSets,suggestion,unitIncrement,convertWeight,convertSessions,calcStreak};
+IL.prog={DAY,startOfDay,e1rm,isWorking,setLoad,sessionVolume,sessionSets,fmtVol,modeOf,real,lastPerf,lastModeFor,exerciseSeries,bestE1rmBefore,setPattern,fmtPerf,nextSets,deloadSets,suggestion,unitIncrement,convertWeight,convertSessions,calcStreak};
 if(typeof module!=='undefined')module.exports=IL.prog;

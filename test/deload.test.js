@@ -1,7 +1,7 @@
 const test=require('node:test'),assert=require('node:assert/strict');
 const {IL,session,set}=require('./load.js');
 const P=IL.prog,B=IL.builder,A=IL.analysis,{EX}=IL.data;
-const dl=(daysAgo,exs,now)=>Object.assign(session(daysAgo,exs,{now}),{deload:true});
+const dl=(daysAgo,exs,now)=>session(daysAgo,exs,{now,deload:true});
 
 test('deloadSets: ~60% of last real load, rounded to the plate grid, reps at the top of the range',()=>{
   const ex=EX['barbell-bench-press']; // rr 5–8

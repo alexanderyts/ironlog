@@ -1,6 +1,18 @@
 const test=require('node:test'),assert=require('node:assert/strict');
 const {IL}=require('./load.js');
-const B=IL.builder,{EX,EXERCISES,LONG_LENGTH,UNILATERAL}=IL.data;
+const B=IL.builder,{EX,EXERCISES,LONG_LENGTH,UNILATERAL,META,BW_FACTOR}=IL.data;
+
+// Integrity guard for future additions: exercises.js falls back to ['overall','iso',3] when META is
+// missing, so a new exercise with a forgotten META entry silently becomes an untiered isolation move
+// (wrong region/pattern/tier, invisible). And a tag id that doesn't match a real exercise is dead.
+// (No current violations — this only catches the next mistake.)
+test('every exercise has explicit META, and every tag/factor id references a real exercise',()=>{
+  EXERCISES.forEach(e=>assert.ok(META[e.id],'missing META (would default to iso/overall/3): '+e.id));
+  Object.keys(META).forEach(id=>assert.ok(EX[id],'META key with no exercise: '+id));
+  [...LONG_LENGTH].forEach(id=>assert.ok(EX[id],'LONG_LENGTH id with no exercise: '+id));
+  [...UNILATERAL].forEach(id=>assert.ok(EX[id],'UNILATERAL id with no exercise: '+id));
+  Object.keys(BW_FACTOR).forEach(id=>assert.ok(EX[id],'BW_FACTOR id with no exercise: '+id));
+});
 
 test('library expanded; LONG_LENGTH / UNILATERAL tags reference real exercises',()=>{
   assert.ok(EXERCISES.length>=100,'library grew to ~100+ ('+EXERCISES.length+')');

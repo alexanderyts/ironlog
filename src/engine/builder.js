@@ -4,7 +4,7 @@ var IL=globalThis.IL||(globalThis.IL={});
 if(typeof require==='function'&&!IL.data)require('../data/exercises.js');
 if(typeof require==='function'&&!IL.prog)require('./progression.js');
 const {C,I,EXERCISES,EX,REGIONS,IDEAL_PATS,PAT_RANK,EQUIP_LOAD,LONG_LENGTH,regLabel,patLabel,hashId}=IL.data;
-const {lastPerf,lastModeFor,nextSets,deloadSets,modeOf}=IL.prog;
+const {lastPerf,lastModeFor,nextSets,deloadSets,modeOf,real,DAY}=IL.prog;
 
 // Working sets a movement deserves when you've never logged it: main lifts 4, other compounds 3,
 // isolation 3, finishers 2. Reps prefilled at the bottom of the target range.
@@ -185,18 +185,17 @@ function complementSuggestions(chosenIds,limit){
        2×/week and 4 at 1×/week are both "4 weeks" of the same movement — a high-frequency lifter is
        never churned by a raw session counter (the bug this phase fixes). */
 const CONTINUE_DAYS=10,STALL_MIN_DAYS=14,ANCHOR_STALL_WEEKS=3,ANCHOR_DELOAD_DAYS=21,MAX_SESSION_EX=7,MAX_SETS_PER_EX=5;
-const WEEK=7*86400000;
-const {e1rm,nextSets:prescribe}=IL.prog;
+const WEEK=7*DAY;
+const {e1rm}=IL.prog;
 
 function sessionGroups(s){const g={};s.exercises.forEach(e=>{const x=EX[e.id];if(x)g[x.group]=(g[x.group]||0)+1;});return g;}
 // The most recent completed session (within the window) that trained exactly these groups —
 // tolerating one incidental add-on exercise from another group.
 function findPlan(groups,sessions,now){
   now=now||Date.now();const want=new Set(groups);
-  for(const s of sessions||[]){
-    if(s.completed===false||!s.exercises.length)continue;
-    if(s.deload)continue;   // resume the real plan, not a recovery detour
-    if(now-s.date>CONTINUE_DAYS*86400000)break;
+  for(const s of real(sessions)){          // completed, non-deload — resume the real plan
+    if(!s.exercises.length)continue;
+    if(now-s.date>CONTINUE_DAYS*DAY)break;
     const sg=sessionGroups(s);
     if(![...want].every(g=>sg[g]))continue;
     if(Object.keys(sg).some(g=>!want.has(g)&&sg[g]>1))continue;
@@ -210,8 +209,7 @@ function findPlan(groups,sessions,now){
 function exerciseTenure(sessions,exId){
   const ex=EX[exId];if(!ex)return{sessions:0,weeks:0};
   let n=0,newest=0,oldest=0;
-  for(const s of sessions||[]){
-    if(s.completed===false||s.deload)continue;
+  for(const s of real(sessions)){
     if(!s.exercises.some(e=>EX[e.id]&&EX[e.id].group===ex.group))continue;
     if(s.exercises.some(e=>e.id===exId)){if(!n)newest=s.date;oldest=s.date;n++;}else break;
   }
@@ -236,15 +234,14 @@ function recentPerfs(sessions,exId,n,mode){
 function isStalled(sessions,exId,mode){
   const p=recentPerfs(sessions,exId,8,mode);
   if(p.length<3)return false;
-  const cutoff=p[0].date-STALL_MIN_DAYS*86400000;
+  const cutoff=p[0].date-STALL_MIN_DAYS*DAY;
   const recent=p.filter(x=>x.date>cutoff),old=p.filter(x=>x.date<=cutoff);
   if(!recent.length||!old.length)return false;   // not enough calendar span yet
   return Math.max(...recent.map(x=>x.score))<=Math.max(...old.map(x=>x.score));
 }
-function isProgressing(sessions,exId,mode){const lp=lastPerf(sessions,exId,{mode});return !!lp&&prescribe(lp.sets,EX[exId],'lb').bumped;}
 // A deload taken within `days` (that the user tried, so a still-stalled anchor is genuinely stuck).
 function recentDeload(sessions,now,days){
-  now=now||Date.now();const cut=now-(days||ANCHOR_DELOAD_DAYS)*86400000;
+  now=now||Date.now();const cut=now-(days||ANCHOR_DELOAD_DAYS)*DAY;
   return (sessions||[]).some(s=>s.deload&&s.completed!==false&&s.date>=cut&&s.date<now);
 }
 function planAnchor(ids,g){
@@ -325,5 +322,5 @@ function planWorkout(groups,sessions,seed,opts){
 }
 
 IL.builder={prescribedSets,seedExercise,lastSessionIds,perfPriority,orderByFatigue,isHeavyAxial,capHeavyAxial,pickForGroup,buildRecommendation,complementSuggestions,
-  CONTINUE_DAYS,STALL_MIN_DAYS,ANCHOR_STALL_WEEKS,ANCHOR_DELOAD_DAYS,MAX_SESSION_EX,MAX_SETS_PER_EX,findPlan,exerciseTenure,exerciseStreak,isStalled,isProgressing,recentDeload,planAnchor,replacementFor,anchorVariation,fillsGap,gapFillExercise,planWorkout};
+  CONTINUE_DAYS,STALL_MIN_DAYS,ANCHOR_STALL_WEEKS,ANCHOR_DELOAD_DAYS,MAX_SESSION_EX,MAX_SETS_PER_EX,findPlan,exerciseTenure,exerciseStreak,isStalled,recentDeload,planAnchor,replacementFor,anchorVariation,fillsGap,gapFillExercise,planWorkout};
 if(typeof module!=='undefined')module.exports=IL.builder;

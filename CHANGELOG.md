@@ -2,6 +2,12 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.22.2 — 2026-09-11 · Internal groundwork, part 1 (Roadmap v5, Phase 0.5-A/B/C)
+No user-visible change — this makes the upcoming fixes small and safe. All existing tests pass unchanged; one integrity test added (92 total).
+- Test scaffolding now runs against a fixed clock (a Wednesday) instead of the live time, so date/streak tests can't flake depending on the day you run them. Added `history`/`weekly` fixture builders.
+- One shared definition of "a session that counts toward progress" (completed, not a deload), used everywhere the app scans your history — instead of the same rule copied in seven places. (progression.js: `real()`, adopted in exerciseSeries/bestE1rmBefore/findPlan/exerciseTenure/progressionStat/personalRecords.)
+- Added a safety test that fails if a future exercise is added without its metadata (which would silently mis-tag it). Removed dead code (`isProgressing`) and a duplicated import.
+
 ## v0.22.1 — 2026-09-11 · Build hygiene + offline safety (Roadmap v5, Phase 0)
 Start of the v5 correctness pass — small, isolated fixes first.
 - **Your offline copy can no longer get stuck on an error page.** If a page or icon failed to load (a bad moment during a deploy), the app used to save that failure and keep showing it offline. It now only saves genuinely good responses. (build.js service worker: `cacheable()` guard — skip non-OK/redirected/opaque responses, and the cache write is wrapped in `e.waitUntil`.)
