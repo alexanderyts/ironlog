@@ -15,10 +15,11 @@ test('press-heavy, leg-less history triggers balance + gap warnings once there i
   assert.equal(a.push,18);assert.equal(a.pull,0);assert.equal(a.lowerSets,0);
   assert.equal(a.sessions,4);assert.ok(a.daySpan>=10,'day span '+a.daySpan);
   assert.equal(a.readyForComparative,true);
-  const tips=A.buildTips(a,hist,now,0).map(strip);
-  assert.ok(tips.some(t=>/pressing outweighs pulling/.test(t)),tips.join('|'));
-  assert.ok(tips.some(t=>/Legs are undertrained/.test(t)));
-  assert.ok(tips.some(t=>/rear delts/.test(t)),'shoulders trained but no rear delts');
+  // assert the DECISIONS (findings), not the varied wording (Phase E rotates phrasing weekly)
+  const F=A.findings(a,hist,now,0);
+  assert.ok(F.find(f=>f.type==='balance'&&f.dir==='push'),'push/pull imbalance');
+  assert.ok(F.find(f=>f.type==='legs-low'),'legs undertrained');
+  assert.ok(F.find(f=>f.type==='region-gap'&&f.group==='Shoulders'&&f.reg==='rear'),'rear-delt gap');
 });
 
 test('comparative verdicts stay hidden until there is enough history (new users are not judged on day 1)',()=>{
@@ -31,23 +32,23 @@ test('comparative verdicts stay hidden until there is enough history (new users 
   ],{now})];
   const a=A.analyze(hist,now);
   assert.equal(a.readyForComparative,false);
-  const tips=A.buildTips(a,hist,now,0).map(strip);
-  assert.ok(!tips.some(t=>/pressing outweighs pulling|Legs are undertrained|weekly sets to drive growth/.test(t)),tips.join('|'));
+  const F=A.findings(a,hist,now,0);
+  assert.ok(!F.some(f=>['balance','legs-low','volume-low','freq-low'].includes(f.type)),'no comparative verdicts on day 1');
 });
 
 test('pattern gap: hamstrings trained only with curls → suggests a hinge',()=>{
   const now=Date.now();
   const hist=[session(1,[['lying-leg-curl',[set(80,12),set(80,12)]]],{now})];
-  const tips=A.buildTips(A.analyze(hist,now),hist,now,0).map(strip);
-  assert.ok(tips.some(t=>/no hip hinge/.test(t)),tips.join('|'));
+  const F=A.findings(A.analyze(hist,now),hist,now,0);
+  assert.ok(F.some(f=>f.type==='pattern-gap'&&f.group==='Hamstrings'&&f.pat==='hinge'),'hamstrings missing a hinge');
 });
 
 test('healthy balance is reported as good, once there is enough history to say so',()=>{
   const now=Date.now();
   const mk=daysAgo=>session(daysAgo,[['barbell-bench-press',[set(135,8),set(135,8),set(135,8)]],['barbell-row',[set(135,8),set(135,8),set(135,8)]]],{now});
   const hist=[mk(1),mk(4),mk(8),mk(13)];
-  const tips=A.buildTips(A.analyze(hist,now),hist,now,0);
-  assert.ok(tips.some(t=>t.lv==='good'&&/balance looks healthy/.test(t.x)));
+  const F=A.findings(A.analyze(hist,now),hist,now,0);
+  assert.ok(F.some(f=>f.type==='balance'&&f.dir==='even'&&f.lv==='good'),'balanced push/pull reported as good');
 });
 
 test('warm-up sets are excluded from analysis, PRs and volume',()=>{

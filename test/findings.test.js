@@ -27,14 +27,12 @@ test('findings: typed decisions; comparative ones gated by readyForComparative',
   assert.ok(!Ft.some(f=>['balance','legs-low','volume-low','freq-low'].includes(f.type)),'comparative findings withheld early');
 });
 
-test('buildTips is a renderer over findings — capped at 5, every tip is a rendered finding',()=>{
+test('buildTips renders findings — capped at 5, well-formed, no unfilled placeholders',()=>{
   const hist=pushHistory();
-  const a=A.analyze(hist,now);
-  const tips=A.buildTips(a,hist,now,0);
+  const tips=A.buildTips(A.analyze(hist,now),hist,now,0);
   assert.ok(tips.length>=1&&tips.length<=5);
-  const rendered=new Set(A.findings(a,hist,now,0).map(f=>A.renderFinding(f).x));
-  assert.ok(tips.every(t=>rendered.has(t.x)),'each tip corresponds to a finding');
   assert.ok(tips.every(t=>['warn','good','info'].includes(t.lv)));
+  assert.ok(tips.every(t=>t.x&&t.x.length>10&&!/\{|\bundefined\b|NaN/.test(t.x)),'no template leaks: '+JSON.stringify(tips.map(t=>t.x)));
 });
 
 test('findingKey gives one identity per concern (deload variants share it)',()=>{

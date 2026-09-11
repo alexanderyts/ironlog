@@ -2,6 +2,13 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.21.0 — 2026-09-11 · Coaching that reads like a coach (Roadmap v4, Phase E)
+Coach's Notes no longer repeats the same canned sentences — still with **no AI**, variety comes from your data plus templates.
+- **Weekly-rotating wording:** 2–3 phrasings per finding, chosen by hash of (finding + week), so it reads differently next week but is **stable within a week** (no flicker between renders on the same day).
+- **Status-aware tone** (built on Phase A's new/persisting/resolved): a *new* issue is stated plainly; a *persisting* one softens to a follow-up ("Still nothing hitting your rear delts…"); and a **resolved** one gets **credit** ("Triceps long head — sorted") shown first as a positive opener. That credit is exactly how the coach acknowledges the builder's reactions worked — and it fades ~a month after the fix.
+- **Context from your numbers:** an undertrained muscle that's climbing says so ("up from ~5, keep climbing"), and your real exercise names are woven in.
+- Pure phrasing — no algorithm change. Existing string-matching tests were moved to assert the underlying *findings* (the decision), which is the right level after the Phase A split. 6 new/rewritten tests (82 total).
+
 ## v0.20.0 — 2026-09-11 · Library expansion (Roadmap v4, Phase D)
 The exercise library grows from 77 to **103**, chosen to give the builder *meaningful* choices, not bulk.
 - **Variation families:** 2–3 close substitutes per region×pattern (e.g. machine incline press, Pendlay row, neutral-grip pulldown, EZ-bar/concentration curls, machine dip) so a rotation swaps *within a family* rather than jumping movement patterns.

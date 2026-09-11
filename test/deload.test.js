@@ -61,7 +61,8 @@ test('coach acknowledges a recent deload instead of nagging for one',()=>{
   const now=Date.now();
   const withDeload=[];for(let w=0;w<7;w++)withDeload.push(session(w*7+3,[['back-squat',[set(225,5),set(225,5)]]],{now}));
   withDeload.unshift(Object.assign(session(1,[['back-squat',[set(135,8)]]],{now}),{deload:true}));
-  const tips=A.buildTips(A.analyze(withDeload,now),withDeload,now,0).map(t=>t.x.replace(/<[^>]+>/g,''));
-  assert.ok(tips.some(x=>/took a deload/i.test(x)),'acknowledges the deload: '+JSON.stringify(tips));
-  assert.ok(!tips.some(x=>/weeks<\/b> straight/i.test(x)),'does not also nag for a deload');
+  // assert the DECISION (Phase E rotates the wording): a deload-taken finding, and no deload-due nag
+  const F=A.findings(A.analyze(withDeload,now),withDeload,now,0);
+  assert.ok(F.some(f=>f.type==='deload-taken'),'acknowledges the recent deload');
+  assert.ok(!F.some(f=>f.type==='deload-due'),'does not also nag for a deload');
 });

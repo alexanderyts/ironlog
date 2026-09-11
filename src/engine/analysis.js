@@ -2,7 +2,7 @@
 var IL=globalThis.IL||(globalThis.IL={});
 if(typeof require==='function'&&!IL.data)require('../data/exercises.js');
 if(typeof require==='function'&&!IL.prog)require('./progression.js');
-const {EX,EXERCISES,REGIONS,IDEAL_PATS,LOWER_GROUPS,MODES,regLabel,patLabel,exampleFor}=IL.data;
+const {EX,EXERCISES,REGIONS,IDEAL_PATS,LOWER_GROUPS,MODES,regLabel,patLabel,exampleFor,hashId}=IL.data;
 const {DAY,startOfDay,e1rm,isWorking,setLoad,sessionVolume,modeOf,calcStreak}=IL.prog;
 
 const completed=sessions=>sessions.filter(s=>s.completed!==false&&s.exercises.length);
@@ -99,43 +99,101 @@ function withStatus(sessions,now,bw){
   now=now||Date.now();
   const cur=findings(analyze(sessions,now),sessions,now,bw);
   const prev=findings(analyze(sessions,now-28*DAY),sessions,now-28*DAY,bw);
-  const prevKeys=new Set(prev.map(findingKey)),curKeys=new Set(cur.map(findingKey));
-  const out=cur.map(f=>Object.assign({status:prevKeys.has(findingKey(f))?'persisting':'new'},f));
+  const prevByKey={};prev.forEach(p=>prevByKey[findingKey(p)]=p);
+  const curKeys=new Set(cur.map(findingKey));
+  const out=cur.map(f=>{const pf=prevByKey[findingKey(f)];return Object.assign({status:pf?'persisting':'new'},pf?{prev:pf}:{},f);});
   prev.forEach(f=>{if(!curKeys.has(findingKey(f)))out.push(Object.assign({status:'resolved'},f));});
   return out;
 }
 
-// Render one finding to a tip {lv, x:html}. Wording is preserved verbatim from the pre-refactor
-// buildTips so output stays byte-identical (Phase A is invisible); Phase E will vary this.
-function renderFinding(f){
-  const g=f.group?f.group.toLowerCase():'';
+/* ── Phrasing engine (Roadmap v4 Phase E): coaching that reads like a coach, not a form letter ──────
+   Still no AI — variety comes from DATA + TEMPLATES. Three levers:
+     • 2–3 wordings per finding, picked by hash(findingKey + week) → different next week, STABLE within a
+       week (no flicker between renders on the same day);
+     • status-aware tone from withStatus: `new` states it, `persisting` softens to a follow-up ("still"),
+       `resolved` gives CREDIT ("rear delts: sorted") — the biggest "not canned" win, and the way the
+       coach acknowledges that the builder's reactions worked;
+     • real numbers and the user's own exercise names woven in. */
+const RESOLVABLE=new Set(['balance','legs-low','region-gap','pattern-gap','volume-low','freq-low']);
+function isoWeek(now){return Math.floor(startOfDay(now||Date.now())/(7*DAY));}
+function cap(s){return s?s.charAt(0).toUpperCase()+s.slice(1):s;}
+function pickVariant(f,week,arr){return arr[Math.abs(hashId(findingKey(f))+(week||0))%arr.length];}
+// renderFinding(f, week) → {lv, x:html}. `week` keeps wording stable within a week; omit for "now".
+function renderFinding(f,week){
+  if(week==null)week=isoWeek();
+  const g=f.group?f.group.toLowerCase():'',G=cap(g),st=f.status;
   switch(f.type){
-    case 'balance':
-      if(f.dir==='push')return {lv:'warn',x:`Your pressing outweighs pulling (<b>${f.push}</b> push vs <b>${f.pull}</b> pull sets). Add rows or pull-ups to balance your shoulders and posture.`};
-      if(f.dir==='pull')return {lv:'warn',x:`You pull far more than you press (<b>${f.pull}</b> vs <b>${f.push}</b>). Add a press to even it out.`};
-      return {lv:'good',x:`Push/pull balance looks healthy (<b>${f.push}</b> vs <b>${f.pull}</b> sets).`};
-    case 'legs-low':return {lv:'warn',x:`Legs are undertrained — <b>${f.lower}</b> lower-body sets vs <b>${f.upper}</b> upper. Add a squat or hinge day.`};
-    case 'deload-taken':return {lv:'good',x:`You took a <b>deload</b> ${f.days<=7?'this week':'recently'} — smart. Recovery is where the last block's work turns into growth; ease back to full loads once you feel fresh.`};
-    case 'deload-due':return {lv:'info',x:`You've trained <b>${f.weeks} weeks</b> straight — a lighter <b>deload</b> (about 60% loads, full range, focus on the stretch) lets accumulated fatigue and joint stress clear so the next block hits harder.`};
-    case 'region-gap':return {lv:'info',x:`You train ${g} but skip <b>${regLabel(f.group,f.reg)}</b>. Try <b>${f.ex}</b>.`};
-    case 'pattern-gap':return {lv:'info',x:`Your ${g} work has no <b>${f.pat==='iso'?'isolation':patLabel(f.pat)}</b> movement — pair it with <b>${f.exName}</b> for complete development.`};
-    case 'volume-low':return {lv:'warn',x:`Only ~<b>${f.perWeek.toFixed(1)}</b> sets/week of ${g} — aim for <b>10+</b> weekly sets to drive growth.`};
-    case 'freq-low':return {lv:'info',x:`You train ${g} hard but about once a week — splitting those <b>~${Math.round(f.sets)} sets</b> across <b>2 days</b> tends to build a muscle faster than one big session.`};
-    case 'progression':return {lv:f.lv,x:`Progression: <b>${f.up}/${f.n}</b> of your tracked lifts are trending up in estimated strength this month.${f.up>=f.n/2?' Keep it going.':' Lean on the +weight suggestions to push the rest.'}`};
+    case 'balance':{
+      if(st==='resolved')return {lv:'good',x:pickVariant(f,week,[`Push and pull are back in balance — nice adjusting.`,`Your press/pull evened out. Good correction.`])};
+      if(f.dir==='even')return {lv:'good',x:pickVariant(f,week,[`Push and pull look balanced (<b>${f.push}</b> vs <b>${f.pull}</b>). Right where you want it.`,`Healthy push/pull split — <b>${f.push}</b> to <b>${f.pull}</b> sets.`])};
+      const heavy=f.dir==='push'?'pressing':'pulling',light=f.dir==='push'?'pulling':'pressing',fix=f.dir==='push'?'rows or pull-ups':'a press or two',pre=st==='persisting'?'Still — ':'';
+      return {lv:'warn',x:pickVariant(f,week,[
+        `${pre}your ${heavy} is outrunning your ${light} (<b>${f.push}</b> push vs <b>${f.pull}</b> pull). Work in ${fix} to keep the shoulders balanced.`,
+        `${pre}a lot of ${heavy} lately — <b>${f.push}</b> to <b>${f.pull}</b>. A bit more ${light} protects your posture.`,
+        `${pre}${heavy} is well ahead (<b>${f.push}</b> vs <b>${f.pull}</b>). Even it out with ${fix}.`])};
+    }
+    case 'legs-low':{
+      if(st==='resolved')return {lv:'good',x:`Legs are catching up — good call giving them more work.`};
+      const pre=st==='persisting'?'Legs are still lagging':'Legs are undertrained';
+      return {lv:'warn',x:pickVariant(f,week,[
+        `${pre} — <b>${f.lower}</b> lower-body sets to <b>${f.upper}</b> upper. A squat or hinge day would even you out.`,
+        `${pre}: <b>${f.lower}</b> vs <b>${f.upper}</b> upper sets. Time to give them their own day.`])};
+    }
+    case 'deload-taken':return {lv:'good',x:pickVariant(f,week,[
+      `You took a <b>deload</b> ${f.days<=7?'this week':'recently'} — smart. Recovery is where the last block turns into growth; ease back to full loads when you feel fresh.`,
+      `Nice — a <b>deload</b> ${f.days<=7?'this week':'lately'}. Let the fatigue clear, then pick the loads back up.`])};
+    case 'deload-due':return {lv:'info',x:pickVariant(f,week,[
+      `<b>${f.weeks} weeks</b> straight — a lighter <b>deload</b> (about 60% loads, full range, own the stretch) clears fatigue so the next block hits harder.`,
+      `You've pushed <b>${f.weeks} weeks</b> without a <b>deload</b> — a recovery week now sets up your next jump in strength.`])};
+    case 'region-gap':{
+      const rl=regLabel(f.group,f.reg);
+      if(st==='resolved')return {lv:'good',x:`<b>${cap(rl)}</b> — sorted. Your ${g} is covered now.`};
+      const pre=st==='persisting'?`Still nothing hitting your <b>${rl}</b>`:`You train ${g} but skip <b>${rl}</b>`;
+      return {lv:'info',x:pickVariant(f,week,[
+        `${pre} — try <b>${f.ex}</b>.`,
+        `${pre}. <b>${f.ex}</b> would round it out.`])};
+    }
+    case 'pattern-gap':{
+      const pl=f.pat==='iso'?'isolation':patLabel(f.pat);
+      if(st==='resolved')return {lv:'good',x:`Your ${g} now has a <b>${pl}</b> covered — nicely rounded.`};
+      const pre=st==='persisting'?'still has no':'has no';
+      return {lv:'info',x:pickVariant(f,week,[
+        `Your ${g} work ${pre} <b>${pl}</b> movement — pair it with <b>${f.exName}</b> for complete development.`,
+        `No <b>${pl}</b> in your ${g} lately. <b>${f.exName}</b> fills that in.`])};
+    }
+    case 'volume-low':{
+      if(st==='resolved')return {lv:'good',x:`${G} volume is back up where it should be — nice work.`};
+      const pw=f.perWeek.toFixed(1),trend=(st==='persisting'&&f.prev&&f.perWeek>f.prev.perWeek)?` (up from ~${f.prev.perWeek.toFixed(1)}, keep climbing)`:'';
+      return {lv:'warn',x:pickVariant(f,week,[
+        `Only ~<b>${pw}</b> sets/week of ${g}${trend} — aim for <b>10+</b> to drive growth.`,
+        `${G} is light at ~<b>${pw}</b> sets/week${trend}. Push toward <b>10+</b> weekly.`])};
+    }
+    case 'freq-low':{
+      if(st==='resolved')return {lv:'good',x:`${G} is spread across the week better now — good.`};
+      return {lv:'info',x:pickVariant(f,week,[
+        `You train ${g} hard but about once a week — splitting those <b>~${Math.round(f.sets)} sets</b> across <b>2 days</b> tends to build the muscle faster.`,
+        `${G}'s volume is packed into one session. Spreading it over <b>2 days</b> a week grows it better than one big hit.`])};
+    }
+    case 'progression':return {lv:f.lv,x:pickVariant(f,week,[
+      `<b>${f.up}/${f.n}</b> of your tracked lifts are trending up in estimated strength this month.${f.up>=f.n/2?' Keep it going.':' Lean on the +weight prompts to push the rest.'}`,
+      `Strength trend: <b>${f.up}</b> of <b>${f.n}</b> lifts climbing this month.${f.up>=f.n/2?" That's a good ratio.":' A few need a nudge — the +weight prompts will help.'}`])};
   }
   return {lv:f.lv||'info',x:''};
 }
-// Coaching tips: renders findings() in the established order (balance, legs, deload, top-2 gaps,
-// lowest-volume, top frequency, progression), capped at 5. See the buildup/empty-state note above.
+// Coaching tips: status-aware and varied (Phase E). One resolved "win" is shown first as a positive
+// opener when something's been fixed; then the active guidance in the established priority order.
 function buildTips(a,sessions,now,bw){
-  const F=findings(a,sessions,now,bw),t=[],pick=ty=>F.filter(f=>f.type===ty);
-  pick('balance').forEach(f=>t.push(renderFinding(f)));
-  pick('legs-low').forEach(f=>t.push(renderFinding(f)));
-  pick('deload-taken').concat(pick('deload-due')).forEach(f=>t.push(renderFinding(f)));
-  F.filter(f=>f.type==='region-gap'||f.type==='pattern-gap').sort((x,y)=>y.prio-x.prio).slice(0,2).forEach(f=>t.push(renderFinding(f)));
-  const vol=pick('volume-low').sort((x,y)=>x.perWeek-y.perWeek)[0];if(vol)t.push(renderFinding(vol));
-  const freq=pick('freq-low').sort((x,y)=>y.sets-x.sets)[0];if(freq)t.push(renderFinding(freq));
-  pick('progression').forEach(f=>t.push(renderFinding(f)));
+  const week=isoWeek(now),ann=withStatus(sessions,now,bw),t=[];
+  const active=ann.filter(f=>f.status!=='resolved'),pick=ty=>active.filter(f=>f.type===ty);
+  const resolved=ann.filter(f=>f.status==='resolved'&&RESOLVABLE.has(f.type)).sort((x,y)=>(y.prio||1)-(x.prio||1));
+  if(resolved.length)t.push(renderFinding(resolved[0],week));
+  pick('balance').forEach(f=>t.push(renderFinding(f,week)));
+  pick('legs-low').forEach(f=>t.push(renderFinding(f,week)));
+  pick('deload-taken').concat(pick('deload-due')).forEach(f=>t.push(renderFinding(f,week)));
+  active.filter(f=>f.type==='region-gap'||f.type==='pattern-gap').sort((x,y)=>y.prio-x.prio).slice(0,2).forEach(f=>t.push(renderFinding(f,week)));
+  const vol=pick('volume-low').sort((x,y)=>x.perWeek-y.perWeek)[0];if(vol)t.push(renderFinding(vol,week));
+  const freq=pick('freq-low').sort((x,y)=>y.sets-x.sets)[0];if(freq)t.push(renderFinding(freq,week));
+  pick('progression').forEach(f=>t.push(renderFinding(f,week)));
   return t.slice(0,5);   // may be empty — the caller owns empty-state copy (too little history vs. nothing to flag)
 }
 /* buildHints (Roadmap v4 Phase C): turn findings into inputs the WORKOUT BUILDER can act on — the
