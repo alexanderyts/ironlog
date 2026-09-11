@@ -12,7 +12,7 @@ const MODULES=['src/data/exercises.js','src/engine/progression.js','src/engine/s
 const FONTS='<link rel="preconnect" href="https://fonts.googleapis.com">\n<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>\n<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">';
 
 function bundle(target,demo){
-  const head=`/* Ironlog v${pkg.version} · ${target}${demo?' demo':''} build · ${new Date().toISOString()} */\nvar IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:${JSON.stringify(target)},DEMO:${!!demo},VERSION:${JSON.stringify(pkg.version)},DROPBOX_APP_KEY:${JSON.stringify(cfg.DROPBOX_APP_KEY||'')}};\n`;
+  const head=`/* Ironlog v${pkg.version} · ${target}${demo?' demo':''} build */\nvar IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:${JSON.stringify(target)},DEMO:${!!demo},VERSION:${JSON.stringify(pkg.version)},DROPBOX_APP_KEY:${JSON.stringify(cfg.DROPBOX_APP_KEY||'')}};\n`;
   const mods=demo?[...MODULES.slice(0,7),'src/app/seed.js',...MODULES.slice(7)]:MODULES;   // seed data only ships in the demo
   // each module is wrapped so its top-level consts stay private; exports go on IL
   return head+mods.map(m=>`\n/* ===== ${m} ===== */\n(function(){'use strict';\n${read(m)}\n})();\n`).join('');
@@ -40,8 +40,9 @@ const CSP=[
   "manifest-src 'self'",
   "worker-src 'self'",
   "base-uri 'none'",
-  "form-action 'none'",
-  "frame-ancestors 'none'"
+  "form-action 'none'"
+  // NB: frame-ancestors is ignored in a <meta> CSP (spec) — it needs a real HTTP header, which
+  // GitHub Pages can't set. Omitted rather than left as false reassurance.
 ].join('; ');
 const site=`<!doctype html>
 <html lang="en">
@@ -85,14 +86,18 @@ const V='ironlog-${pkg.version}';
 const ASSETS=['./','./index.html','./manifest.webmanifest','./icon-192.png','./icon-512.png','./apple-touch-icon.png'];
 self.addEventListener('install',e=>{e.waitUntil(caches.open(V).then(c=>c.addAll(ASSETS)).then(()=>self.skipWaiting()));});
 self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==V).map(k=>caches.delete(k)))).then(()=>self.clients.claim()));});
+// Only cache a genuinely good response — never a 404/503 error page or an opaque/redirected reply.
+// Caching a bad response would serve it back offline as if it were the app (a deploy that 503s once
+// would strand the PWA on an error page forever).
+function cacheable(res){return res&&res.ok&&!res.redirected&&res.type!=='opaque';}
 self.addEventListener('fetch',e=>{
   const u=new URL(e.request.url);
   if(u.origin!==location.origin||e.request.method!=='GET')return;           // Dropbox / fonts go to the network
   if(e.request.mode==='navigate'||e.request.destination==='document'){
-    e.respondWith(fetch(e.request).then(res=>{const copy=res.clone();caches.open(V).then(c=>c.put(e.request,copy));return res;}).catch(()=>caches.match(e.request,{ignoreSearch:true}).then(r=>r||caches.match('./index.html'))));
+    e.respondWith(fetch(e.request).then(res=>{if(cacheable(res)){const copy=res.clone();e.waitUntil(caches.open(V).then(c=>c.put(e.request,copy)));}return res;}).catch(()=>caches.match(e.request,{ignoreSearch:true}).then(r=>r||caches.match('./index.html'))));
     return;
   }
-  e.respondWith(caches.match(e.request,{ignoreSearch:true}).then(r=>r||fetch(e.request).then(res=>{const copy=res.clone();caches.open(V).then(c=>c.put(e.request,copy));return res;})));
+  e.respondWith(caches.match(e.request,{ignoreSearch:true}).then(r=>r||fetch(e.request).then(res=>{if(cacheable(res)){const copy=res.clone();e.waitUntil(caches.open(V).then(c=>c.put(e.request,copy)));}return res;})));
 });
 `;
 const manifest=JSON.stringify({name:'Ironlog',short_name:'Ironlog',description:'A smart, fast workout tracker.',start_url:'./',scope:'./',display:'standalone',orientation:'portrait',background_color:'#0d1219',theme_color:'#0d1219',

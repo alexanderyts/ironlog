@@ -2,6 +2,12 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.22.1 — 2026-09-11 · Build hygiene + offline safety (Roadmap v5, Phase 0)
+Start of the v5 correctness pass — small, isolated fixes first.
+- **Your offline copy can no longer get stuck on an error page.** If a page or icon failed to load (a bad moment during a deploy), the app used to save that failure and keep showing it offline. It now only saves genuinely good responses. (build.js service worker: `cacheable()` guard — skip non-OK/redirected/opaque responses, and the cache write is wrapped in `e.waitUntil`.)
+- **Cleaner builds.** The build no longer stamps a timestamp into the page, so rebuilding with no code change produces no phantom diff (and doesn't churn the security hash). (build.js: dropped `new Date().toISOString()` from the bundle header.)
+- Removed a security line (`frame-ancestors`) that does nothing inside a `<meta>` tag — it needs a real server header, which GitHub Pages can't set, so it was false reassurance.
+
 ## v0.22.0 — 2026-09-11 · Adversarial audit of the builder (Roadmap v4, Phase F — final)
 A 10-check adversarial suite attacking every invariant the v4 design relies on. It found and fixed **two real bugs**:
 - **Frequency fairness bug (fixed):** `isStalled` looked at the 3 *most-recent* sessions, which for a 3×/week lifter span only a few days — so a high-frequency lifter could **never** trip the 2-week stall requirement and their stalled lifts would never rotate. Now it compares your best in the last ~2 weeks against your best from before that, judging the plateau in *calendar time* — fair across any training frequency.
