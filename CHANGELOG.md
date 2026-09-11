@@ -2,6 +2,11 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.22.3 — 2026-09-11 · Internal groundwork, part 2 (Roadmap v5, Phase 0.5-D/E)
+No user-visible change — verified in the browser that every way of starting a workout still works. Sets up the deload and safety fixes coming next.
+- Every way to start a workout (Build, Start from scratch, Repeat, Routine, repeat-from-history) now goes through one function, so behaviour is consistent and the next fixes touch one place instead of five. (ui.js: `startSession(spec)`.)
+- The New-workout screen's picks (muscle groups + deload toggle) live in one `draft` object, reset in exactly one place when a workout begins — so a stale pick can't leak into your next visit.
+
 ## v0.22.2 — 2026-09-11 · Internal groundwork, part 1 (Roadmap v5, Phase 0.5-A/B/C)
 No user-visible change — this makes the upcoming fixes small and safe. All existing tests pass unchanged; one integrity test added (92 total).
 - Test scaffolding now runs against a fixed clock (a Wednesday) instead of the live time, so date/streak tests can't flake depending on the day you run them. Added `history`/`weekly` fixture builders.

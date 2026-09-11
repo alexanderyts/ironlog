@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-v/elV0/WJYRBOu26xP0yfQyhOJD7ukYTiNDt/vzy7eg=' 'sha256-EkxoJS/XfnHAg4Tv4KlM2HO15VAwse2HF4NYsW84Gss='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-1SHYO6kLkPmBAizCXAXuQqhT3K575PuihxSOdhkqVdQ=' 'sha256-EkxoJS/XfnHAg4Tv4KlM2HO15VAwse2HF4NYsW84Gss='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Ironlog</title>
@@ -365,8 +365,8 @@ html.standalone .tabbar{bottom:auto;top:calc(var(--screen-h,100vh) - var(--tab-h
 </div>
 
 <script>
-/* Ironlog v0.22.2 · site build */
-var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.22.2",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
+/* Ironlog v0.22.3 · site build */
+var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.22.3",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
 
 /* ===== src/data/exercises.js ===== */
 (function(){'use strict';
@@ -1887,8 +1887,10 @@ function updateCloud(){
 let currentTab='today';
 let todayScreen='home';          // 'home' | 'start' | 'active' | 'edit'
 let editSession=null,editDirty=false;
-let pickedGroups=new Set();
-let deloadPicked=false;
+// The New-workout screen's transient picks. Reset in exactly one place: resetDraft(), called by
+// startSession() when a workout begins — so nothing leaks into the next visit.
+let draft={groups:new Set(),deload:false};
+function resetDraft(){draft.groups=new Set();draft.deload=false;}
 let calMonth=new Date().getFullYear()*12+new Date().getMonth(),selDay=null;
 let libQuery='',libGroup='All';
 function setTab(t){vlog('tab '+t);currentTab=t;document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===t));render();window.scrollTo(0,0);}
@@ -1967,8 +1969,8 @@ function startWorkoutView(){
     </div>
     <div style="height:18px"></div>${coachNudge()}
     <div class="eyebrow" style="margin:16px 2px 10px">Target muscle groups</div>
-    <div class="chips" id="groupPick">${GROUPS.map(g=>`<button class="chip ${pickedGroups.has(g)?'on':''}" data-g="${g}">${g}</button>`).join('')}</div>
-    <div class="card settingrow" style="margin:18px 0 0;padding:14px 15px"><div><div style="font-weight:600">Deload / recovery session</div><div class="dim" style="font-size:12.5px">Sore or beat up? Build it ~60% lighter — full range, focus on the stretch. Won't count against your progress or PRs.</div></div><button class="sw ${deloadPicked?'on':''}" id="deloadToggle" aria-label="Deload session"></button></div>
+    <div class="chips" id="groupPick">${GROUPS.map(g=>`<button class="chip ${draft.groups.has(g)?'on':''}" data-g="${g}">${g}</button>`).join('')}</div>
+    <div class="card settingrow" style="margin:18px 0 0;padding:14px 15px"><div><div style="font-weight:600">Deload / recovery session</div><div class="dim" style="font-size:12.5px">Sore or beat up? Build it ~60% lighter — full range, focus on the stretch. Won't count against your progress or PRs.</div></div><button class="sw ${draft.deload?'on':''}" id="deloadToggle" aria-label="Deload session"></button></div>
     <div class="spacer"></div><div class="spacer"></div>
     <div id="buildBtns">${buildButtons()}</div>
     <div style="height:10px"></div>
@@ -1981,7 +1983,7 @@ function startWorkoutView(){
 // builder.js) and says so, so "continue" is the obvious default and "fresh" a deliberate choice.
 const ICON_BUILD='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2 2M16.4 16.4l2 2M18.4 5.6l-2 2M7.6 16.4l-2 2"/><circle cx="12" cy="12" r="3.2"/></svg>';
 function buildButtons(){
-  const plan=pickedGroups.size?B.findPlan([...pickedGroups],state.sessions):null;
+  const plan=draft.groups.size?B.findPlan([...draft.groups],state.sessions):null;
   if(!plan)return `<button class="btn primary block" id="btnRecommend" style="height:56px;font-size:16px">${ICON_BUILD} Build me a workout</button>`;
   const wk=Math.min(...plan.exercises.map(e=>B.exerciseStreak(state.sessions,e.id)))+1;
   return `<button class="btn primary block" id="btnRecommend" style="height:auto;padding:12px 16px;font-size:16px;flex-direction:column;gap:2px">
@@ -1990,6 +1992,8 @@ function buildButtons(){
     <div style="height:8px"></div>
     <button class="btn ghost block" id="btnFresh">Build a fresh plan instead</button>`;
 }
+// Re-render just the build buttons in place (their label depends on the picked groups / deload).
+function refreshBuildBtns(){const bb=$('#buildBtns');if(bb)bb.innerHTML=buildButtons();}
 function routineList(){
   if(!state.routines.length)return'';
   return `<div class="eyebrow" style="margin:26px 2px 10px">Your routines</div>`+state.routines.map(r=>`<div class="routine" data-routine="${r.id}">
@@ -2007,7 +2011,16 @@ function recentTemplates(){
 }
 const SCHEMA=1;
 function newSession(exIds,deload,volumeBump){const s={id:S.uid(),schema:SCHEMA,date:Date.now(),updatedAt:Date.now(),completed:false,exercises:(exIds||[]).map(id=>B.seedExercise(id,state.sessions,null,U(),deload,volumeBump&&volumeBump.indexOf(id)>=0))};if(deload)s.deload=true;return s;}
-function startSession(exIds,msg,deload,volumeBump){S.setActive(newSession(exIds,deload,volumeBump));todayScreen='active';render();if(msg)toast(msg);}
+// The ONLY way a workout begins. spec: {ids, deload, msg, volumeBump, source}. Every start path —
+// build / blank / repeat / routine / history-repeat — routes through here, so the draft reset (and,
+// from Phase 1, the discard guard) live in one place instead of at each call site.
+function startSession(spec){
+  spec=spec||{};
+  S.setActive(newSession(spec.ids||[],!!spec.deload,spec.volumeBump));
+  resetDraft();
+  todayScreen='active';render();
+  if(spec.msg)toast(spec.msg);
+}
 // Equipment picker for a logged exercise. Changing it re-scopes progression/PRs to that modality
 // (see modeOf/lastPerf); entered sets are kept (you're relabelling how it was done, not clearing it).
 // The choice is stored only when it differs from the exercise's native equipment, so data stays clean.
@@ -2023,10 +2036,10 @@ function openModePicker(ei){
     persistCur();closeSheet();render();toast(MODES[m].label);}));
 }
 function buildAndStart(fresh){
-  const dl=deloadPicked;
+  const dl=draft.deload;
   // Coach's findings feed the builder (Phase C) — but never on a deload (recovery isn't the time to add volume/coverage).
   const hints=dl?null:A.buildHints(state.sessions,Date.now(),bw());
-  const p=B.planWorkout([...pickedGroups],state.sessions,null,{fresh,hints});pickedGroups.clear();deloadPicked=false;
+  const p=B.planWorkout([...draft.groups],state.sessions,null,{fresh,hints});
   let msg='Workout built — adjust anything';
   if(dl)msg='Deload built — lighter loads, focus on the stretch';
   else if(p.mode==='continue'){
@@ -2037,7 +2050,7 @@ function buildAndStart(fresh){
     else if(p.volumeBump&&p.volumeBump.length)msg='Plan continued · +1 set where your volume was low';
     else msg='Plan continued — weights progressed from last time';
   }
-  startSession(p.ids,msg,dl,p.volumeBump);
+  startSession({ids:p.ids,msg,deload:dl,volumeBump:p.volumeBump,source:'build'});
 }
 // Reaction 1: a one-tap nudge toward the muscles the coach says are light or unbalanced this week.
 function coachNudge(){
@@ -2515,7 +2528,7 @@ function openSessionDetail(sid){
     <button class="btn ghost block" data-routinefrom="${s.id}" style="margin-bottom:10px">★ Save as routine</button>
     <button class="linkbtn dim" data-delsess="${s.id}" style="display:block;text-align:center;width:100%">Delete this session</button>`);
   const body=$('#sheetBody');
-  body.querySelector('[data-repeatfrom]').addEventListener('click',()=>{closeSheet();startSession(s.exercises.map(e=>e.id),'Loaded — weights prefilled');setTab('today');});
+  body.querySelector('[data-repeatfrom]').addEventListener('click',()=>{closeSheet();startSession({ids:s.exercises.map(e=>e.id),msg:'Loaded — weights prefilled',source:'repeat'});setTab('today');});
   body.querySelector('[data-editsess]').addEventListener('click',()=>{closeSheet();startEdit(s);});
   body.querySelector('[data-routinefrom]').addEventListener('click',()=>{closeSheet();saveAsRoutine(s);});
   body.querySelector('[data-delsess]').addEventListener('click',()=>showConfirm('Delete session?','This removes the workout from your history.','Delete',()=>{
@@ -2525,6 +2538,8 @@ function openSessionDetail(sid){
 
 /* ---------------- actions ---------------- */
 function addExerciseToCur(id){
+  // Lazy-inits an active session only when there isn't one — so it never overwrites a workout in
+  // progress and needs no discard guard (unlike the start paths that go through startSession()).
   if(todayScreen!=='edit'&&!state.active){S.setActive(newSession([]));}
   const t=cur();
   if(t.exercises.some(x=>x.id===id)){toast('Already added');return;}
@@ -2605,16 +2620,16 @@ function bind(){
     bindClick('#btnRecommend',()=>buildAndStart(false));
     bindClick('#btnFresh',()=>buildAndStart(true));
   };
-  const gp=$('#groupPick');if(gp)gp.addEventListener('click',e=>{const b=e.target.closest('[data-g]');if(!b)return;const g=b.dataset.g;pickedGroups.has(g)?pickedGroups.delete(g):pickedGroups.add(g);b.classList.toggle('on');
-    const bb=$('#buildBtns');if(bb){bb.innerHTML=buildButtons();bindBuild();}});
-  bindClick('#coachNudge',()=>{const el=$('#coachNudge');if(!el)return;pickedGroups=new Set(el.dataset.groups.split(','));render();});
+  const gp=$('#groupPick');if(gp)gp.addEventListener('click',e=>{const b=e.target.closest('[data-g]');if(!b)return;const g=b.dataset.g;draft.groups.has(g)?draft.groups.delete(g):draft.groups.add(g);b.classList.toggle('on');
+    refreshBuildBtns();bindBuild();});
+  bindClick('#coachNudge',()=>{const el=$('#coachNudge');if(!el)return;draft.groups=new Set(el.dataset.groups.split(','));render();});
   bindBuild();
-  bindClick('#btnBlank',()=>{const dl=deloadPicked;deloadPicked=false;startSession([],dl?'Deload — lighter loads, focus on the stretch':null,dl);});
-  bindClick('#deloadToggle',()=>{deloadPicked=!deloadPicked;const b=$('#deloadToggle');if(b)b.classList.toggle('on',deloadPicked);});
-  v.querySelectorAll('[data-repeat]').forEach(b=>b.addEventListener('click',()=>{const s=state.sessions.find(x=>x.id===b.dataset.repeat);if(s)startSession(s.exercises.map(e=>e.id),'Loaded — weights prefilled from history');}));
+  bindClick('#btnBlank',()=>startSession({ids:[],msg:draft.deload?'Deload — lighter loads, focus on the stretch':null,deload:draft.deload,source:'blank'}));
+  bindClick('#deloadToggle',()=>{draft.deload=!draft.deload;const b=$('#deloadToggle');if(b)b.classList.toggle('on',draft.deload);});
+  v.querySelectorAll('[data-repeat]').forEach(b=>b.addEventListener('click',()=>{const s=state.sessions.find(x=>x.id===b.dataset.repeat);if(s)startSession({ids:s.exercises.map(e=>e.id),msg:'Loaded — weights prefilled from history',source:'repeat'});}));
   v.querySelectorAll('[data-routine]').forEach(el=>el.addEventListener('click',e=>{
     if(e.target.closest('[data-delroutine]'))return;
-    const r=state.routines.find(x=>x.id===el.dataset.routine);if(r)startSession(r.exIds,r.name+' loaded');}));
+    const r=state.routines.find(x=>x.id===el.dataset.routine);if(r)startSession({ids:r.exIds,msg:r.name+' loaded',source:'routine'});}));
   v.querySelectorAll('[data-delroutine]').forEach(b=>b.addEventListener('click',()=>{
     const r=state.routines.find(x=>x.id===b.dataset.delroutine);if(!r)return;
     showConfirm('Delete routine?',r.name+' will be removed.','Delete',()=>{const copy=Object.assign({},r);S.deleteRoutine(r.id);render();toast('Routine deleted',{label:'Undo',fn:()=>{S.saveRoutine(copy);render();}});});}));
