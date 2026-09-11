@@ -229,14 +229,17 @@ function recentPerfs(sessions,exId,n,mode){
   }
   return out;
 }
-// Stalled = ≥3 performances spanning ≥STALL_MIN_DAYS with a non-improving e1RM across all three. The
-// time-span requirement is the Phase B fix: three sessions crammed into one week is short-term noise,
-// not a plateau — a real stall for an intermediate reveals itself over weeks.
+// Stalled = your best in the last ~2 weeks hasn't beaten your best from BEFORE that. Comparing a
+// recent window to an earlier one (rather than the 3 most-recent sessions) is the Phase F fix: a
+// 3×/week lifter's three most-recent sessions span only a few days, so the old check could never
+// flag them stalled — this judges the plateau in calendar time, fair across any training frequency.
 function isStalled(sessions,exId,mode){
-  const p=recentPerfs(sessions,exId,3,mode);
+  const p=recentPerfs(sessions,exId,8,mode);
   if(p.length<3)return false;
-  if((p[0].date-p[2].date)<STALL_MIN_DAYS*86400000)return false;
-  return p[0].score<=p[1].score&&p[1].score<=p[2].score;   // newest ≤ middle ≤ oldest: no gain
+  const cutoff=p[0].date-STALL_MIN_DAYS*86400000;
+  const recent=p.filter(x=>x.date>cutoff),old=p.filter(x=>x.date<=cutoff);
+  if(!recent.length||!old.length)return false;   // not enough calendar span yet
+  return Math.max(...recent.map(x=>x.score))<=Math.max(...old.map(x=>x.score));
 }
 function isProgressing(sessions,exId,mode){const lp=lastPerf(sessions,exId,{mode});return !!lp&&prescribe(lp.sets,EX[exId],'lb').bumped;}
 // A deload taken within `days` (that the user tried, so a still-stalled anchor is genuinely stuck).
@@ -248,18 +251,21 @@ function planAnchor(ids,g){
   const c=ids.map(id=>EX[id]).filter(e=>e&&e.group===g&&e.tier===1&&(IDEAL_PATS[g]||[]).indexOf(e.pat)>=0);
   return c.sort((a,b)=>perfPriority(b)-perfPriority(a))[0]||null;
 }
+// The replacement for a rotated exercise is DETERMINISTIC (tie-broken by hashId, not the build seed)
+// so rebuilding a stalled plan gives the same swap — a rotation shouldn't be a lottery. (Seed still
+// varies fresh builds; only the continue-path rotation goes through here.)
 function replacementFor(exId,planIds,seed,hints){
   const e=EX[exId];
   const cands=EXERCISES.filter(x=>x.group===e.group&&x.id!==exId&&planIds.indexOf(x.id)<0);
-  return cands.map(x=>{let sc=(x.reg===e.reg?4:0)+(x.pat===e.pat?3:0)+(x.type===e.type?1:0)+(x.tier===1?.5:x.tier===2?.3:0)+(fillsGap(x,hints)?2:0)+((hashId(x.id)+(seed||0))%5)/100;return{x,sc};})
+  return cands.map(x=>{let sc=(x.reg===e.reg?4:0)+(x.pat===e.pat?3:0)+(x.type===e.type?1:0)+(x.tier===1?.5:x.tier===2?.3:0)+(fillsGap(x,hints)?2:0)+(hashId(x.id)%5)/100;return{x,sc};})
     .sort((a,b)=>b.sc-a.sc)[0]?.x||null;
 }
 // A same-group, same-pattern tier-1 alternative for a stalled anchor (bench→incline, squat→front
-// squat) — a variation for the block, never a change of pattern. Null if the library has none.
+// squat) — a variation for the block, never a change of pattern. Deterministic. Null if none.
 function anchorVariation(exId,planIds,seed){
   const e=EX[exId];
   const cands=EXERCISES.filter(x=>x.tier===1&&x.group===e.group&&x.pat===e.pat&&x.id!==exId&&planIds.indexOf(x.id)<0);
-  return cands.sort((a,b)=>perfPriority(b)-perfPriority(a)||((hashId(a.id)+(seed||0))%5)-((hashId(b.id)+(seed||0))%5))[0]||null;
+  return cands.sort((a,b)=>perfPriority(b)-perfPriority(a)||(hashId(a.id)%5)-(hashId(b.id)%5))[0]||null;
 }
 // An exercise id to cover a flagged gap that isn't already in the plan (Phase C reaction 4).
 function gapFillExercise(gp,ids){

@@ -2,6 +2,13 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.22.0 — 2026-09-11 · Adversarial audit of the builder (Roadmap v4, Phase F — final)
+A 10-check adversarial suite attacking every invariant the v4 design relies on. It found and fixed **two real bugs**:
+- **Frequency fairness bug (fixed):** `isStalled` looked at the 3 *most-recent* sessions, which for a 3×/week lifter span only a few days — so a high-frequency lifter could **never** trip the 2-week stall requirement and their stalled lifts would never rotate. Now it compares your best in the last ~2 weeks against your best from before that, judging the plateau in *calendar time* — fair across any training frequency.
+- **Non-deterministic rotation (fixed):** the replacement for a rotated/anchor-swapped exercise was tie-broken by the build seed, so rebuilding a stalled plan could yield a different swap. Now deterministic (tie-broken by exercise hash) — a rotation isn't a lottery. Verified: 15 builds with random seeds produce one identical plan even with an active rotation.
+- **Verified invariants (all pass):** continuity churn (20 builds of a stable plan → identical), "hold what works" (a 10-week progressing lift never rotates), anchor-swap safety (only with stall + deload, same pattern, never dropped), volume ceilings (bump only below threshold, ≤5 sets/exercise, never on a deload), session size/order (compounds first, heavy-axial cap survive reactions), and interaction traps (a swap and a gap-add never both fire; a mid-block modality switch doesn't spuriously rotate).
+- 10 new audit tests (91 total). **This completes Roadmap v4** — the builder learns from your data, reacts to the coach, and varies deliberately, all deterministic and with no AI.
+
 ## v0.21.0 — 2026-09-11 · Coaching that reads like a coach (Roadmap v4, Phase E)
 Coach's Notes no longer repeats the same canned sentences — still with **no AI**, variety comes from your data plus templates.
 - **Weekly-rotating wording:** 2–3 phrasings per finding, chosen by hash of (finding + week), so it reads differently next week but is **stable within a week** (no flicker between renders on the same day).
