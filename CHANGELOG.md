@@ -2,6 +2,10 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.24.0 — 2026-09-11 · Streak counts real weeks (Roadmap v5, Phase 2)
+- **Your streak now counts real Monday-to-Sunday weeks.** Before, the week boundary fell mid-week (between Wednesday and Thursday), so three sessions on Tuesday–Thursday could show as a "2-week streak." Now it's correctly 1 week. This also fixes an hour of drift in the weekly-volume chart around daylight-saving changes. (progression.js: `weekIndex`/`weekStart`, local Monday-start, replacing the epoch-week math in calcStreak, the coach's phrasing rotation, and weeklyVolumes.)
+- Note: the Home "This week" tile is a rolling last-7-days count and is unchanged — it can differ from the streak's calendar week, which is expected.
+
 ## v0.23.0 — 2026-09-11 · Only the sets you did get saved (Roadmap v5, Phase 1)
 The most important fix in this pass. Browser-verified end to end.
 - **Finishing a workout now saves only the sets you checked off.** Before, when the app pre-filled your weights, any set with a weight in it was saved as "done" even if you never touched it — so checking 2 of 3 sets could quietly log all 3, inflating your history, volume, PRs and streak. Now an unchecked pre-filled set is never saved. (ui.js `cleanSets` → progression.js `finalizeSets`; setsOf/Finish already counted correctly.)

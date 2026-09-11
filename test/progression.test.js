@@ -140,6 +140,29 @@ test('streak counts consecutive training weeks and tolerates an untrained curren
   assert.ok(w>0);
 });
 
+test('weekIndex: local Monday-start weeks, DST-safe',()=>{
+  const D=(y,m,d,h)=>new Date(y,m,d,h||12).getTime();
+  // Sun 23:59 and the Monday that STARTS that same week share an index; the next Monday differs by 1
+  const sun=new Date(2026,8,13,23,59).getTime();          // Sun 13 Sep 2026 (week of Mon 7 Sep)
+  assert.equal(P.weekIndex(sun),P.weekIndex(D(2026,8,7,0)),'Sun night == that week\'s Monday');
+  assert.equal(P.weekIndex(D(2026,8,14))-P.weekIndex(D(2026,8,7)),1,'consecutive Mondays differ by 1');
+  // a week spanning the end-of-DST change (Sun 1 Nov 2026 in the US) is still one bucket
+  assert.equal(P.weekIndex(D(2026,9,28)),P.weekIndex(D(2026,10,1)),'Wed and the following Sun across DST share a week');
+  assert.equal(P.weekIndex(D(2026,10,2))-P.weekIndex(D(2026,9,28)),1,'the next Monday is the next week');
+});
+
+test('streak counts REAL Mon–Sun weeks: Tue+Wed+Thu of one week is a 1-week streak',()=>{
+  // The reported bug: 3 sessions Tue/Wed/Thu read as "2 weeks" because the old epoch bucket split them.
+  const now=new Date(2026,8,11,12).getTime();             // Fri 11 Sep 2026 (week of Mon 7 Sep)
+  const wk=[new Date(2026,8,8,18),new Date(2026,8,9,18),new Date(2026,8,10,18)]  // Tue, Wed, Thu
+    .map(d=>({id:'s'+d.getTime(),schema:1,date:d.getTime(),updatedAt:d.getTime(),completed:true,exercises:[{id:'crunch',name:'Crunch',sets:[{w:0,r:20,done:true}]}]}));
+  assert.equal(P.calcStreak(wk,now),1,'one calendar week');
+  // a Sun→Mon pair crosses a week boundary → 2
+  const cross=[{id:'a',schema:1,date:new Date(2026,8,6,18).getTime(),updatedAt:0,completed:true,exercises:[{id:'crunch',name:'C',sets:[{w:0,r:20,done:true}]}]},
+               {id:'b',schema:1,date:new Date(2026,8,7,18).getTime(),updatedAt:0,completed:true,exercises:[{id:'crunch',name:'C',sets:[{w:0,r:20,done:true}]}]}];
+  assert.equal(P.calcStreak(cross,now),2,'Sun + Mon are two different weeks');
+});
+
 test('e1rm and fmtVol',()=>{
   assert.equal(P.e1rm(100,1),100);assert.equal(P.e1rm(100,10),133);
   // comma-formatted (readable to a lifter) up to 99,999 — a real session/week volume almost never

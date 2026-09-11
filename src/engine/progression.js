@@ -213,16 +213,23 @@ function convertSessions(sessions,from,to,now){
   sessions.forEach(s=>{s.exercises.forEach(e=>e.sets.forEach(st=>{st.w=convertWeight(st.w,from,to);}));s.updatedAt=now||Date.now();ids.push(s.id);});
   return ids;
 }
+// Local calendar week, MONDAY start. weekStart(ts) = local-midnight timestamp of that week's Monday;
+// weekIndex(ts) = a monotonic integer that increments each Monday. Both are computed from local
+// calendar days, so a session Tue/Wed and one Thu of the SAME week share a week (the old
+// floor(ts/7days) bucketed on a fixed epoch boundary that fell mid-week and split them), and neither
+// drifts across a daylight-saving change.
+function weekStart(ts){const d=new Date(ts),day=(d.getDay()+6)%7;return new Date(d.getFullYear(),d.getMonth(),d.getDate()-day).getTime();}
+function weekIndex(ts){return Math.round(weekStart(ts)/(7*DAY));}   // round absorbs the DST ±1h
 // Consecutive weeks with at least one workout (current week may be untrained yet)
 function calcStreak(sessions,now){
   now=now||Date.now();const done=sessions.filter(s=>s.completed!==false&&s.exercises.length);
   if(!done.length)return 0;
-  const weeks=new Set(done.map(s=>Math.floor(startOfDay(s.date)/(7*DAY))));
-  const cur=Math.floor(startOfDay(now)/(7*DAY));
+  const weeks=new Set(done.map(s=>weekIndex(s.date)));
+  const cur=weekIndex(now);
   let wk=cur,n=0;while(weeks.has(wk)){n++;wk--;}
   if(n===0&&weeks.has(cur-1)){wk=cur-1;while(weeks.has(wk)){n++;wk--;}}
   return n;
 }
 
-IL.prog={DAY,startOfDay,e1rm,isWorking,setLoad,sessionVolume,sessionSets,finalizeSets,parseWeightInput,fmtVol,modeOf,real,lastPerf,lastModeFor,exerciseSeries,bestE1rmBefore,setPattern,fmtPerf,nextSets,deloadSets,suggestion,unitIncrement,convertWeight,convertSessions,calcStreak};
+IL.prog={DAY,startOfDay,e1rm,isWorking,setLoad,sessionVolume,sessionSets,finalizeSets,parseWeightInput,fmtVol,modeOf,real,lastPerf,lastModeFor,exerciseSeries,bestE1rmBefore,setPattern,fmtPerf,nextSets,deloadSets,suggestion,unitIncrement,convertWeight,convertSessions,calcStreak,weekIndex,weekStart};
 if(typeof module!=='undefined')module.exports=IL.prog;

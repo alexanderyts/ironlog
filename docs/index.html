@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-Us6dHZfpXzWAVVL2FrZdo9GOEGs5LX6PjCWAX0VPMe0=' 'sha256-EkxoJS/XfnHAg4Tv4KlM2HO15VAwse2HF4NYsW84Gss='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-PVUY1I56N+f8mjGPzZWg45uBFDa628fE6PADk4pFjPE=' 'sha256-EkxoJS/XfnHAg4Tv4KlM2HO15VAwse2HF4NYsW84Gss='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Ironlog</title>
@@ -365,8 +365,8 @@ html.standalone .tabbar{bottom:auto;top:calc(var(--screen-h,100vh) - var(--tab-h
 </div>
 
 <script>
-/* Ironlog v0.23.0 · site build */
-var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.23.0",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
+/* Ironlog v0.24.0 · site build */
+var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.24.0",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
 
 /* ===== src/data/exercises.js ===== */
 (function(){'use strict';
@@ -821,18 +821,25 @@ function convertSessions(sessions,from,to,now){
   sessions.forEach(s=>{s.exercises.forEach(e=>e.sets.forEach(st=>{st.w=convertWeight(st.w,from,to);}));s.updatedAt=now||Date.now();ids.push(s.id);});
   return ids;
 }
+// Local calendar week, MONDAY start. weekStart(ts) = local-midnight timestamp of that week's Monday;
+// weekIndex(ts) = a monotonic integer that increments each Monday. Both are computed from local
+// calendar days, so a session Tue/Wed and one Thu of the SAME week share a week (the old
+// floor(ts/7days) bucketed on a fixed epoch boundary that fell mid-week and split them), and neither
+// drifts across a daylight-saving change.
+function weekStart(ts){const d=new Date(ts),day=(d.getDay()+6)%7;return new Date(d.getFullYear(),d.getMonth(),d.getDate()-day).getTime();}
+function weekIndex(ts){return Math.round(weekStart(ts)/(7*DAY));}   // round absorbs the DST ±1h
 // Consecutive weeks with at least one workout (current week may be untrained yet)
 function calcStreak(sessions,now){
   now=now||Date.now();const done=sessions.filter(s=>s.completed!==false&&s.exercises.length);
   if(!done.length)return 0;
-  const weeks=new Set(done.map(s=>Math.floor(startOfDay(s.date)/(7*DAY))));
-  const cur=Math.floor(startOfDay(now)/(7*DAY));
+  const weeks=new Set(done.map(s=>weekIndex(s.date)));
+  const cur=weekIndex(now);
   let wk=cur,n=0;while(weeks.has(wk)){n++;wk--;}
   if(n===0&&weeks.has(cur-1)){wk=cur-1;while(weeks.has(wk)){n++;wk--;}}
   return n;
 }
 
-IL.prog={DAY,startOfDay,e1rm,isWorking,setLoad,sessionVolume,sessionSets,finalizeSets,parseWeightInput,fmtVol,modeOf,real,lastPerf,lastModeFor,exerciseSeries,bestE1rmBefore,setPattern,fmtPerf,nextSets,deloadSets,suggestion,unitIncrement,convertWeight,convertSessions,calcStreak};
+IL.prog={DAY,startOfDay,e1rm,isWorking,setLoad,sessionVolume,sessionSets,finalizeSets,parseWeightInput,fmtVol,modeOf,real,lastPerf,lastModeFor,exerciseSeries,bestE1rmBefore,setPattern,fmtPerf,nextSets,deloadSets,suggestion,unitIncrement,convertWeight,convertSessions,calcStreak,weekIndex,weekStart};
 if(typeof module!=='undefined')module.exports=IL.prog;
 
 })();
@@ -1203,7 +1210,7 @@ var IL=globalThis.IL||(globalThis.IL={});
 if(typeof require==='function'&&!IL.data)require('../data/exercises.js');
 if(typeof require==='function'&&!IL.prog)require('./progression.js');
 const {EX,EXERCISES,REGIONS,IDEAL_PATS,LOWER_GROUPS,MODES,regLabel,patLabel,exampleFor,hashId}=IL.data;
-const {DAY,startOfDay,e1rm,isWorking,setLoad,sessionVolume,modeOf,calcStreak,real}=IL.prog;
+const {DAY,startOfDay,e1rm,isWorking,setLoad,sessionVolume,modeOf,calcStreak,real,weekIndex,weekStart}=IL.prog;
 
 // completed() INCLUDES deloads on purpose — volume/frequency/PR-window analysis wants everything the
 // user actually did. Progression-only scans use real() (completed AND not a deload) instead.
@@ -1317,7 +1324,7 @@ function withStatus(sessions,now,bw){
        coach acknowledges that the builder's reactions worked;
      • real numbers and the user's own exercise names woven in. */
 const RESOLVABLE=new Set(['balance','legs-low','region-gap','pattern-gap','volume-low','freq-low']);
-function isoWeek(now){return Math.floor(startOfDay(now||Date.now())/(7*DAY));}
+function isoWeek(now){return weekIndex(now||Date.now());}   // local Monday-start week (see progression.js)
 function cap(s){return s?s.charAt(0).toUpperCase()+s.slice(1):s;}
 function pickVariant(f,week,arr){return arr[Math.abs(hashId(findingKey(f))+(week||0))%arr.length];}
 // renderFinding(f, week) → {lv, x:html}. `week` keeps wording stable within a week; omit for "now".
@@ -1432,12 +1439,12 @@ function personalRecords(sessions,bw,limit){
   // e1RM-comparable lifts first (by e1RM); the rest after, by load
   return Object.values(best).sort((a,b)=>(b.showEst-a.showEst)||(a.showEst?b.est-a.est:b.load-a.load)).slice(0,limit||8);
 }
-// Volume per week for the last n weeks (oldest first), weeks starting Sunday
+// Volume per week for the last n weeks (oldest first), weeks starting Monday
 function weeklyVolumes(sessions,now,bw,n){
   now=now||Date.now();n=n||8;
-  const today=startOfDay(now);const weekStart=today-(new Date(now).getDay())*DAY;
+  const ws0=weekStart(now);   // Monday of the current week
   const done=completed(sessions);const cols=[];
-  for(let i=n-1;i>=0;i--){const ws=weekStart-i*7*DAY,we=ws+7*DAY;
+  for(let i=n-1;i>=0;i--){const ws=ws0-i*7*DAY,we=ws+7*DAY;
     cols.push({start:ws,v:done.filter(s=>s.date>=ws&&s.date<we).reduce((a,s)=>a+sessionVolume(s,bw),0)});}
   return cols;
 }

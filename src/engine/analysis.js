@@ -3,7 +3,7 @@ var IL=globalThis.IL||(globalThis.IL={});
 if(typeof require==='function'&&!IL.data)require('../data/exercises.js');
 if(typeof require==='function'&&!IL.prog)require('./progression.js');
 const {EX,EXERCISES,REGIONS,IDEAL_PATS,LOWER_GROUPS,MODES,regLabel,patLabel,exampleFor,hashId}=IL.data;
-const {DAY,startOfDay,e1rm,isWorking,setLoad,sessionVolume,modeOf,calcStreak,real}=IL.prog;
+const {DAY,startOfDay,e1rm,isWorking,setLoad,sessionVolume,modeOf,calcStreak,real,weekIndex,weekStart}=IL.prog;
 
 // completed() INCLUDES deloads on purpose — volume/frequency/PR-window analysis wants everything the
 // user actually did. Progression-only scans use real() (completed AND not a deload) instead.
@@ -117,7 +117,7 @@ function withStatus(sessions,now,bw){
        coach acknowledges that the builder's reactions worked;
      • real numbers and the user's own exercise names woven in. */
 const RESOLVABLE=new Set(['balance','legs-low','region-gap','pattern-gap','volume-low','freq-low']);
-function isoWeek(now){return Math.floor(startOfDay(now||Date.now())/(7*DAY));}
+function isoWeek(now){return weekIndex(now||Date.now());}   // local Monday-start week (see progression.js)
 function cap(s){return s?s.charAt(0).toUpperCase()+s.slice(1):s;}
 function pickVariant(f,week,arr){return arr[Math.abs(hashId(findingKey(f))+(week||0))%arr.length];}
 // renderFinding(f, week) → {lv, x:html}. `week` keeps wording stable within a week; omit for "now".
@@ -232,12 +232,12 @@ function personalRecords(sessions,bw,limit){
   // e1RM-comparable lifts first (by e1RM); the rest after, by load
   return Object.values(best).sort((a,b)=>(b.showEst-a.showEst)||(a.showEst?b.est-a.est:b.load-a.load)).slice(0,limit||8);
 }
-// Volume per week for the last n weeks (oldest first), weeks starting Sunday
+// Volume per week for the last n weeks (oldest first), weeks starting Monday
 function weeklyVolumes(sessions,now,bw,n){
   now=now||Date.now();n=n||8;
-  const today=startOfDay(now);const weekStart=today-(new Date(now).getDay())*DAY;
+  const ws0=weekStart(now);   // Monday of the current week
   const done=completed(sessions);const cols=[];
-  for(let i=n-1;i>=0;i--){const ws=weekStart-i*7*DAY,we=ws+7*DAY;
+  for(let i=n-1;i>=0;i--){const ws=ws0-i*7*DAY,we=ws+7*DAY;
     cols.push({start:ws,v:done.filter(s=>s.date>=ws&&s.date<we).reduce((a,s)=>a+sessionVolume(s,bw),0)});}
   return cols;
 }
