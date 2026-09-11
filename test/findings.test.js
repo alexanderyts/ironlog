@@ -1,7 +1,25 @@
 const test=require('node:test'),assert=require('node:assert/strict');
-const {IL,session,set}=require('./load.js');
+const {IL,session,set,history}=require('./load.js');
 const A=IL.analysis;
 const now=Date.now();
+
+test('a finding that vanished because you STOPPED training the muscle is not credited as resolved (Phase 6)',()=>{
+  // prev window (28-56d ago): shoulders trained (overhead press only -> rear/side region gaps).
+  // cur window (0-28d): only chest, no shoulders at all.
+  const dropped=history(
+    ...[3,10,17].map(d=>session(d,[['barbell-bench-press',[set(135,6),set(135,6)]]],{now})),
+    ...[35,42,49].map(d=>session(d,[['overhead-press',[set(95,8),set(95,8)]]],{now}))
+  );
+  assert.ok(!A.withStatus(dropped,now,0).some(f=>f.status==='resolved'&&f.type==='region-gap'&&f.group==='Shoulders'),
+    'dropping shoulders is not "gap sorted"');
+  // positive control: a gap filled while STILL training the muscle does resolve
+  const filled=history(
+    ...[3,10,17].map(d=>session(d,[['overhead-press',[set(95,8),set(95,8)]],['rear-delt-fly',[set(20,15),set(20,15)]]],{now})),
+    ...[35,42,49].map(d=>session(d,[['overhead-press',[set(95,8),set(95,8)]]],{now}))
+  );
+  assert.ok(A.withStatus(filled,now,0).some(f=>f.status==='resolved'&&f.type==='region-gap'&&f.group==='Shoulders'&&f.reg==='rear'),
+    'covering the rear delts while still training shoulders IS resolved');
+});
 
 // A push-heavy, multi-week history: enough to be readyForComparative, imbalanced toward pushing.
 function pushHistory(){

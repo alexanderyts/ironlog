@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-CZWFcq280Fv8NtT8Wo5DESehPdHU0V4KtuOoaTbg9lw=' 'sha256-EkxoJS/XfnHAg4Tv4KlM2HO15VAwse2HF4NYsW84Gss='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-4iCPBMp4uvUJIjJrIBvNPhe8fLa4rTIrAoBP6SzlanU=' 'sha256-EkxoJS/XfnHAg4Tv4KlM2HO15VAwse2HF4NYsW84Gss='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Ironlog</title>
@@ -365,8 +365,8 @@ html.standalone .tabbar{bottom:auto;top:calc(var(--screen-h,100vh) - var(--tab-h
 </div>
 
 <script>
-/* Ironlog v0.27.0 · site build */
-var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.27.0",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
+/* Ironlog v0.28.0 · site build */
+var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.28.0",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
 
 /* ===== src/data/exercises.js ===== */
 (function(){'use strict';
@@ -1044,7 +1044,7 @@ function complementSuggestions(chosenIds,limit){
     if(e.type===I&&!why){sc+=0.6;why='Isolation to finish off your '+e.group.toLowerCase();}
     sc+=e.tier===1?0.5:e.tier===2?0.3:0;
     return {e,sc,why};
-  }).filter(x=>x.sc>0).sort((a,b)=>b.sc-a.sc);
+  }).filter(x=>x.sc>0&&x.why).sort((a,b)=>b.sc-a.sc);   // require a reason, so no blank suggestion line
   const res=[],seen=new Set();
   for(const x of scored){const key=x.e.group+':'+x.e.reg;if(seen.has(key))continue;seen.add(key);res.push({id:x.e.id,why:x.why});if(res.length>=limit)break;}
   return res;
@@ -1339,14 +1339,23 @@ function findingKey(f){
 // Current findings annotated with status by comparing to the window 28 days earlier (derived from
 // history, no persisted state). Resolved findings (present then, gone now) are appended so the coach
 // can give credit later (Phase E). buildTips ignores status for now — it's foundation for C and E.
+// A finding that vanished only earns "resolved" credit if the CURRENT window could still have raised
+// it — otherwise it disappeared because you stopped training that muscle (or stopped logging enough),
+// not because you fixed it. And a finding that was already positive is never "resolved".
+function canResolve(f,curA){
+  if(f.lv==='good'||f.type==='progression')return false;
+  if(f.type==='region-gap'||f.type==='pattern-gap')return (curA.groupSets[f.group]||0)>0;   // still training it
+  return curA.readyForComparative;   // balance / legs-low / volume-low / freq-low need a real current sample
+}
 function withStatus(sessions,now,bw){
   now=now||Date.now();
-  const cur=findings(analyze(sessions,now),sessions,now,bw);
+  const curA=analyze(sessions,now);
+  const cur=findings(curA,sessions,now,bw);
   const prev=findings(analyze(sessions,now-28*DAY),sessions,now-28*DAY,bw);
   const prevByKey={};prev.forEach(p=>prevByKey[findingKey(p)]=p);
   const curKeys=new Set(cur.map(findingKey));
   const out=cur.map(f=>{const pf=prevByKey[findingKey(f)];return Object.assign({status:pf?'persisting':'new'},pf?{prev:pf}:{},f);});
-  prev.forEach(f=>{if(!curKeys.has(findingKey(f)))out.push(Object.assign({status:'resolved'},f));});
+  prev.forEach(f=>{if(!curKeys.has(findingKey(f))&&canResolve(f,curA))out.push(Object.assign({status:'resolved'},f));});
   return out;
 }
 
@@ -1497,6 +1506,8 @@ if(typeof module!=='undefined')module.exports=IL.analysis;
 (function(){'use strict';
 // Pure merge/backup logic shared by every cloud backend (Claude DB, Dropbox, file import).
 var IL=globalThis.IL||(globalThis.IL={});
+if(typeof require==='function'&&!IL.data)require('../data/exercises.js');
+const MODES=(IL.data&&IL.data.MODES)||{};   // to validate an imported exercise's modality
 
 const TOMB_KEEP=90*86400000;   // remember deletions for 90 days so no device resurrects them
 
@@ -1551,8 +1562,8 @@ function sNumBlank(v){if(v===''||v==null)return '';const n=+v;return Number.isFi
 function sArr(v,max){return Array.isArray(v)?v.slice(0,max||MAX_ARR):[];}
 const rid=p=>p+Math.random().toString(36).slice(2,9);
 
-function cleanSet(st){st=st&&typeof st==='object'?st:{};const o={w:sNumBlank(st.w),r:sNumBlank(st.r),done:!!st.done};if(st.warm)o.warm=true;return o;}
-function cleanExercise(e){e=e&&typeof e==='object'?e:{};const o={id:sId(e.id),name:sStr(e.name),sets:sArr(e.sets,MAX_SETS).map(cleanSet)};if(e.mode)o.mode=sId(e.mode);return o;}
+function cleanSet(st){st=st&&typeof st==='object'?st:{};const o={w:sNumBlank(st.w),r:sNumBlank(st.r),done:st.done!==false};if(st.warm)o.warm=true;return o;}   // missing done => done, matching the engine
+function cleanExercise(e){e=e&&typeof e==='object'?e:{};const o={id:sId(e.id),name:sStr(e.name),sets:sArr(e.sets,MAX_SETS).map(cleanSet)};if(e.mode&&MODES[e.mode])o.mode=sId(e.mode);return o;}   // drop an unknown mode (a bad import would white-screen Progress via MODES[mode].label)
 function cleanSession(s){s=s&&typeof s==='object'?s:{};const o={id:sId(s.id)||rid('imp'),schema:sNum(s.schema)||1,date:sNum(s.date)||Date.now(),updatedAt:sNum(s.updatedAt)||sNum(s.date)||Date.now(),completed:s.completed!==false,exercises:sArr(s.exercises,MAX_EX).map(cleanExercise)};if(s.deload)o.deload=true;return o;}
 function cleanRoutine(r){r=r&&typeof r==='object'?r:{};return {id:sId(r.id)||rid('r'),name:sStr(r.name),exIds:sArr(r.exIds,MAX_EX).map(sId).filter(Boolean),updatedAt:sNum(r.updatedAt)||Date.now()};}
 function cleanSettings(o){if(!o||typeof o!=='object')return null;

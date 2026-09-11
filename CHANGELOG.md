@@ -2,6 +2,12 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.28.0 — 2026-09-11 · Honest coaching + import hardening (Roadmap v5, Phase 6)
+- **The coach no longer congratulates you for a problem you didn't fix.** If a "gap" disappears only because you stopped training that muscle (or stopped logging enough), it's no longer shown as "sorted." Credit is given only when the muscle is still trained and the issue is genuinely gone. (analysis.js `withStatus`/`canResolve`.)
+- A within-workout exercise suggestion can no longer appear with a blank reason line. (builder.js `complementSuggestions`.)
+- Importing a backup is safer: a set with no "done" flag now counts as performed (matching how the app reads history), and an unrecognized equipment tag is dropped instead of white-screening the Progress tab. (sync.js `cleanSet`/`cleanExercise`.)
+- Deferred to a later pass (not a bug): folding the coach's finding types into a single ordered registry — noted in ROADMAP-v5 v6-candidates.
+
 ## v0.27.0 — 2026-09-11 · One-tap workout presets + precise plan matching (Roadmap v5, Phase 5)
 - **New: one-tap Quick picks** on the New-workout screen — Full body, Upper, Lower, Push, Pull, Arms. Tapping one selects those muscle groups (you can still fine-tune the chips), and tapping it again clears. Browser-verified: each builds a balanced session and "Continue your plan" works when you pick it again. (exercises.js `PRESETS`; UI only — no new builder logic.)
 - **Picking a single muscle now builds for that muscle.** Before, choosing just "Chest" the day after a push day would continue the whole push workout. Now it builds a chest session; to continue a push day, pick Push (or the same groups). (builder.js `findPlan`: counts add-ons across all non-picked groups.)

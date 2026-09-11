@@ -1,5 +1,7 @@
 // Pure merge/backup logic shared by every cloud backend (Claude DB, Dropbox, file import).
 var IL=globalThis.IL||(globalThis.IL={});
+if(typeof require==='function'&&!IL.data)require('../data/exercises.js');
+const MODES=(IL.data&&IL.data.MODES)||{};   // to validate an imported exercise's modality
 
 const TOMB_KEEP=90*86400000;   // remember deletions for 90 days so no device resurrects them
 
@@ -54,8 +56,8 @@ function sNumBlank(v){if(v===''||v==null)return '';const n=+v;return Number.isFi
 function sArr(v,max){return Array.isArray(v)?v.slice(0,max||MAX_ARR):[];}
 const rid=p=>p+Math.random().toString(36).slice(2,9);
 
-function cleanSet(st){st=st&&typeof st==='object'?st:{};const o={w:sNumBlank(st.w),r:sNumBlank(st.r),done:!!st.done};if(st.warm)o.warm=true;return o;}
-function cleanExercise(e){e=e&&typeof e==='object'?e:{};const o={id:sId(e.id),name:sStr(e.name),sets:sArr(e.sets,MAX_SETS).map(cleanSet)};if(e.mode)o.mode=sId(e.mode);return o;}
+function cleanSet(st){st=st&&typeof st==='object'?st:{};const o={w:sNumBlank(st.w),r:sNumBlank(st.r),done:st.done!==false};if(st.warm)o.warm=true;return o;}   // missing done => done, matching the engine
+function cleanExercise(e){e=e&&typeof e==='object'?e:{};const o={id:sId(e.id),name:sStr(e.name),sets:sArr(e.sets,MAX_SETS).map(cleanSet)};if(e.mode&&MODES[e.mode])o.mode=sId(e.mode);return o;}   // drop an unknown mode (a bad import would white-screen Progress via MODES[mode].label)
 function cleanSession(s){s=s&&typeof s==='object'?s:{};const o={id:sId(s.id)||rid('imp'),schema:sNum(s.schema)||1,date:sNum(s.date)||Date.now(),updatedAt:sNum(s.updatedAt)||sNum(s.date)||Date.now(),completed:s.completed!==false,exercises:sArr(s.exercises,MAX_EX).map(cleanExercise)};if(s.deload)o.deload=true;return o;}
 function cleanRoutine(r){r=r&&typeof r==='object'?r:{};return {id:sId(r.id)||rid('r'),name:sStr(r.name),exIds:sArr(r.exIds,MAX_EX).map(sId).filter(Boolean),updatedAt:sNum(r.updatedAt)||Date.now()};}
 function cleanSettings(o){if(!o||typeof o!=='object')return null;

@@ -3,6 +3,18 @@ const {IL}=require('./load.js');
 const {mergeSessions,applyTombstones,pruneTombstones,exportPayload,parseImport}=IL.sync;
 const s=(id,updatedAt,date)=>({id,updatedAt,date:date||updatedAt,exercises:[]});
 
+test('import sanitizer: missing set.done counts as done; an unknown modality is dropped (Phase 6)',()=>{
+  const backup={app:'ironlog',format:2,sessions:[{id:'x1',date:1,updatedAt:1,exercises:[
+    {id:'barbell-bench-press',name:'Bench',mode:'nonsense',sets:[{w:135,r:8}]},   // no `done`, bogus mode
+    {id:'overhead-press',name:'OHP',mode:'smith',sets:[{w:95,r:8,done:false}]}
+  ]}]};
+  const ex=parseImport(backup).sessions[0].exercises;
+  assert.equal(ex[0].sets[0].done,true,'a set with no done flag is treated as performed');
+  assert.ok(!('mode'in ex[0]),'an unknown mode is dropped (would otherwise crash Progress)');
+  assert.equal(ex[1].mode,'smith','a valid mode is kept');
+  assert.equal(ex[1].sets[0].done,false,'an explicit done:false is preserved');
+});
+
 test('merge: newest updatedAt wins, remote-only added, local-only flagged for push',()=>{
   const local=[s('a',10),s('b',50),s('c',5)];
   const remote=[s('a',20),s('b',40),s('d',7)];

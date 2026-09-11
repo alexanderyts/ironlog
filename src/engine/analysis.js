@@ -97,14 +97,23 @@ function findingKey(f){
 // Current findings annotated with status by comparing to the window 28 days earlier (derived from
 // history, no persisted state). Resolved findings (present then, gone now) are appended so the coach
 // can give credit later (Phase E). buildTips ignores status for now — it's foundation for C and E.
+// A finding that vanished only earns "resolved" credit if the CURRENT window could still have raised
+// it — otherwise it disappeared because you stopped training that muscle (or stopped logging enough),
+// not because you fixed it. And a finding that was already positive is never "resolved".
+function canResolve(f,curA){
+  if(f.lv==='good'||f.type==='progression')return false;
+  if(f.type==='region-gap'||f.type==='pattern-gap')return (curA.groupSets[f.group]||0)>0;   // still training it
+  return curA.readyForComparative;   // balance / legs-low / volume-low / freq-low need a real current sample
+}
 function withStatus(sessions,now,bw){
   now=now||Date.now();
-  const cur=findings(analyze(sessions,now),sessions,now,bw);
+  const curA=analyze(sessions,now);
+  const cur=findings(curA,sessions,now,bw);
   const prev=findings(analyze(sessions,now-28*DAY),sessions,now-28*DAY,bw);
   const prevByKey={};prev.forEach(p=>prevByKey[findingKey(p)]=p);
   const curKeys=new Set(cur.map(findingKey));
   const out=cur.map(f=>{const pf=prevByKey[findingKey(f)];return Object.assign({status:pf?'persisting':'new'},pf?{prev:pf}:{},f);});
-  prev.forEach(f=>{if(!curKeys.has(findingKey(f)))out.push(Object.assign({status:'resolved'},f));});
+  prev.forEach(f=>{if(!curKeys.has(findingKey(f))&&canResolve(f,curA))out.push(Object.assign({status:'resolved'},f));});
   return out;
 }
 

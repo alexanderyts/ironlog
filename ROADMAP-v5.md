@@ -411,6 +411,7 @@ sync.js). Manual: two tabs, finish on one, no Resume on the other; delete on one
 | Split `ui.js` into `ui-core / ui-today / ui-tabs / ui-settings` (build.js `MODULES` already supports it; shared helpers go on `IL.ui`; viewport code moves verbatim) | The next new screen, or ui.js > 1000 lines |
 | Exercise metadata: fold META into each RAW row (one object per exercise; output shape unchanged) | The next batch of ≥5 exercises |
 | Reaction pipeline as an ordered rule array | A third structural reaction |
+| Finding-type registry (one ordered table driving buildTips order + RESOLVABLE) — deferred from Phase 6 to avoid churning tested buildTips output | The next new finding type |
 | Dropbox conditional upload (`update: rev`) instead of last-writer-wins | Two devices editing the same day regularly |
 | `platform.saveFile()` behind export (artifact downloads vs native share) | App Store / WKWebView wrapper |
 | Second profile (store.js key namespacing; engine is already profile-agnostic) | When asked |

@@ -157,7 +157,7 @@ function complementSuggestions(chosenIds,limit){
     if(e.type===I&&!why){sc+=0.6;why='Isolation to finish off your '+e.group.toLowerCase();}
     sc+=e.tier===1?0.5:e.tier===2?0.3:0;
     return {e,sc,why};
-  }).filter(x=>x.sc>0).sort((a,b)=>b.sc-a.sc);
+  }).filter(x=>x.sc>0&&x.why).sort((a,b)=>b.sc-a.sc);   // require a reason, so no blank suggestion line
   const res=[],seen=new Set();
   for(const x of scored){const key=x.e.group+':'+x.e.reg;if(seen.has(key))continue;seen.add(key);res.push({id:x.e.id,why:x.why});if(res.length>=limit)break;}
   return res;
