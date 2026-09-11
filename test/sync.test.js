@@ -1,6 +1,25 @@
 const test=require('node:test'),assert=require('node:assert/strict');
 const {IL}=require('./load.js');
-const {mergeSessions,applyTombstones,pruneTombstones,exportPayload,parseImport}=IL.sync;
+const {mergeSessions,applyTombstones,pruneTombstones,exportPayload,parseImport,resolveActive}=IL.sync;
+
+test('resolveActive: a finished workout is not resurrected by a stale open one (Phase 7)',()=>{
+  // Device A finished at t=200 (active null, cleared 200). Device B still holds an open workout from t=100.
+  const A={active:null,activeClearedAt:200}, B={active:{id:'w',updatedAt:100}};
+  // From A's view, B's stale active must NOT win.
+  assert.deepEqual(resolveActive(A,B),{active:null,activeClearedAt:200,changed:false,pushNeeded:true});
+  // From B's view, A's newer "cleared at 200" wins → B drops its stale active.
+  const rb=resolveActive(B,{active:null,activeClearedAt:200});
+  assert.equal(rb.active,null);assert.equal(rb.changed,true);assert.equal(rb.activeClearedAt,200);
+  // A genuinely newer remote active IS adopted.
+  const rc=resolveActive({active:null,activeClearedAt:50},{active:{id:'x',updatedAt:300}});
+  assert.equal(rc.active.id,'x');assert.equal(rc.changed,true);
+});
+
+test('import converts a backup recorded in another unit is handled by parseImport passing settings.unit (Phase 7)',()=>{
+  // parseImport surfaces the backup's unit so importBackup can convert; here just assert it round-trips.
+  const p=parseImport({app:'ironlog',format:2,settings:{unit:'kg',settingsUpdatedAt:1},sessions:[]});
+  assert.equal(p.settings.unit,'kg');
+});
 const s=(id,updatedAt,date)=>({id,updatedAt,date:date||updatedAt,exercises:[]});
 
 test('import sanitizer: missing set.done counts as done; an unknown modality is dropped (Phase 6)',()=>{

@@ -2,6 +2,14 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.29.0 — 2026-09-11 · Multi-device sync fixes (Roadmap v5, Phase 7)
+For people who use Ironlog on more than one device (Dropbox sync or the cloud artifact).
+- **A workout you finished on one device no longer comes back as "Resume" on another.** Finishing now records *when* you ended it, and that "ended" moment is compared against the other device's open workout — the more recent action wins, so a stale open session can't resurrect a completed one. (store.js `activeClearedAt`; sync.js pure `resolveActive`.)
+- **Dropbox: sessions logged during an upload are no longer lost.** The sync now clears only the exact sessions it uploaded, and a 30-second safety timeout prevents sync from getting stuck. (store.js `syncNow`.)
+- **Importing a backup from a different unit converts the weights** (a kg backup into an lb install no longer shows kg numbers as lb). (store.js `importBackup`.)
+- Deferred (needs two-device testing): unifying the cloud artifact's live-sync through the shared merge so deletions propagate there too — noted in ROADMAP-v5. The Resume fix above already covers the artifact.
+- 2 new tests (107).
+
 ## v0.28.0 — 2026-09-11 · Honest coaching + import hardening (Roadmap v5, Phase 6)
 - **The coach no longer congratulates you for a problem you didn't fix.** If a "gap" disappears only because you stopped training that muscle (or stopped logging enough), it's no longer shown as "sorted." Credit is given only when the muscle is still trained and the issue is genuinely gone. (analysis.js `withStatus`/`canResolve`.)
 - A within-workout exercise suggestion can no longer appear with a blank reason line. (builder.js `complementSuggestions`.)

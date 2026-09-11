@@ -6,7 +6,7 @@ var IL=globalThis.IL||(globalThis.IL={});
 const {mergeSessions,applyTombstones,pruneTombstones,exportPayload,parseImport,cleanSession,cleanRoutine,cleanSettings}=IL.sync;
 const CFG=IL.config||{};
 
-const LS={sessions:'il_sessions',active:'il_active',settings:'il_settings',dirty:'il_dirty',routines:'il_routines',deleted:'il_deleted',dbxRev:'il_dbx_rev'};
+const LS={sessions:'il_sessions',active:'il_active',settings:'il_settings',dirty:'il_dirty',routines:'il_routines',deleted:'il_deleted',dbxRev:'il_dbx_rev',activeCleared:'il_active_cleared'};
 function lsGet(k,f){try{const v=localStorage.getItem(k);return v?JSON.parse(v):f;}catch(e){return f;}}
 function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
@@ -18,6 +18,7 @@ const state={
   routines:lsGet(LS.routines,[]),
   deleted:lsGet(LS.deleted,{}),
   dirty:new Set(lsGet(LS.dirty,[])),
+  activeClearedAt:lsGet(LS.activeCleared,0),   // when this device last ended/discarded a workout (so a stale active on another device can't resurrect a finished one)
   cloud:null, cloudName:'none', syncing:false, lastSync:0, cloudError:''
 };
 state.settings.rest=Object.assign({auto:true,sound:true,notify:false,compound:120,isolation:75},state.settings.rest||{});
@@ -32,7 +33,7 @@ if(CFG.DEMO&&IL.seed&&!state.sessions.length&&!lsGet('il_seeded',false)){
 function resetDemo(){try{Object.values(LS).forEach(k=>localStorage.removeItem(k));localStorage.removeItem('il_seeded');}catch(e){}location.reload();}
 
 const saveSessions=()=>lsSet(LS.sessions,state.sessions);
-const saveActive=()=>lsSet(LS.active,state.active);
+const saveActive=()=>{lsSet(LS.active,state.active);lsSet(LS.activeCleared,state.activeClearedAt||0);};
 const saveSettings=()=>lsSet(LS.settings,state.settings);
 const saveRoutines=()=>lsSet(LS.routines,state.routines);
 const saveDeleted=()=>lsSet(LS.deleted,state.deleted);
@@ -80,6 +81,7 @@ function saveSettingsCloud(){state.settings.settingsUpdatedAt=Date.now();saveSet
 let activeTimer=null;
 function persistActive(){
   if(state.active)state.active.updatedAt=Date.now();
+  else state.activeClearedAt=Date.now();   // record WHEN we cleared it, so the newer event (active vs cleared) wins on merge
   saveActive();
   if(state.cloud){clearTimeout(activeTimer);activeTimer=setTimeout(()=>state.cloud.pushActive(),1500);}
 }
@@ -101,14 +103,19 @@ function absorbRemote(remote,opts){
     state.settings=Object.assign(state.settings,remote.settings);state.settings.rest=Object.assign({auto:true,sound:true,notify:false,compound:120,isolation:75},state.settings.rest||{});changed=true;
   }else if((state.settings.settingsUpdatedAt||0)>((remote.settings&&remote.settings.settingsUpdatedAt)||0))pushNeeded=true;
   if(!opts.skipActive){
-    if(remote.active&&(!state.active||(remote.active.updatedAt||0)>(state.active.updatedAt||0))){state.active=remote.active;changed=true;}
-    else if(state.active&&(!remote.active||(state.active.updatedAt||0)>(remote.active.updatedAt||0)))pushNeeded=true;
+    const r=IL.sync.resolveActive({active:state.active,activeClearedAt:state.activeClearedAt},{active:remote.active,activeClearedAt:remote.activeClearedAt});
+    if(r.changed){state.active=r.active;state.activeClearedAt=r.activeClearedAt;changed=true;}
+    if(r.pushNeeded)pushNeeded=true;
   }
   saveSessions();saveRoutines();saveDeleted();saveSettings();saveActive();
   return {changed,pushNeeded};
 }
 function importBackup(json){
   const d=parseImport(json);const before=state.sessions.length;
+  // If the backup was recorded in a different unit, convert its weights to the current unit first —
+  // otherwise kg numbers would show as lb (or vice versa).
+  const fromUnit=d.settings&&d.settings.unit,toUnit=state.settings.unit;
+  if(fromUnit&&toUnit&&fromUnit!==toUnit&&IL.prog&&IL.prog.convertSessions)IL.prog.convertSessions(d.sessions,fromUnit,toUnit,Date.now());
   const r=absorbRemote({sessions:d.sessions,routines:d.routines,deleted:{},settings:null,active:null},{skipActive:true});
   d.sessions.forEach(s=>{state.dirty.add(s.id);});saveDirty();
   if(state.cloud){state.cloud.flush();}
@@ -133,9 +140,13 @@ function artifactAdapter(){
       try{const snap=await db.doc('settings/app').get();if(snap.exists){const rs=cleanSettings(snap.data())||{};
         if((rs.settingsUpdatedAt||0)>(state.settings.settingsUpdatedAt||0)){state.settings=Object.assign(state.settings,rs);saveSettings();}
         else if((state.settings.settingsUpdatedAt||0)>(rs.settingsUpdatedAt||0))A.pushSettings();}}catch(e){}
-      try{const snap=await db.doc('active/current').get();if(snap.exists){const raw=snap.data();const ra=raw&&raw.id?cleanSession(raw):null;
-        if(ra&&(!state.active||(ra.updatedAt||0)>(state.active.updatedAt||0))){state.active=ra;saveActive();}
-        else if(state.active)A.pushActive();}else if(state.active)A.pushActive();}catch(e){}
+      try{const snap=await db.doc('active/current').get();
+        if(snap.exists){const raw=snap.data();
+          const remoteTs=(raw&&raw.updatedAt)||0,localTs=state.active?(state.active.updatedAt||0):(state.activeClearedAt||0);
+          if(raw&&raw.id&&remoteTs>localTs){state.active=cleanSession(raw);saveActive();}                                    // remote has a newer active
+          else if(raw&&raw.empty&&remoteTs>localTs&&state.active){state.active=null;state.activeClearedAt=Math.max(state.activeClearedAt||0,remoteTs);saveActive();}  // remote ended a workout more recently → don't resurrect it
+          else if(localTs>remoteTs)A.pushActive();
+        }else if(state.active)A.pushActive();}catch(e){}
       await A.flush();
       db.collection('sessions').onSnapshot(qs=>{
         const remote=[];qs.docs.forEach(d=>{const data=d.data();if(data){data.id=d.id;remote.push(cleanSession(data));}});
@@ -154,12 +165,12 @@ function artifactAdapter(){
       },()=>{});
       return true;
     },
-    async pushSession(s){try{await db.doc('sessions/'+s.id).set(s);state.dirty.delete(s.id);saveDirty();state.lastSync=Date.now();emit();}catch(e){state.cloudError='Sync failed';emit();}},
+    async pushSession(s){try{await db.doc('sessions/'+s.id).set(s);state.dirty.delete(s.id);saveDirty();state.lastSync=Date.now();state.cloudError='';emit();}catch(e){state.cloudError='Sync failed';emit();}},
     deleteSession(id){db.doc('sessions/'+id).delete().catch(()=>{});},
     pushSettings(){db.doc('settings/app').set(state.settings).catch(()=>{});},
     pushRoutine(r){db.doc('routines/'+r.id).set(r).catch(()=>{});},
     deleteRoutine(id){db.doc('routines/'+id).delete().catch(()=>{});},
-    pushActive(){db.doc('active/current').set(state.active||{empty:true,updatedAt:Date.now()}).catch(()=>{});},
+    pushActive(){db.doc('active/current').set(state.active||{empty:true,updatedAt:state.activeClearedAt||Date.now(),activeClearedAt:state.activeClearedAt||Date.now()}).catch(()=>{});},
     async flush(){for(const id of [...state.dirty]){const s=state.sessions.find(x=>x.id===id);if(s)await A.pushSession(s);else{state.dirty.delete(id);saveDirty();}}},
     syncNow(){return A.flush();}
   };
@@ -180,23 +191,27 @@ function dropboxAdapter(){
     pushSession(){schedule();},deleteSession(){schedule();},pushSettings(){schedule();},pushRoutine(){schedule();},deleteRoutine(){schedule();},pushActive(){schedule();},
     flush(){return A.syncNow();},
     async syncNow(){
-      if(state.syncing||!D.isConnected())return;state.syncing=true;state.cloudError='';emit();
+      if(state.syncing||!D.isConnected()){if(state.syncing)A._pending=true;return;}   // a sync requested mid-flight re-runs once
+      state.syncing=true;state.cloudError='';emit();
+      const guard=setTimeout(()=>{state.syncing=false;emit();},30000);   // never wedge if a request hangs
       try{
         const meta=await D.getMetadata();
         let pushNeeded=state.dirty.size>0;
         if(meta&&meta.rev!==rev){
           const f=await D.download();
-          if(f){try{const remote=parseImport(f.text);const r=absorbRemote({sessions:remote.sessions,routines:remote.routines,deleted:remote.deleted,settings:remote.settings,active:remote.active});
+          if(f){try{const remote=parseImport(f.text);const r=absorbRemote({sessions:remote.sessions,routines:remote.routines,deleted:remote.deleted,settings:remote.settings,active:remote.active,activeClearedAt:remote.activeClearedAt});
             if(r.changed)emit();if(r.pushNeeded)pushNeeded=true;}catch(e){pushNeeded=true;}
             rev=f.rev;}
         }
         if(!meta||pushNeeded||meta.rev!==rev){
+          const pushIds=[...state.dirty];   // snapshot BEFORE the await, so sessions logged mid-upload aren't wrongly cleared
           rev=await D.upload(JSON.stringify(exportPayload(state,CFG.VERSION)));
-          state.dirty.clear();saveDirty();
+          pushIds.forEach(id=>state.dirty.delete(id));saveDirty();
         }
         lsSet(LS.dbxRev,rev);state.lastSync=Date.now();
       }catch(e){state.cloudError=e.message||'Sync failed';}
-      state.syncing=false;emit();
+      clearTimeout(guard);state.syncing=false;emit();
+      if(A._pending){A._pending=false;return A.syncNow();}
     }
   };
   return A;

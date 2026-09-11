@@ -38,7 +38,7 @@ function pruneTombstones(tomb,now){
 // The one backup/sync document shape (file export and Dropbox both use it)
 function exportPayload(st,version){
   return {app:'ironlog',format:2,version:version||'',exported:new Date().toISOString(),
-    settings:st.settings,sessions:st.sessions,routines:st.routines||[],deleted:st.deleted||{},active:st.active||null};
+    settings:st.settings,sessions:st.sessions,routines:st.routines||[],deleted:st.deleted||{},active:st.active||null,activeClearedAt:st.activeClearedAt||0};
 }
 /* ── Import sanitization: the trust boundary for file imports and cloud (Dropbox/DB) snapshots ──────
    Backups are UNTRUSTED input (a shared file, a synced blob, another viewer of a shared artifact).
@@ -81,9 +81,22 @@ function parseImport(json){
     sessions:sArr(d.sessions).map(cleanSession),
     routines:sArr(d.routines).map(cleanRoutine),
     deleted:cleanDeleted(d.deleted),
-    active:(d.active&&typeof d.active==='object')?cleanSession(d.active):null
+    active:(d.active&&typeof d.active==='object')?cleanSession(d.active):null,
+    activeClearedAt:sNum(d.activeClearedAt)||0
   };
 }
 
-IL.sync={mergeSessions,applyTombstones,pruneTombstones,exportPayload,parseImport,cleanSession,cleanRoutine,cleanSettings,TOMB_KEEP};
+// Resolve the active workout between two devices. Each side is {active, activeClearedAt}; the more
+// recent EVENT wins — a workout updated at T, or ended/cleared at T. So a finished workout (cleared)
+// is never resurrected by another device's older, still-open active session. Pure and testable.
+function resolveActive(local,remote){
+  const lc=local.activeClearedAt||0,rc=remote.activeClearedAt||0;
+  const localEvt=local.active?(local.active.updatedAt||0):lc;
+  const remoteEvt=remote.active?(remote.active.updatedAt||0):rc;
+  if(remoteEvt>localEvt)return remote.active?{active:remote.active,activeClearedAt:lc,changed:true,pushNeeded:false}
+                                            :{active:null,activeClearedAt:Math.max(lc,rc),changed:true,pushNeeded:false};
+  return {active:local.active,activeClearedAt:lc,changed:false,pushNeeded:remoteEvt<localEvt};
+}
+
+IL.sync={mergeSessions,applyTombstones,pruneTombstones,exportPayload,parseImport,resolveActive,cleanSession,cleanRoutine,cleanSettings,TOMB_KEEP};
 if(typeof module!=='undefined')module.exports=IL.sync;

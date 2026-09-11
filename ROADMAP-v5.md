@@ -412,6 +412,7 @@ sync.js). Manual: two tabs, finish on one, no Resume on the other; delete on one
 | Exercise metadata: fold META into each RAW row (one object per exercise; output shape unchanged) | The next batch of ≥5 exercises |
 | Reaction pipeline as an ordered rule array | A third structural reaction |
 | Finding-type registry (one ordered table driving buildTips order + RESOLVABLE) — deferred from Phase 6 to avoid churning tested buildTips output | The next new finding type |
+| Route the artifact adapter's `onSnapshot` through `absorbRemote` + a `deleted/` tombstone doc (Phase 7 item 1) — deferred: needs two-device manual testing that isn't possible in this environment, and the current inline merge works for the single-user artifact. The active-resurrection fix already reaches the artifact via `init`/`pushActive`. | A real two-device artifact test, or a reported artifact deletion-sync issue |
 | Dropbox conditional upload (`update: rev`) instead of last-writer-wins | Two devices editing the same day regularly |
 | `platform.saveFile()` behind export (artifact downloads vs native share) | App Store / WKWebView wrapper |
 | Second profile (store.js key namespacing; engine is already profile-agnostic) | When asked |
