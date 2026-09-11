@@ -2,6 +2,11 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.27.0 — 2026-09-11 · One-tap workout presets + precise plan matching (Roadmap v5, Phase 5)
+- **New: one-tap Quick picks** on the New-workout screen — Full body, Upper, Lower, Push, Pull, Arms. Tapping one selects those muscle groups (you can still fine-tune the chips), and tapping it again clears. Browser-verified: each builds a balanced session and "Continue your plan" works when you pick it again. (exercises.js `PRESETS`; UI only — no new builder logic.)
+- **Picking a single muscle now builds for that muscle.** Before, choosing just "Chest" the day after a push day would continue the whole push workout. Now it builds a chest session; to continue a push day, pick Push (or the same groups). (builder.js `findPlan`: counts add-ons across all non-picked groups.)
+- Safety: a session is capped at 7 exercises even if you select every muscle group. (builder.js `buildRecommendation`.)
+
 ## v0.26.0 — 2026-09-11 · The builder stops "fixing" what's working (Roadmap v5, Phase 4)
 - **The builder no longer swaps out a lift right after you add weight to it.** When you bump the weight, you drop reps back down — which briefly lowers the estimated 1-rep-max, and the old stall check misread that dip as a plateau and could rotate the lift away. Now a heavier top-set weight always counts as progress, so a working lift is left alone. (builder.js `isStalled`: compares top weight, bounded to the current training run.)
 - **Coming back after time off no longer looks like a stall.** The stall check now only considers your current unbroken run of an exercise, not heavier sessions from months ago. (builder.js `exerciseTenure` ends a run at a long gap; `recentPerfs` is bounded to it.)

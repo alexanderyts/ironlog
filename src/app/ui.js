@@ -1,7 +1,7 @@
 // Views, interactions, rest timer and boot. Everything that touches the DOM lives here.
 var IL=globalThis.IL||(globalThis.IL={});
 const CFG=IL.config||{},D=IL.data,P=IL.prog,B=IL.builder,A=IL.analysis,S=IL.store,SR=IL.search,DBX=IL.dropbox;
-const {EX,EXERCISES,GROUPS,exIcon,C,I,MODES,MODE_ORDER,EQUIP_MODE}=D;
+const {EX,EXERCISES,GROUPS,PRESETS,exIcon,C,I,MODES,MODE_ORDER,EQUIP_MODE}=D;
 const modeOf=P.modeOf;
 const state=S.state;
 const APP_VERSION=CFG.VERSION||'0';
@@ -139,6 +139,8 @@ function startWorkoutView(){
       <p class="muted" style="margin:7px 0 0">Pick your muscle groups (first pick leads the session) and I'll build a balanced plan — or start from scratch.</p>
     </div>
     <div style="height:18px"></div>${coachNudge()}
+    <div class="eyebrow" style="margin:16px 2px 10px">Quick picks</div>
+    <div class="chips hscroll" id="presetPick">${PRESETS.map(p=>`<button class="chip ${presetOn(p)?'on':''}" data-action="preset" data-preset="${p.label}">${p.label}</button>`).join('')}</div>
     <div class="eyebrow" style="margin:16px 2px 10px">Target muscle groups</div>
     <div class="chips" id="groupPick">${GROUPS.map(g=>`<button class="chip ${draft.groups.has(g)?'on':''}" data-g="${g}">${g}</button>`).join('')}</div>
     <div class="card settingrow" style="margin:18px 0 0;padding:14px 15px"><div><div style="font-weight:600">Deload / recovery session</div><div class="dim" style="font-size:12.5px">Sore or beat up? Build it ~60% lighter — full range, focus on the stretch. Won't count against your progress or PRs.</div></div><button class="sw ${draft.deload?'on':''}" id="deloadToggle" data-action="deloadToggle" aria-label="Deload session"></button></div>
@@ -172,6 +174,8 @@ function buildButtons(){
 }
 // Re-render just the build buttons in place (their label depends on the picked groups / deload).
 function refreshBuildBtns(){const bb=$('#buildBtns');if(bb)bb.innerHTML=buildButtons();}
+// Is this preset exactly the current selection? (so its chip lights up, and re-tapping clears)
+function presetOn(p){return draft.groups.size===p.groups.length&&p.groups.every(g=>draft.groups.has(g));}
 function routineList(){
   if(!state.routines.length)return'';
   return `<div class="eyebrow" style="margin:26px 2px 10px">Your routines</div>`+state.routines.map(r=>`<div class="routine" data-routine="${r.id}">
@@ -826,6 +830,9 @@ const ACTIONS={
   build:()=>buildAndStart(false),
   buildFresh:()=>buildAndStart(true),
   coachNudge:el=>{draft.groups=new Set(el.dataset.groups.split(','));render();},
+  preset:el=>{const p=PRESETS.find(x=>x.label===el.dataset.preset);if(!p)return;
+    draft.groups=presetOn(p)?new Set():new Set(p.groups);   // tap to select those groups; tap again to clear
+    render();},
   blank:()=>startSession({ids:[],msg:draft.deload?'Deload — lighter loads, focus on the stretch':null,deload:draft.deload,source:'blank'}),
   deloadToggle:el=>{draft.deload=!draft.deload;el.classList.toggle('on',draft.deload);refreshBuildBtns();}
 };

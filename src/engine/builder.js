@@ -133,7 +133,10 @@ function buildRecommendation(groups,sessions,seed,hints){
   let out=[];
   groups.forEach(g=>{const cap=Math.min(per[g],Math.max((REGIONS[g]||['overall']).length,(IDEAL_PATS[g]||[]).length)+1,EXERCISES.filter(e=>e.group===g).length);
     out.push(...pickForGroup(g,cap,seed,sessions,hints).map(e=>e.id));});
-  return orderByFatigue(capHeavyAxial(out),groups[0]);
+  // Hard session ceiling: picking many groups (e.g. all 11) must not produce a 11-exercise workout.
+  // orderByFatigue puts the highest-priority work first, so the slice drops the lowest-priority
+  // isolation last — a full-body pick lands on ~7 compound-led exercises.
+  return orderByFatigue(capHeavyAxial(out),groups[0]).slice(0,MAX_SESSION_EX);
 }
 // Suggest exercises that COMPLEMENT what's already chosen — always from a muscle group already in
 // the workout (a pull day should never get a press "to balance" it; that's a program-level,
@@ -200,7 +203,10 @@ function findPlan(groups,sessions,now){
     if(now-s.date>CONTINUE_DAYS*DAY)break;
     const sg=sessionGroups(s);
     if(![...want].every(g=>sg[g]))continue;
-    if(Object.keys(sg).some(g=>!want.has(g)&&sg[g]>1))continue;
+    // Tolerate ONE incidental add-on exercise from outside the picked groups — summed ACROSS all
+    // non-picked groups, so picking 'Chest' alone won't continue a whole push day (Chest+Shoulders+Triceps).
+    const extras=Object.keys(sg).filter(g=>!want.has(g)).reduce((a,g)=>a+sg[g],0);
+    if(extras>1)continue;
     return s;
   }
   return null;

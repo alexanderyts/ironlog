@@ -1,6 +1,21 @@
 const test=require('node:test'),assert=require('node:assert/strict');
 const {IL,session,set}=require('./load.js');
-const {EX,EXERCISES,GROUPS,REGIONS,IDEAL_PATS,C,I}=IL.data;
+const {EX,EXERCISES,GROUPS,PRESETS,REGIONS,IDEAL_PATS,C,I}=IL.data;
+
+test('presets build a sane session and continue only when the same groups are picked (Phase 5)',()=>{
+  const now=Date.now();
+  PRESETS.forEach(p=>{
+    const ids=B.buildRecommendation(p.groups,[],7);
+    assert.ok(ids.length<=B.MAX_SESSION_EX,p.label+': <= session cap ('+ids.length+')');
+    p.groups.forEach(g=>assert.ok(ids.some(id=>EX[id]&&EX[id].group===g),p.label+': covers '+g));
+    assert.ok(ids.filter(id=>B.isHeavyAxial(EX[id])).length<=2,p.label+': heavy-axial cap');
+    // logging that preset session, then picking the same preset, continues it
+    const hist=[session(3,ids.map(id=>[id,[set(100,8)]]),{now})];
+    assert.ok(B.findPlan(p.groups,hist,now),p.label+': continues when re-picked');
+  });
+  // picking all 11 groups still caps the session size
+  assert.ok(B.buildRecommendation(GROUPS,[],1).length<=B.MAX_SESSION_EX,'all groups still capped');
+});
 const B=IL.builder;
 const names=ids=>ids.map(id=>EX[id].name);
 

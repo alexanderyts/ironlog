@@ -171,6 +171,17 @@ const EXERCISES=RAW.map(r=>{const m=META[r[0]]||['overall','iso',3];
   return {id:r[0],name:r[1],group:r[2],muscles:r[3],equip:r[4],type:r[5],rr:r[6],instr:r[7],alias:r[8],reg:m[0],pat:m[1],tier:m[2]||3};});
 const EX={}; EXERCISES.forEach(e=>EX[e.id]=e);
 const GROUPS=["Chest","Back","Shoulders","Biceps","Triceps","Forearms","Quads","Hamstrings","Glutes","Calves","Core"];
+// One-tap muscle-group presets. A preset is JUST a named list of groups — tapping it selects those
+// chips, and the builder still receives a plain groups[] (no new engine path). The first group leads
+// the session (perfPriority focus). Pull omits Forearms so a typical pull day continues cleanly.
+const PRESETS=[
+ {label:'Full body',groups:['Quads','Chest','Back','Hamstrings','Shoulders']},
+ {label:'Upper',    groups:['Chest','Back','Shoulders','Biceps','Triceps']},
+ {label:'Lower',    groups:['Quads','Hamstrings','Glutes','Calves']},
+ {label:'Push',     groups:['Chest','Shoulders','Triceps']},
+ {label:'Pull',     groups:['Back','Biceps']},
+ {label:'Arms',     groups:['Biceps','Triceps','Forearms']}
+];
 
 // Ideal region coverage per muscle group (what a well-rounded session hits)
 const REGIONS={Chest:['upper','mid','lower'],Shoulders:['front','side','rear'],Back:['lats','mid','upper'],Biceps:['long','short','brachialis'],Triceps:['long','lateral'],Forearms:['flexor','extensor'],Quads:['overall'],Hamstrings:['overall'],Glutes:['overall','medius'],Calves:['gastro','soleus'],Core:['flexion','antiext','rotation']};
@@ -228,4 +239,4 @@ function patLabel(p){return {hpush:'horizontal press',vpush:'overhead press',hpu
 function exampleFor(group,reg){const e=EXERCISES.find(x=>x.group===group&&x.reg===reg&&x.type===C)||EXERCISES.find(x=>x.group===group&&x.reg===reg);return e?e.name:null;}
 function hashId(s){let h=0;for(let i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))>>>0;return h;}
 
-IL.data={C,I,EXERCISES,EX,GROUPS,META,REGIONS,IDEAL_PATS,PAT_RANK,EQUIP_LOAD,MODES,MODE_ORDER,EQUIP_MODE,LONG_LENGTH,UNILATERAL,PUSH_PATS,PULL_PATS,LOWER_GROUPS,BW_FACTOR,GROUP_ICON,exIcon,regLabel,patLabel,exampleFor,hashId};
+IL.data={C,I,EXERCISES,EX,GROUPS,PRESETS,META,REGIONS,IDEAL_PATS,PAT_RANK,EQUIP_LOAD,MODES,MODE_ORDER,EQUIP_MODE,LONG_LENGTH,UNILATERAL,PUSH_PATS,PULL_PATS,LOWER_GROUPS,BW_FACTOR,GROUP_ICON,exIcon,regLabel,patLabel,exampleFor,hashId};
