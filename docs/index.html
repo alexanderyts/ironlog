@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-6HGHfUVp/ehCLyMOjSVts3FVHahUnCPBXVcVhj2B5og=' 'sha256-EkxoJS/XfnHAg4Tv4KlM2HO15VAwse2HF4NYsW84Gss='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-bL9hWnRY+hqLjgRLtk9DWCZPxFb0wh9G5gU5SWCPQv4=' 'sha256-EkxoJS/XfnHAg4Tv4KlM2HO15VAwse2HF4NYsW84Gss='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Ironlog</title>
@@ -365,8 +365,8 @@ html.standalone .tabbar{bottom:auto;top:calc(var(--screen-h,100vh) - var(--tab-h
 </div>
 
 <script>
-/* Ironlog v0.17.0 · site build · 2026-09-11T04:28:11.175Z */
-var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.17.0",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
+/* Ironlog v0.18.0 · site build · 2026-09-11T04:36:21.993Z */
+var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.18.0",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
 
 /* ===== src/data/exercises.js ===== */
 (function(){'use strict';
@@ -955,14 +955,22 @@ function complementSuggestions(chosenIds,limit){
    (within CONTINUE_DAYS); repeat streaks and stalls are derived by walking history. That syncs via
    the existing session merge for free and can never drift out of step with what was actually done.
 
-   Rotation rules (RP/Helms-style mesocycle practice, simplified):
-     • anchor (the group's tier-1 key-pattern lift) is never rotated by the planner
-     • STALLED: ≥3 performances and the best e1RM has not improved across the last two sessions
-     • STALE:   repeated ≥ROTATE_AFTER consecutive sessions AND not currently progressing (its last
-                session didn't earn a load bump), or ≥ROTATE_HARD sessions regardless
-     • at most ONE rotation per continue; stalled beats stale, longer streak breaks ties
-     • replacement: same group, same region and pattern preferred, not already in the plan */
-const CONTINUE_DAYS=10,ROTATE_AFTER=5,ROTATE_HARD=8;
+   Rotation policy (Roadmap v4 Phase B — measured in TIME, not session count, and biased hard toward
+   continuity, per the user's goal of progress over variety):
+     • A non-anchor accessory rotates ONLY when it is STALLED — best-set e1RM not improving across ≥3
+       performances spanning ≥STALL_MIN_DAYS. A lift that is still progressing is NEVER rotated, no
+       matter how long it's been in the plan. "Stick with what works" is the default.
+     • The ANCHOR (tier-1 key-pattern lift) normally never rotates. Sole exception: a long stall
+       (≥ANCHOR_STALL_WEEKS of tenure) that a recent deload (≤ANCHOR_DELOAD_DAYS) did NOT unstick →
+       swap to a same-group, same-pattern tier-1 VARIATION (bench→incline, squat→front squat), never
+       dropping the pattern. Rare by construction.
+     • At most ONE change per continued session (anchor swap wins, else one accessory); among stalled
+       accessories the one in the plan longest rotates.
+     • Exposure is measured in WEEKS (exerciseTenure), which normalizes by frequency: 8 sessions at
+       2×/week and 4 at 1×/week are both "4 weeks" of the same movement — a high-frequency lifter is
+       never churned by a raw session counter (the bug this phase fixes). */
+const CONTINUE_DAYS=10,STALL_MIN_DAYS=14,ANCHOR_STALL_WEEKS=3,ANCHOR_DELOAD_DAYS=21;
+const WEEK=7*86400000;
 const {e1rm,nextSets:prescribe}=IL.prog;
 
 function sessionGroups(s){const g={};s.exercises.forEach(e=>{const x=EX[e.id];if(x)g[x.group]=(g[x.group]||0)+1;});return g;}
@@ -981,29 +989,46 @@ function findPlan(groups,sessions,now){
   }
   return null;
 }
-// Consecutive most-recent sessions of this exercise's group that included it
-function exerciseStreak(sessions,exId){
-  const ex=EX[exId];if(!ex)return 0;let n=0;
+// How long this exercise has been in the plan: the run of consecutive most-recent sessions of its
+// group that included it, and the calendar SPAN of that run in weeks (see the policy note above).
+// Deloads are transparent to it.
+function exerciseTenure(sessions,exId){
+  const ex=EX[exId];if(!ex)return{sessions:0,weeks:0};
+  let n=0,newest=0,oldest=0;
   for(const s of sessions||[]){
-    if(s.completed===false)continue;
-    if(s.deload)continue;   // deloads are transparent to staleness/rotation
+    if(s.completed===false||s.deload)continue;
     if(!s.exercises.some(e=>EX[e.id]&&EX[e.id].group===ex.group))continue;
-    if(s.exercises.some(e=>e.id===exId))n++;else break;
+    if(s.exercises.some(e=>e.id===exId)){if(!n)newest=s.date;oldest=s.date;n++;}else break;
   }
-  return n;
+  return{sessions:n,weeks:n?(newest-oldest)/WEEK:0};
 }
-// Best e1RM (or reps for weightless work) of the last three performances, newest first. Mode-scoped
-// so alternating equipment doesn't produce a meaningless e1RM sequence.
-function recentScores(sessions,exId,n,mode){
+function exerciseStreak(sessions,exId){return exerciseTenure(sessions,exId).sessions;}
+// The last n performances as {date, score}, newest first. score = best-set estimated 1RM, which
+// already folds reps in (a rep PR at the same load raises it), so no separate reps check is needed.
+// Mode-scoped so alternating equipment doesn't produce a meaningless sequence.
+function recentPerfs(sessions,exId,n,mode){
   const out=[];let before;
   for(let i=0;i<(n||3);i++){
     const lp=lastPerf(sessions,exId,{beforeTs:before,mode});if(!lp)break;
-    out.push(Math.max(...lp.sets.map(s=>s.w>0?e1rm(s.w,s.r):s.r)));before=lp.date;
+    out.push({date:lp.date,score:Math.max(...lp.sets.map(s=>s.w>0?e1rm(s.w,s.r):s.r))});before=lp.date;
   }
   return out;
 }
-function isStalled(sessions,exId,mode){const sc=recentScores(sessions,exId,3,mode);return sc.length>=3&&sc[0]<=sc[1]&&sc[1]<=sc[2];}
+// Stalled = ≥3 performances spanning ≥STALL_MIN_DAYS with a non-improving e1RM across all three. The
+// time-span requirement is the Phase B fix: three sessions crammed into one week is short-term noise,
+// not a plateau — a real stall for an intermediate reveals itself over weeks.
+function isStalled(sessions,exId,mode){
+  const p=recentPerfs(sessions,exId,3,mode);
+  if(p.length<3)return false;
+  if((p[0].date-p[2].date)<STALL_MIN_DAYS*86400000)return false;
+  return p[0].score<=p[1].score&&p[1].score<=p[2].score;   // newest ≤ middle ≤ oldest: no gain
+}
 function isProgressing(sessions,exId,mode){const lp=lastPerf(sessions,exId,{mode});return !!lp&&prescribe(lp.sets,EX[exId],'lb').bumped;}
+// A deload taken within `days` (that the user tried, so a still-stalled anchor is genuinely stuck).
+function recentDeload(sessions,now,days){
+  now=now||Date.now();const cut=now-(days||ANCHOR_DELOAD_DAYS)*86400000;
+  return (sessions||[]).some(s=>s.deload&&s.completed!==false&&s.date>=cut&&s.date<now);
+}
 function planAnchor(ids,g){
   const c=ids.map(id=>EX[id]).filter(e=>e&&e.group===g&&e.tier===1&&(IDEAL_PATS[g]||[]).indexOf(e.pat)>=0);
   return c.sort((a,b)=>perfPriority(b)-perfPriority(a))[0]||null;
@@ -1013,6 +1038,13 @@ function replacementFor(exId,planIds,seed){
   const cands=EXERCISES.filter(x=>x.group===e.group&&x.id!==exId&&planIds.indexOf(x.id)<0);
   return cands.map(x=>{let sc=(x.reg===e.reg?4:0)+(x.pat===e.pat?3:0)+(x.type===e.type?1:0)+(x.tier===1?.5:x.tier===2?.3:0)+((hashId(x.id)+(seed||0))%5)/100;return{x,sc};})
     .sort((a,b)=>b.sc-a.sc)[0]?.x||null;
+}
+// A same-group, same-pattern tier-1 alternative for a stalled anchor (bench→incline, squat→front
+// squat) — a variation for the block, never a change of pattern. Null if the library has none.
+function anchorVariation(exId,planIds,seed){
+  const e=EX[exId];
+  const cands=EXERCISES.filter(x=>x.tier===1&&x.group===e.group&&x.pat===e.pat&&x.id!==exId&&planIds.indexOf(x.id)<0);
+  return cands.sort((a,b)=>perfPriority(b)-perfPriority(a)||((hashId(a.id)+(seed||0))%5)-((hashId(b.id)+(seed||0))%5))[0]||null;
 }
 // What to train for these groups today. Returns {ids, mode:'continue'|'fresh', plan, rotation,
 // streak}. opts.fresh forces a fresh build (the "Start fresh" escape hatch).
@@ -1025,22 +1057,31 @@ function planWorkout(groups,sessions,seed,opts){
   let ids=plan.exercises.map(e=>e.id).filter(id=>EX[id]);
   const modeById={};plan.exercises.forEach(e=>{if(EX[e.id])modeById[e.id]=modeOf(e);});
   const anchors=new Set(groups.map(g=>planAnchor(ids,g)).filter(Boolean).map(e=>e.id));
-  const cands=ids.filter(id=>!anchors.has(id)).map(id=>{
-    const m=modeById[id],streak=exerciseStreak(sessions,id),stalled=isStalled(sessions,id,m),progressing=isProgressing(sessions,id,m);
-    const stale=streak>=ROTATE_HARD||(streak>=ROTATE_AFTER&&!progressing);
-    return{id,streak,pri:stalled?2:stale?1:0};
-  }).filter(c=>c.pri>0).sort((a,b)=>b.pri-a.pri||b.streak-a.streak);
   let rotation=null;
-  if(cands.length){
-    const c=cands[0],to=replacementFor(c.id,ids,seed);
-    if(to){ids=ids.map(id=>id===c.id?to.id:id);rotation={from:c.id,to:to.id,why:c.pri===2?'stalled':'time for a change',streak:c.streak};}
+  // 1. Anchor variation swap — rare: a long-stalled main lift a recent deload didn't unstick.
+  if(recentDeload(sessions,opts.now,ANCHOR_DELOAD_DAYS)){
+    for(const aid of anchors){
+      const t=exerciseTenure(sessions,aid);
+      if(t.weeks>=ANCHOR_STALL_WEEKS&&isStalled(sessions,aid,modeById[aid])){
+        const to=anchorVariation(aid,ids,seed);
+        if(to){ids=ids.map(id=>id===aid?to.id:id);rotation={from:aid,to:to.id,why:'anchor-stalled',anchor:true};break;}
+      }
+    }
+  }
+  // 2. Otherwise, rotate at most one STALLED accessory (the one in the plan longest). A progressing
+  //    accessory is never touched — continuity is the default.
+  if(!rotation){
+    const cands=ids.filter(id=>!anchors.has(id)).map(id=>({id,sessions:exerciseTenure(sessions,id).sessions,stalled:isStalled(sessions,id,modeById[id])}))
+      .filter(c=>c.stalled).sort((a,b)=>b.sessions-a.sessions);
+    if(cands.length){const c=cands[0],to=replacementFor(c.id,ids,seed);
+      if(to){ids=ids.map(id=>id===c.id?to.id:id);rotation={from:c.id,to:to.id,why:'stalled',streak:c.sessions};}}
   }
   const streak=Math.min(...ids.filter(id=>!rotation||id!==rotation.to).map(id=>exerciseStreak(sessions,id)));
   return{ids:orderByFatigue(capHeavyAxial(ids),groups[0]),mode:'continue',plan,rotation,streak:isFinite(streak)?streak:0};
 }
 
 IL.builder={prescribedSets,seedExercise,lastSessionIds,perfPriority,orderByFatigue,isHeavyAxial,capHeavyAxial,pickForGroup,buildRecommendation,complementSuggestions,
-  CONTINUE_DAYS,ROTATE_AFTER,ROTATE_HARD,findPlan,exerciseStreak,isStalled,isProgressing,planAnchor,replacementFor,planWorkout};
+  CONTINUE_DAYS,STALL_MIN_DAYS,ANCHOR_STALL_WEEKS,ANCHOR_DELOAD_DAYS,findPlan,exerciseTenure,exerciseStreak,isStalled,isProgressing,recentDeload,planAnchor,replacementFor,anchorVariation,planWorkout};
 if(typeof module!=='undefined')module.exports=IL.builder;
 
 })();

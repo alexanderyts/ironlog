@@ -52,15 +52,41 @@ test('rotates exactly one stalled accessory, never the anchor, with a same-group
   assert.equal(p.ids.filter(id=>!PUSH.includes(id)).length,1,'only one exercise changed');
 });
 
-test('stale-but-progressing accessories are kept until the hard limit',()=>{
+test('a progressing lift is NEVER rotated, no matter how long it has been in the plan (Phase B)',()=>{
   const now=Date.now();
-  const climbing=(id,days)=>{const wk=days/7,hi=EX[id].rr[1];return[set(100+5*(6-wk),hi),set(100+5*(6-wk),hi)];}; // top of each range → progressing
-  const six=[7,14,21,28,35,42].map(d=>pushDay(d,now,climbing));
-  assert.equal(B.planWorkout(['Chest','Shoulders','Triceps'],six,2,{now}).rotation,null,'6 sessions, all progressing: keep');
+  const climbing=(id,days)=>{const wk=days/7,hi=EX[id].rr[1];return[set(100+5*(9-wk),hi),set(100+5*(9-wk),hi)];}; // climbs every week → always progressing
+  // 9 straight weekly sessions, everything still going up: continuity holds, zero rotation.
   const nine=[7,14,21,28,35,42,49,56,63].map(d=>pushDay(d,now,climbing));
-  const p=B.planWorkout(['Chest','Shoulders','Triceps'],nine,2,{now});
-  assert.ok(p.rotation&&p.rotation.why!=='stalled','9 sessions: rotate one for freshness');
-  assert.notEqual(p.rotation.from,'barbell-bench-press','anchor never rotates');
+  assert.equal(B.planWorkout(['Chest','Shoulders','Triceps'],nine,2,{now}).rotation,null,'still progressing at 9 weeks → keep the whole plan');
+});
+
+test('staleness is measured in weeks, not session count — a 3×/week lifter is not churned (Phase B)',()=>{
+  const now=Date.now();
+  // Only the crossover is flat; everything else climbs toward the present (200-d rises as d shrinks).
+  const sets=(id,d)=>id==='cable-crossover'?[set(40,12),set(40,12)]:[set(200-d,6),set(200-d,6)];
+  const day=d=>session(d,PUSH.map(id=>[id,sets(id,d)]),{now});
+  // 5 sessions in <2 weeks: the flat crossover hasn't stalled yet (short-term noise) → no rotation.
+  assert.equal(B.planWorkout(['Chest','Shoulders','Triceps'],[2,4,6,8,10].map(day),2,{now}).rotation,null,'5 sessions in <2 weeks is not a stall');
+  // The same flat crossover spread over 4 weeks IS a stall → it (and only it) rotates.
+  const p=B.planWorkout(['Chest','Shoulders','Triceps'],[3,10,17,24].map(day),2,{now});
+  assert.ok(p.rotation&&p.rotation.from==='cable-crossover','flat over weeks → stalled → rotate that accessory');
+});
+
+test('a stalled ANCHOR swaps to a same-pattern tier-1 variation only after a deload that did not help (Phase B)',()=>{
+  const now=Date.now();
+  // Bench dead flat for 5 weeks; a deload two weeks ago didn't unstick it → swap to another tier-1 hpush.
+  const benchFlat=(id)=>id==='barbell-bench-press'?[set(185,5),set(185,5)]:[set(60+id.length,8)];
+  const hist=[7,14,21,28,35].map(d=>session(d,[['barbell-bench-press',[set(185,5),set(185,5)]],['cable-crossover',[set(40,12)]]],{now}));
+  hist.push(Object.assign(session(10,[['barbell-bench-press',[set(120,8)]],['cable-crossover',[set(30,12)]]],{now}),{deload:true}));
+  hist.sort((a,b)=>b.date-a.date);
+  const p=B.planWorkout(['Chest'],hist,2,{now});
+  assert.ok(p.rotation&&p.rotation.anchor,'anchor variation swap happened');
+  assert.equal(p.rotation.from,'barbell-bench-press');
+  assert.equal(EX[p.rotation.to].tier,1);assert.equal(EX[p.rotation.to].pat,'hpush');assert.equal(EX[p.rotation.to].group,'Chest');
+  // WITHOUT a recent deload, the stalled anchor is left alone (deload is the gate).
+  const noDeload=[7,14,21,28,35].map(d=>session(d,[['barbell-bench-press',[set(185,5),set(185,5)]],['cable-crossover',[set(40,12)]]],{now}));
+  const p2=B.planWorkout(['Chest'],noDeload,2,{now});
+  assert.ok(!p2.rotation||!p2.rotation.anchor,'no deload → anchor not swapped');
 });
 
 test('streak and stall helpers',()=>{
@@ -72,4 +98,15 @@ test('streak and stall helpers',()=>{
   assert.equal(B.isStalled(hist,'cable-crossover'),true,'flat 100×8 for 3 sessions');
   const up=[session(7,[['barbell-curl',[set(60,10)]]],{now}),session(14,[['barbell-curl',[set(55,10)]]],{now}),session(21,[['barbell-curl',[set(50,10)]]],{now})];
   assert.equal(B.isStalled(up,'barbell-curl'),false);
+});
+
+test('churn guard: continuing a stable, progressing plan is identical every time (Phase B)',()=>{
+  const now=Date.now();
+  const climb=(id,d)=>[set(200-d,6),set(200-d,6)];   // everything climbing → nothing stalls
+  const hist=[3,10,17,24,31].map(d=>session(d,PUSH.map(id=>[id,climb(id,d)]),{now}));
+  const runs=[1,2,3,42,999].map(seed=>B.planWorkout(['Chest','Shoulders','Triceps'],hist,seed,{now}));
+  runs.forEach(r=>{assert.equal(r.mode,'continue');assert.equal(r.rotation,null,'no spurious rotation on unchanged data');});
+  const first=new Set(runs[0].ids);
+  runs.forEach(r=>assert.deepEqual(new Set(r.ids),first,'identical exercises regardless of seed'));
+  assert.deepEqual(first,new Set(hist[0].exercises.map(e=>e.id)),'continues the exact plan — no reshuffle');
 });

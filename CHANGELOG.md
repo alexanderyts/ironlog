@@ -2,6 +2,14 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.18.0 — 2026-09-10 · Rotation & progression policy (Roadmap v4, Phase B)
+The builder's continuity rules now match the goal — *progress, not variety* — with three research-backed fixes to the mesocycle core (builder.js):
+- **Staleness is measured in weeks, not session count.** The old `ROTATE_AFTER=5 sessions` told a 3×/week lifter "time for a change" in under two weeks. Now exposure is tracked by calendar span (`exerciseTenure`), which normalizes by frequency — 8 sessions at 2×/week and 4 at 1×/week are both "4 weeks" of the same movement.
+- **A progressing lift is never rotated.** Rotation now fires only on a genuine **stall** — no net e1RM gain across ≥3 performances spanning **≥2 weeks** (the time-span requirement stops short-term noise from reading as a plateau). The old unconditional "hard limit" that swapped a still-improving lift is gone. "Stick with what works" is the default.
+- **A stuck main lift can finally be helped.** A stalled **anchor** (≥3 weeks) that a **recent deload didn't unstick** swaps to a same-group, same-pattern tier-1 **variation** (bench→incline, squat→front squat) — never dropping the pattern, and rare by construction (the deload is the gate).
+- **Determinism / no churn:** verified on demo data that continuing a plan is now identical across every seed (a churn guard test asserts a stable progressing plan never spuriously rotates).
+- Research basis: Baz-Valle 2019 (deliberate variation helps, random variation impairs load progression), Fonseca 2014, block-periodization practice (core lifts held 4–8 weeks); intermediate progress shows over 2–4 weeks → judge stall/staleness in time. 4 tests rewritten/added (69 total).
+
 ## v0.17.0 — 2026-09-10 · Findings layer (Roadmap v4, Phase A)
 Foundation for the builder reacting to Coach's Notes — no visible change yet.
 - **`findings()`** splits *deciding what's true* from *writing the sentence*: it returns typed data (`balance`, `legs-low`, `region-gap`, `pattern-gap`, `volume-low`, `freq-low`, `deload-taken`/`due`, `progression`) that two consumers can read — the coach renders it to text, and (next phase) the builder acts on it.
