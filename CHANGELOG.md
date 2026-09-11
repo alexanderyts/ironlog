@@ -2,6 +2,13 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.17.0 — 2026-09-10 · Findings layer (Roadmap v4, Phase A)
+Foundation for the builder reacting to Coach's Notes — no visible change yet.
+- **`findings()`** splits *deciding what's true* from *writing the sentence*: it returns typed data (`balance`, `legs-low`, `region-gap`, `pattern-gap`, `volume-low`, `freq-low`, `deload-taken`/`due`, `progression`) that two consumers can read — the coach renders it to text, and (next phase) the builder acts on it.
+- **`buildTips()` is now a thin renderer** over `findings()` with byte-identical wording — a pure refactor; every existing analysis test passes unchanged.
+- **`withStatus()`** derives **new / persisting / resolved** for each finding by comparing the current 28-day window to the previous one — no new stored state (analyze gained an upper window bound so a shifted `now` reads the right window). This powers "credit when you fix something" and richer phrasing later.
+- 4 new tests (66 total); verified in-browser that Coach's Notes is unchanged and status diffing works on real data.
+
 ## v0.16.0 — 2026-09-10 · Security hardening
 A defense-in-depth pass ahead of a possible store release. No user-facing feature change.
 - **Import/sync sanitization (the big one).** All untrusted input — file imports, Dropbox downloads, and the Claude artifact database — is now rebuilt field-by-field from a strict whitelist with every value type-coerced (`cleanSession`/`cleanRoutine`/`cleanSettings` in sync.js). This means a crafted backup can't smuggle HTML/attribute-injection through a "numeric" field, and it's structurally immune to **prototype pollution** (`__proto__`/`constructor` keys are never copied). Also caps array sizes to prevent a malicious file from ballooning memory.

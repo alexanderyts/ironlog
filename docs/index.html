@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-HymCtkW13rKzXY7FffsyetWNFPLlvxsrv5UZRo2Zx/4=' 'sha256-EkxoJS/XfnHAg4Tv4KlM2HO15VAwse2HF4NYsW84Gss='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-6HGHfUVp/ehCLyMOjSVts3FVHahUnCPBXVcVhj2B5og=' 'sha256-EkxoJS/XfnHAg4Tv4KlM2HO15VAwse2HF4NYsW84Gss='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Ironlog</title>
@@ -365,8 +365,8 @@ html.standalone .tabbar{bottom:auto;top:calc(var(--screen-h,100vh) - var(--tab-h
 </div>
 
 <script>
-/* Ironlog v0.16.0 · site build · 2026-09-11T02:28:16.123Z */
-var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.16.0",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
+/* Ironlog v0.17.0 · site build · 2026-09-11T04:28:11.175Z */
+var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.17.0",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
 
 /* ===== src/data/exercises.js ===== */
 (function(){'use strict';
@@ -1064,7 +1064,9 @@ const MIN_COMPARATIVE_SESSIONS=4,MIN_COMPARATIVE_DAYS=10;
 
 function analyze(sessions,now){
   now=now||Date.now();const winDays=28,weeks=4;
-  const done=completed(sessions).filter(s=>s.date>=now-winDays*DAY);
+  // Upper bound (s.date < now) matters when `now` is shifted back to compute a PRIOR window
+  // (withStatus); for the normal call it's a no-op since there are no future-dated sessions.
+  const done=completed(sessions).filter(s=>s.date>=now-winDays*DAY&&s.date<now);
   const groupSets={},effSets={},pat={hpush:0,vpush:0,hpull:0,vpull:0,hinge:0,squat:0,lunge:0,iso:0},regSeen={},patSeen={},groupDays={};
   let totalSets=0;
   done.forEach(s=>{const day=startOfDay(s.date),dayGroups=new Set();
@@ -1087,7 +1089,7 @@ function analyze(sessions,now){
 // How many tracked lifts trend up in estimated 1RM over the last 4 weeks
 function progressionStat(sessions,now,bw){
   now=now||Date.now();
-  const done=completed(sessions).filter(s=>!s.deload&&s.date>=now-28*DAY).sort((x,y)=>x.date-y.date);
+  const done=completed(sessions).filter(s=>!s.deload&&s.date>=now-28*DAY&&s.date<now).sort((x,y)=>x.date-y.date);
   const byEx={};
   done.forEach(s=>s.exercises.forEach(e=>{const best=Math.max(0,...e.sets.filter(isWorking).map(st=>e1rm(setLoad(e.id,st.w,bw),+st.r||0)));if(best)(byEx[e.id]=byEx[e.id]||[]).push(best);}));
   let n=0,up=0;Object.values(byEx).forEach(arr=>{if(arr.length>=2){n++;if(arr[arr.length-1]>arr[0])up++;}});
@@ -1095,49 +1097,95 @@ function progressionStat(sessions,now,bw){
 }
 function gapPrio(g,r){return {'Shoulders:rear':5,'Chest:upper':4,'Hamstrings:overall':4,'Back:lats':3,'Chest:lower':2,'Triceps:long':2}[g+':'+r]||1;}
 function patPrio(g,p){return {'Hamstrings:hinge':5,'Hamstrings:iso':4,'Back:hpull':4,'Back:vpull':4,'Glutes:hinge':3,'Quads:lunge':2,'Quads:iso':1}[g+':'+p]||0.5;}
-// Coaching tips: [{lv:'warn'|'good'|'info', x:html}]. Comparative/program-level verdicts (push vs
-// pull, upper vs lower, weekly-volume landmarks) only appear once a.readyForComparative is true —
-// see MIN_COMPARATIVE_SESSIONS/DAYS above. Region/pattern gaps and progression are per-muscle or
-// per-exercise instructions ("try adding X"), not verdicts about your training as a whole, so they
-// can appear as soon as they're individually meaningful — this is what lets the report get richer
-// over time instead of jumping straight to a full analysis on day one.
-function buildTips(a,sessions,now,bw){
-  const t=[],trained=Object.keys(a.groupSets).filter(g=>a.groupSets[g]>=2);
+/* ── Findings: the DECISION layer (Roadmap v4 Phase A) ─────────────────────────────────────────────
+   `findings()` decides what's true about the user's training and returns TYPED data — no wording.
+   Two consumers read it: buildTips() renders sentences (below), and the workout builder reads the
+   same facts to react (Phase C). Keeping the decision separate from the phrasing is what lets the
+   coaching vary its language (Phase E) and the builder act on gaps, from one shared source of truth.
+   Gating mirrors the old buildTips exactly: comparative findings (balance/legs/volume/frequency) need
+   a.readyForComparative; per-muscle gaps, deload and progression appear as soon as they're meaningful.
+   All gaps/volume/freq candidates are returned (not pre-sliced) so the builder sees everything; the
+   renderer does the display trimming. */
+function findings(a,sessions,now,bw){
+  now=now||Date.now();
+  const F=[],trained=Object.keys(a.groupSets).filter(g=>a.groupSets[g]>=2);
   if(a.readyForComparative){
     if(a.push+a.pull>=6){
-      if(a.push>=a.pull*1.5&&a.push-a.pull>=3)t.push({lv:'warn',x:`Your pressing outweighs pulling (<b>${a.push}</b> push vs <b>${a.pull}</b> pull sets). Add rows or pull-ups to balance your shoulders and posture.`});
-      else if(a.pull>=a.push*1.5&&a.pull-a.push>=3)t.push({lv:'warn',x:`You pull far more than you press (<b>${a.pull}</b> vs <b>${a.push}</b>). Add a press to even it out.`});
-      else t.push({lv:'good',x:`Push/pull balance looks healthy (<b>${a.push}</b> vs <b>${a.pull}</b> sets).`});
+      if(a.push>=a.pull*1.5&&a.push-a.pull>=3)F.push({type:'balance',lv:'warn',dir:'push',push:a.push,pull:a.pull});
+      else if(a.pull>=a.push*1.5&&a.pull-a.push>=3)F.push({type:'balance',lv:'warn',dir:'pull',push:a.push,pull:a.pull});
+      else F.push({type:'balance',lv:'good',dir:'even',push:a.push,pull:a.pull});
     }
-    // upper has twice the muscle groups, so ~2:1 is normal (push/pull/legs); flag only a real skew
-    if(a.upperSets+a.lowerSets>=8&&a.lowerSets*3<=a.upperSets)t.push({lv:'warn',x:`Legs are undertrained — <b>${a.lowerSets}</b> lower-body sets vs <b>${a.upperSets}</b> upper. Add a squat or hinge day.`});
+    if(a.upperSets+a.lowerSets>=8&&a.lowerSets*3<=a.upperSets)F.push({type:'legs-low',lv:'warn',lower:a.lowerSets,upper:a.upperSets});
   }
-  // deload/recovery — placed high because recovery is time-sensitive: acknowledge a recent deload,
-  // else prompt one after a long unbroken run (fatigue/joint stress clears, then overload resumes).
-  const lastDeload=completed(sessions).filter(s=>s.deload).sort((x,y)=>y.date-x.date)[0];
+  const lastDeload=completed(sessions).filter(s=>s.deload&&s.date<now).sort((x,y)=>y.date-x.date)[0];
   const sinceDeload=lastDeload?Math.round((now-lastDeload.date)/DAY):Infinity;
-  if(sinceDeload<=14){
-    t.push({lv:'good',x:`You took a <b>deload</b> ${sinceDeload<=7?'this week':'recently'} — smart. Recovery is where the last block's work turns into growth; ease back to full loads once you feel fresh.`});
-  }else{
-    const streakWk=calcStreak(sessions,now);
-    if(streakWk>=6)t.push({lv:'info',x:`You've trained <b>${streakWk} weeks</b> straight — a lighter <b>deload</b> (about 60% loads, full range, focus on the stretch) lets accumulated fatigue and joint stress clear so the next block hits harder.`});
-  }
-  const gaps=[];
-  trained.forEach(g=>{const seen=a.regSeen[g]||new Set();(REGIONS[g]||[]).forEach(r=>{if(!seen.has(r)){const ex=exampleFor(g,r);if(ex)gaps.push({lv:'info',prio:gapPrio(g,r),x:`You train ${g.toLowerCase()} but skip <b>${regLabel(g,r)}</b>. Try <b>${ex}</b>.`});}});});
-  trained.forEach(g=>{const seen=a.patSeen[g]||new Set();(IDEAL_PATS[g]||[]).forEach(p=>{if(!seen.has(p)){const ex=EXERCISES.find(x=>x.group===g&&x.pat===p&&x.tier<=2)||EXERCISES.find(x=>x.group===g&&x.pat===p);if(ex)gaps.push({lv:'info',prio:patPrio(g,p),x:`Your ${g.toLowerCase()} work has no <b>${p==='iso'?'isolation':patLabel(p)}</b> movement — pair it with <b>${ex.name}</b> for complete development.`});}});});
-  gaps.sort((x,y)=>y.prio-x.prio);t.push(...gaps.slice(0,2));
+  if(sinceDeload<=14)F.push({type:'deload-taken',lv:'good',days:sinceDeload});
+  else{const streakWk=calcStreak(sessions,now);if(streakWk>=6)F.push({type:'deload-due',lv:'info',weeks:streakWk});}
+  trained.forEach(g=>{const seen=a.regSeen[g]||new Set();(REGIONS[g]||[]).forEach(r=>{if(!seen.has(r)){const ex=exampleFor(g,r);if(ex)F.push({type:'region-gap',lv:'info',group:g,reg:r,ex,prio:gapPrio(g,r)});}});});
+  trained.forEach(g=>{const seen=a.patSeen[g]||new Set();(IDEAL_PATS[g]||[]).forEach(p=>{if(!seen.has(p)){const ex=EXERCISES.find(x=>x.group===g&&x.pat===p&&x.tier<=2)||EXERCISES.find(x=>x.group===g&&x.pat===p);if(ex)F.push({type:'pattern-gap',lv:'info',group:g,pat:p,exId:ex.id,exName:ex.name,prio:patPrio(g,p)});}});});
   if(a.readyForComparative){
-    // volume landmark applies to major muscles you clearly train (≥4 sets in the window); core/calves have their own norms
-    const under=trained.filter(g=>a.groupSets[g]>=4&&g!=='Core'&&g!=='Calves').map(g=>({g,pw:a.perWeek[g]})).filter(x=>x.pw<8).sort((x,y)=>x.pw-y.pw)[0];
-    if(under)t.push({lv:'warn',x:`Only ~<b>${under.pw.toFixed(1)}</b> sets/week of ${under.g.toLowerCase()} — aim for <b>10+</b> weekly sets to drive growth.`});
-    // frequency: real weekly volume packed into ~one session grows slower than the same volume over 2 days
-    const lowFreq=trained.filter(g=>g!=='Core'&&g!=='Calves'&&a.groupSets[g]/a.weeks>=6&&(a.groupFreq[g]||0)/a.weeks<1.5)
-      .map(g=>({g,pw:a.groupSets[g]/a.weeks})).sort((x,y)=>y.pw-x.pw)[0];
-    if(lowFreq)t.push({lv:'info',x:`You train ${lowFreq.g.toLowerCase()} hard but about once a week — splitting those <b>~${Math.round(lowFreq.pw)} sets</b> across <b>2 days</b> tends to build a muscle faster than one big session.`});
+    trained.filter(g=>a.groupSets[g]>=4&&g!=='Core'&&g!=='Calves').forEach(g=>{if(a.perWeek[g]<8)F.push({type:'volume-low',lv:'warn',group:g,perWeek:a.perWeek[g]});});
+    trained.filter(g=>g!=='Core'&&g!=='Calves'&&a.groupSets[g]/a.weeks>=6&&(a.groupFreq[g]||0)/a.weeks<1.5).forEach(g=>F.push({type:'freq-low',lv:'info',group:g,sets:a.groupSets[g]/a.weeks}));
   }
   const pr=progressionStat(sessions,now,bw);
-  if(pr.n>=2)t.push({lv:pr.up>=pr.n/2?'good':'info',x:`Progression: <b>${pr.up}/${pr.n}</b> of your tracked lifts are trending up in estimated strength this month.${pr.up>=pr.n/2?' Keep it going.':' Lean on the +weight suggestions to push the rest.'}`});
-  return t.slice(0,5);   // may be empty — the caller owns empty-state copy (it knows WHY: too little history vs. genuinely nothing to flag)
+  if(pr.n>=2)F.push({type:'progression',lv:pr.up>=pr.n/2?'good':'info',up:pr.up,n:pr.n});
+  return F;
+}
+// A stable identity for a finding, so the same concern across two time windows is recognised as the
+// same thing (for new/persisting/resolved status). Deload-taken and deload-due share one identity.
+function findingKey(f){
+  if(f.type==='region-gap')return 'region-gap:'+f.group+':'+f.reg;
+  if(f.type==='pattern-gap')return 'pattern-gap:'+f.group+':'+f.pat;
+  if(f.type==='volume-low')return 'volume-low:'+f.group;
+  if(f.type==='freq-low')return 'freq-low:'+f.group;
+  if(f.type==='deload-taken'||f.type==='deload-due')return 'deload';
+  return f.type;
+}
+// Current findings annotated with status by comparing to the window 28 days earlier (derived from
+// history, no persisted state). Resolved findings (present then, gone now) are appended so the coach
+// can give credit later (Phase E). buildTips ignores status for now — it's foundation for C and E.
+function withStatus(sessions,now,bw){
+  now=now||Date.now();
+  const cur=findings(analyze(sessions,now),sessions,now,bw);
+  const prev=findings(analyze(sessions,now-28*DAY),sessions,now-28*DAY,bw);
+  const prevKeys=new Set(prev.map(findingKey)),curKeys=new Set(cur.map(findingKey));
+  const out=cur.map(f=>Object.assign({status:prevKeys.has(findingKey(f))?'persisting':'new'},f));
+  prev.forEach(f=>{if(!curKeys.has(findingKey(f)))out.push(Object.assign({status:'resolved'},f));});
+  return out;
+}
+
+// Render one finding to a tip {lv, x:html}. Wording is preserved verbatim from the pre-refactor
+// buildTips so output stays byte-identical (Phase A is invisible); Phase E will vary this.
+function renderFinding(f){
+  const g=f.group?f.group.toLowerCase():'';
+  switch(f.type){
+    case 'balance':
+      if(f.dir==='push')return {lv:'warn',x:`Your pressing outweighs pulling (<b>${f.push}</b> push vs <b>${f.pull}</b> pull sets). Add rows or pull-ups to balance your shoulders and posture.`};
+      if(f.dir==='pull')return {lv:'warn',x:`You pull far more than you press (<b>${f.pull}</b> vs <b>${f.push}</b>). Add a press to even it out.`};
+      return {lv:'good',x:`Push/pull balance looks healthy (<b>${f.push}</b> vs <b>${f.pull}</b> sets).`};
+    case 'legs-low':return {lv:'warn',x:`Legs are undertrained — <b>${f.lower}</b> lower-body sets vs <b>${f.upper}</b> upper. Add a squat or hinge day.`};
+    case 'deload-taken':return {lv:'good',x:`You took a <b>deload</b> ${f.days<=7?'this week':'recently'} — smart. Recovery is where the last block's work turns into growth; ease back to full loads once you feel fresh.`};
+    case 'deload-due':return {lv:'info',x:`You've trained <b>${f.weeks} weeks</b> straight — a lighter <b>deload</b> (about 60% loads, full range, focus on the stretch) lets accumulated fatigue and joint stress clear so the next block hits harder.`};
+    case 'region-gap':return {lv:'info',x:`You train ${g} but skip <b>${regLabel(f.group,f.reg)}</b>. Try <b>${f.ex}</b>.`};
+    case 'pattern-gap':return {lv:'info',x:`Your ${g} work has no <b>${f.pat==='iso'?'isolation':patLabel(f.pat)}</b> movement — pair it with <b>${f.exName}</b> for complete development.`};
+    case 'volume-low':return {lv:'warn',x:`Only ~<b>${f.perWeek.toFixed(1)}</b> sets/week of ${g} — aim for <b>10+</b> weekly sets to drive growth.`};
+    case 'freq-low':return {lv:'info',x:`You train ${g} hard but about once a week — splitting those <b>~${Math.round(f.sets)} sets</b> across <b>2 days</b> tends to build a muscle faster than one big session.`};
+    case 'progression':return {lv:f.lv,x:`Progression: <b>${f.up}/${f.n}</b> of your tracked lifts are trending up in estimated strength this month.${f.up>=f.n/2?' Keep it going.':' Lean on the +weight suggestions to push the rest.'}`};
+  }
+  return {lv:f.lv||'info',x:''};
+}
+// Coaching tips: renders findings() in the established order (balance, legs, deload, top-2 gaps,
+// lowest-volume, top frequency, progression), capped at 5. See the buildup/empty-state note above.
+function buildTips(a,sessions,now,bw){
+  const F=findings(a,sessions,now,bw),t=[],pick=ty=>F.filter(f=>f.type===ty);
+  pick('balance').forEach(f=>t.push(renderFinding(f)));
+  pick('legs-low').forEach(f=>t.push(renderFinding(f)));
+  pick('deload-taken').concat(pick('deload-due')).forEach(f=>t.push(renderFinding(f)));
+  F.filter(f=>f.type==='region-gap'||f.type==='pattern-gap').sort((x,y)=>y.prio-x.prio).slice(0,2).forEach(f=>t.push(renderFinding(f)));
+  const vol=pick('volume-low').sort((x,y)=>x.perWeek-y.perWeek)[0];if(vol)t.push(renderFinding(vol));
+  const freq=pick('freq-low').sort((x,y)=>y.sets-x.sets)[0];if(freq)t.push(renderFinding(freq));
+  pick('progression').forEach(f=>t.push(renderFinding(f)));
+  return t.slice(0,5);   // may be empty — the caller owns empty-state copy (too little history vs. nothing to flag)
 }
 // Best set per exercise BY MODALITY (a Smith and a dumbbell overhead press are separate PRs) by
 // estimated 1RM. `showEst` is true only for compound lifts done with equipment whose 1RM estimate
@@ -1167,7 +1215,7 @@ function muscleSetCounts(sessions){
   return Object.entries(cnt).sort((a,b)=>b[1]-a[1]);
 }
 
-IL.analysis={analyze,progressionStat,gapPrio,patPrio,buildTips,personalRecords,weeklyVolumes,muscleSetCounts,MIN_COMPARATIVE_SESSIONS,MIN_COMPARATIVE_DAYS};
+IL.analysis={analyze,progressionStat,gapPrio,patPrio,findings,findingKey,withStatus,renderFinding,buildTips,personalRecords,weeklyVolumes,muscleSetCounts,MIN_COMPARATIVE_SESSIONS,MIN_COMPARATIVE_DAYS};
 if(typeof module!=='undefined')module.exports=IL.analysis;
 
 })();
