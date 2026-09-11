@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-QVpv5nkUD9v+O/NI7bSA/h+ZCkxy/rsDO+qPOJ8U6fo=' 'sha256-EkxoJS/XfnHAg4Tv4KlM2HO15VAwse2HF4NYsW84Gss='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-fzT5AlH+TQW4ESHmQPFJkVI9YeTCGLpLyHZOF5LE7hU=' 'sha256-EkxoJS/XfnHAg4Tv4KlM2HO15VAwse2HF4NYsW84Gss='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Ironlog</title>
@@ -365,8 +365,8 @@ html.standalone .tabbar{bottom:auto;top:calc(var(--screen-h,100vh) - var(--tab-h
 </div>
 
 <script>
-/* Ironlog v0.19.0 · site build · 2026-09-11T04:52:51.641Z */
-var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.19.0",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
+/* Ironlog v0.20.0 · site build · 2026-09-11T05:01:44.632Z */
+var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.20.0",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
 
 /* ===== src/data/exercises.js ===== */
 (function(){'use strict';
@@ -464,7 +464,45 @@ const RAW=[
  ["reverse-wrist-curl","Reverse Wrist Curl","Forearms",["Forearms"],"Dumbbell",I,[12,20],"Palms down, extend the wrists up against the weight, lower fully.",""],
  ["reverse-curl","Reverse Curl","Forearms",["Forearms","Biceps"],"Barbell",I,[10,15],"Overhand grip, curl the bar up keeping elbows fixed at your sides.","reverse bicep curl"],
  ["farmers-carry","Farmer's Carry","Forearms",["Forearms","Core"],"Dumbbell",C,[20,40],"Grip a heavy dumbbell in each hand and walk with tall posture; log seconds as reps.","farmer walk"],
- ["wrist-roller","Wrist Roller","Forearms",["Forearms"],"Other",I,[1,3],"Roll the weight up by twisting the handle, then lower it under control.",""]
+ ["wrist-roller","Wrist Roller","Forearms",["Forearms"],"Other",I,[1,3],"Roll the weight up by twisting the handle, then lower it under control.",""],
+ // ── v4 Phase D expansion: variation families, lengthened-position (stretch) options, machine/cable
+ //    variants, unilateral movements, and true anatomical gaps ─────────────────────────────────────
+ // Chest
+ ["machine-incline-press","Machine Incline Press","Chest",["Chest","Shoulders"],"Machine",C,[8,12],"Press the handles up and in on an incline path, control to a stretch.",""],
+ ["incline-dumbbell-fly","Incline Dumbbell Fly","Chest",["Chest"],"Dumbbell",I,[10,15],"On an incline, open the arms wide for a deep upper-chest stretch, squeeze back.","incline fly"],
+ ["dumbbell-pullover","Dumbbell Pullover","Chest",["Chest","Back"],"Dumbbell",I,[10,15],"Lie across a bench, lower a dumbbell back over the head for a big stretch, pull it back.","pullover"],
+ // Back
+ ["pendlay-row","Pendlay Row","Back",["Back","Biceps"],"Barbell",C,[5,8],"Row explosively from a dead stop on the floor to the lower chest each rep.",""],
+ ["neutral-grip-pulldown","Neutral-Grip Pulldown","Back",["Back","Biceps"],"Cable",C,[8,12],"Pull a neutral-grip handle to the chest, driving the elbows down and back.",""],
+ ["single-arm-cable-row","Single-Arm Cable Row","Back",["Back","Biceps"],"Cable",C,[10,15],"Row one handle to the hip, letting the shoulder stretch forward at the front.","one arm cable row"],
+ ["cable-pullover","Cable Pullover","Back",["Back"],"Cable",I,[10,15],"With straight arms, pull the bar from overhead to the thighs, feeling the lats stretch up top.",""],
+ // Shoulders
+ ["machine-shoulder-press","Machine Shoulder Press","Shoulders",["Shoulders","Triceps"],"Machine",C,[8,12],"Press the handles overhead on a fixed path, control back to ear height.",""],
+ ["reverse-pec-deck","Reverse Pec Deck","Shoulders",["Shoulders"],"Machine",I,[12,20],"Facing the pad, sweep the arms back and out to hit the rear delts.","rear delt machine"],
+ ["leaning-cable-lateral","Leaning Cable Lateral Raise","Shoulders",["Shoulders"],"Cable",I,[12,20],"Lean away from the stack and raise the cable out to the side through a long range.",""],
+ // Biceps
+ ["ez-bar-curl","EZ-Bar Curl","Biceps",["Biceps"],"Barbell",I,[8,12],"Curl an EZ bar up with a semi-supinated grip, elbows fixed.",""],
+ ["concentration-curl","Concentration Curl","Biceps",["Biceps"],"Dumbbell",I,[10,15],"Elbow braced on the inner thigh, curl one dumbbell up with a hard peak squeeze.",""],
+ ["bayesian-cable-curl","Bayesian Cable Curl","Biceps",["Biceps"],"Cable",I,[10,15],"Face away from a low pulley so the arm trails behind you, curling from a deep stretch.",""],
+ // Triceps
+ ["cable-overhead-extension","Cable Overhead Triceps Extension","Triceps",["Triceps"],"Cable",I,[10,15],"Facing away from the stack, extend overhead from a deep long-head stretch.",""],
+ ["single-arm-pushdown","Single-Arm Pushdown","Triceps",["Triceps"],"Cable",I,[12,15],"Push one handle down to lockout with the elbow pinned, control up.",""],
+ ["machine-dip","Machine Dip","Triceps",["Triceps","Chest"],"Machine",C,[8,12],"Press the handles down to lockout staying upright to bias the triceps.","assisted dip"],
+ // Quads
+ ["sissy-squat","Sissy Squat","Quads",["Quads"],"Bodyweight",C,[8,15],"Rise onto the toes and lean back, bending the knees to stretch the quads, then drive up.",""],
+ ["reverse-lunge","Reverse Lunge","Quads",["Quads","Glutes"],"Dumbbell",C,[8,12],"Step back into a lunge and drive through the front heel to stand; alternate legs.",""],
+ // Hamstrings
+ ["back-extension","45° Back Extension","Hamstrings",["Hamstrings","Glutes","Back"],"Bodyweight",I,[12,20],"On a 45° bench, hinge down and squeeze the posterior chain to rise to a straight line.","hyperextension"],
+ ["single-leg-curl","Single-Leg Curl","Hamstrings",["Hamstrings"],"Machine",I,[10,15],"Curl one leg at a time to even out side-to-side and add range.",""],
+ // Glutes
+ ["hip-abduction","Hip Abduction","Glutes",["Glutes"],"Machine",I,[12,20],"Press the knees outward against the pads to target the glute medius.","abductor machine"],
+ ["single-leg-hip-thrust","Single-Leg Hip Thrust","Glutes",["Glutes"],"Bodyweight",I,[10,15],"Shoulders on a bench, drive one hip up and squeeze; alternate sides.",""],
+ // Calves
+ ["leg-press-calf-raise","Leg Press Calf Raise","Calves",["Calves"],"Machine",I,[12,20],"On the leg press, push the platform with the toes to full plantarflexion, stretch at the bottom.",""],
+ ["single-leg-calf-raise","Single-Leg Calf Raise","Calves",["Calves"],"Dumbbell",I,[12,20],"Balance on one foot holding a dumbbell, rise to a full contraction and stretch down.",""],
+ // Core
+ ["pallof-press","Pallof Press","Core",["Core"],"Cable",I,[10,15],"Press a cable straight out from the chest and resist the rotational pull; log per side.","anti-rotation press"],
+ ["reverse-crunch","Reverse Crunch","Core",["Core"],"Bodyweight",I,[12,20],"Curl the knees and hips toward the chest, lifting the tailbone off the floor.",""]
 ];
 
 // [region/head, movement pattern, tier]. tier 1 = foundational lift (can anchor a session and should be
@@ -481,8 +519,25 @@ const META={
  'standing-calf-raise':['gastro','iso',1],'seated-calf-raise':['soleus','iso',2],
  'plank':['antiext','iso',2],'hanging-leg-raise':['flexion','iso',1],'cable-crunch':['flexion','iso',2],'russian-twist':['rotation','iso',3],'ab-wheel':['antiext','iso',1],'crunch':['flexion','iso',3],
  'nordic-curl':['overall','iso',2],'step-up':['overall','lunge',2],'chest-supported-row':['mid','hpull',2],'rack-pull':['lower','hinge',2],'landmine-press':['front','vpush',2],
- 'wrist-curl':['flexor','iso',1],'reverse-wrist-curl':['extensor','iso',1],'reverse-curl':['extensor','iso',2],'farmers-carry':['grip','iso',1],'wrist-roller':['grip','iso',3]
+ 'wrist-curl':['flexor','iso',1],'reverse-wrist-curl':['extensor','iso',1],'reverse-curl':['extensor','iso',2],'farmers-carry':['grip','iso',1],'wrist-roller':['grip','iso',3],
+ // v4 Phase D additions
+ 'machine-incline-press':['upper','hpush',2],'incline-dumbbell-fly':['upper','iso',3],'dumbbell-pullover':['lower','iso',3],
+ 'pendlay-row':['mid','hpull',2],'neutral-grip-pulldown':['lats','vpull',2],'single-arm-cable-row':['mid','hpull',2],'cable-pullover':['lats','iso',3],
+ 'machine-shoulder-press':['front','vpush',2],'reverse-pec-deck':['rear','iso',2],'leaning-cable-lateral':['side','iso',3],
+ 'ez-bar-curl':['overall','iso',2],'concentration-curl':['overall','iso',3],'bayesian-cable-curl':['long','iso',3],
+ 'cable-overhead-extension':['long','iso',2],'single-arm-pushdown':['lateral','iso',3],'machine-dip':['lateral','hpush',2],
+ 'sissy-squat':['overall','squat',3],'reverse-lunge':['overall','lunge',2],
+ 'back-extension':['overall','hinge',2],'single-leg-curl':['overall','iso',3],
+ 'hip-abduction':['medius','iso',2],'single-leg-hip-thrust':['overall','hinge',3],
+ 'leg-press-calf-raise':['gastro','iso',2],'single-leg-calf-raise':['gastro','iso',3],
+ 'pallof-press':['rotation','iso',2],'reverse-crunch':['flexion','iso',2]
 };
+// Movements trained at a long muscle length (a strong hypertrophy driver) — the builder gives these a
+// small preference so a plan tends to include a stretch-biased option per muscle. Existing lifts that
+// already load the stretch are tagged here too.
+const LONG_LENGTH=new Set(['incline-dumbbell-fly','dumbbell-pullover','cable-pullover','bayesian-cable-curl','incline-dumbbell-curl','cable-overhead-extension','overhead-tricep-extension','leaning-cable-lateral','sissy-squat','romanian-deadlift','stiff-leg-deadlift','seated-leg-curl']);
+// Single-limb movements (for future per-side volume handling and to diversify rotation families).
+const UNILATERAL=new Set(['single-arm-cable-row','concentration-curl','single-arm-pushdown','reverse-lunge','single-leg-curl','single-leg-hip-thrust','single-leg-calf-raise','bulgarian-split-squat','walking-lunge','step-up','dumbbell-row','cable-kickback']);
 
 const EXERCISES=RAW.map(r=>{const m=META[r[0]]||['overall','iso',3];
   return {id:r[0],name:r[1],group:r[2],muscles:r[3],equip:r[4],type:r[5],rr:r[6],instr:r[7],alias:r[8],reg:m[0],pat:m[1],tier:m[2]||3};});
@@ -490,7 +545,7 @@ const EX={}; EXERCISES.forEach(e=>EX[e.id]=e);
 const GROUPS=["Chest","Back","Shoulders","Biceps","Triceps","Forearms","Quads","Hamstrings","Glutes","Calves","Core"];
 
 // Ideal region coverage per muscle group (what a well-rounded session hits)
-const REGIONS={Chest:['upper','mid','lower'],Shoulders:['front','side','rear'],Back:['lats','mid','upper'],Biceps:['long','short','brachialis'],Triceps:['long','lateral'],Forearms:['flexor','extensor'],Quads:['overall'],Hamstrings:['overall'],Glutes:['overall'],Calves:['gastro','soleus'],Core:['flexion','antiext','rotation']};
+const REGIONS={Chest:['upper','mid','lower'],Shoulders:['front','side','rear'],Back:['lats','mid','upper'],Biceps:['long','short','brachialis'],Triceps:['long','lateral'],Forearms:['flexor','extensor'],Quads:['overall'],Hamstrings:['overall'],Glutes:['overall','medius'],Calves:['gastro','soleus'],Core:['flexion','antiext','rotation']};
 // Complementary movement patterns a muscle needs (hamstrings = a hinge AND a knee-flexion curl, etc.)
 const IDEAL_PATS={Chest:['hpush','iso'],Back:['vpull','hpull'],Shoulders:['vpush','iso'],Biceps:['iso'],Triceps:['hpush','iso'],Forearms:['iso'],Quads:['squat','lunge','iso'],Hamstrings:['hinge','iso'],Glutes:['hinge','iso'],Calves:['iso'],Core:['iso']};
 // Systemic demand of a pattern — drives session ordering (big lifts first)
@@ -538,14 +593,14 @@ const GROUP_ICON={
 function exIcon(g){return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">'+(GROUP_ICON[g]||GROUP_ICON.Core)+'</svg>';}
 
 function regLabel(group,reg){
-  const M={Chest:{upper:'upper chest',mid:'mid chest',lower:'lower chest'},Back:{lats:'lats (vertical pull)',mid:'mid-back',upper:'upper back / rear delts',lower:'lower back'},Shoulders:{front:'front delts',side:'side delts',rear:'rear delts',traps:'traps'},Biceps:{long:'biceps long head',short:'biceps short head',brachialis:'brachialis',overall:'biceps'},Triceps:{long:'triceps long head',lateral:'triceps lateral head'},Forearms:{flexor:'forearm flexors',extensor:'forearm extensors',grip:'grip strength'},Quads:{overall:'quads'},Hamstrings:{overall:'hamstrings'},Glutes:{overall:'glutes'},Calves:{gastro:'gastrocnemius (upper calf)',soleus:'soleus (lower calf)'},Core:{flexion:'ab flexion',antiext:'deep core',rotation:'rotational core'}};
+  const M={Chest:{upper:'upper chest',mid:'mid chest',lower:'lower chest'},Back:{lats:'lats (vertical pull)',mid:'mid-back',upper:'upper back / rear delts',lower:'lower back'},Shoulders:{front:'front delts',side:'side delts',rear:'rear delts',traps:'traps'},Biceps:{long:'biceps long head',short:'biceps short head',brachialis:'brachialis',overall:'biceps'},Triceps:{long:'triceps long head',lateral:'triceps lateral head'},Forearms:{flexor:'forearm flexors',extensor:'forearm extensors',grip:'grip strength'},Quads:{overall:'quads'},Hamstrings:{overall:'hamstrings'},Glutes:{overall:'glutes',medius:'glute medius (abductors)'},Calves:{gastro:'gastrocnemius (upper calf)',soleus:'soleus (lower calf)'},Core:{flexion:'ab flexion',antiext:'deep core',rotation:'rotational core'}};
   return (M[group]&&M[group][reg])||reg;
 }
 function patLabel(p){return {hpush:'horizontal press',vpush:'overhead press',hpull:'row',vpull:'pull-up / pulldown',hinge:'hip hinge',squat:'squat',lunge:'lunge',iso:'isolation'}[p]||p;}
 function exampleFor(group,reg){const e=EXERCISES.find(x=>x.group===group&&x.reg===reg&&x.type===C)||EXERCISES.find(x=>x.group===group&&x.reg===reg);return e?e.name:null;}
 function hashId(s){let h=0;for(let i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))>>>0;return h;}
 
-IL.data={C,I,EXERCISES,EX,GROUPS,META,REGIONS,IDEAL_PATS,PAT_RANK,EQUIP_LOAD,MODES,MODE_ORDER,EQUIP_MODE,PUSH_PATS,PULL_PATS,LOWER_GROUPS,BW_FACTOR,GROUP_ICON,exIcon,regLabel,patLabel,exampleFor,hashId};
+IL.data={C,I,EXERCISES,EX,GROUPS,META,REGIONS,IDEAL_PATS,PAT_RANK,EQUIP_LOAD,MODES,MODE_ORDER,EQUIP_MODE,LONG_LENGTH,UNILATERAL,PUSH_PATS,PULL_PATS,LOWER_GROUPS,BW_FACTOR,GROUP_ICON,exIcon,regLabel,patLabel,exampleFor,hashId};
 
 })();
 
@@ -798,7 +853,7 @@ if(typeof module!=='undefined')module.exports=IL.search;
 var IL=globalThis.IL||(globalThis.IL={});
 if(typeof require==='function'&&!IL.data)require('../data/exercises.js');
 if(typeof require==='function'&&!IL.prog)require('./progression.js');
-const {C,I,EXERCISES,EX,REGIONS,IDEAL_PATS,PAT_RANK,EQUIP_LOAD,regLabel,patLabel,hashId}=IL.data;
+const {C,I,EXERCISES,EX,REGIONS,IDEAL_PATS,PAT_RANK,EQUIP_LOAD,LONG_LENGTH,regLabel,patLabel,hashId}=IL.data;
 const {lastPerf,lastModeFor,nextSets,deloadSets,modeOf}=IL.prog;
 
 // Working sets a movement deserves when you've never logged it: main lifts 4, other compounds 3,
@@ -902,6 +957,8 @@ function pickForGroup(g,per,seed,sessions,hints){
       sc+=e.tier===1?0.6:e.tier===2?0.3:0;
       sc+=(EQUIP_LOAD[e.equip]||0)/20;
       if(recent.indexOf(e.id)>=0)sc-=0.4;
+      // Phase D: a small nudge toward including one lengthened-position (stretch) movement per muscle
+      if(LONG_LENGTH&&LONG_LENGTH.has(e.id)&&!sel.some(x=>LONG_LENGTH.has(x.id)))sc+=0.7;
       if(fillsGap(e,hints))sc+=2;   // Phase C: prefer covering a gap Coach's Notes flagged
       sc+=((hashId(e.id)+seed)%5)/100;
       if(sc>bestScore){bestScore=sc;best=e;}

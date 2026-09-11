@@ -94,8 +94,11 @@ test('frequency nudge: real weekly volume packed into ~one session/week',()=>{
   }
   const a=A.analyze(hist,now);
   assert.ok(a.groupFreq.Chest<=6,'chest hit on ~5 distinct days in the 28d window');
-  const tips=A.buildTips(a,hist,now,0).map(strip);
-  assert.ok(tips.some(x=>/train chest hard but about once a week/i.test(x)),'frequency tip fires: '+JSON.stringify(tips));
+  // Assert the DECISION (a freq-low finding for chest), not the rendered top-5 slice — which competes
+  // with date-dependent tips like a deload prompt and isn't a stable target after the Phase A refactor.
+  const F=A.findings(a,hist,now,0);
+  assert.ok(F.some(f=>f.type==='freq-low'&&f.group==='Chest'),'a low-frequency finding fires for chest');
+  assert.ok(A.renderFinding(F.find(f=>f.type==='freq-low'&&f.group==='Chest')).x.match(/train chest hard but about once a week/i),'and renders the expected copy');
 });
 
 test('deload prompt appears only after a long unbroken training streak',()=>{

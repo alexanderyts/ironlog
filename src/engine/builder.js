@@ -3,7 +3,7 @@
 var IL=globalThis.IL||(globalThis.IL={});
 if(typeof require==='function'&&!IL.data)require('../data/exercises.js');
 if(typeof require==='function'&&!IL.prog)require('./progression.js');
-const {C,I,EXERCISES,EX,REGIONS,IDEAL_PATS,PAT_RANK,EQUIP_LOAD,regLabel,patLabel,hashId}=IL.data;
+const {C,I,EXERCISES,EX,REGIONS,IDEAL_PATS,PAT_RANK,EQUIP_LOAD,LONG_LENGTH,regLabel,patLabel,hashId}=IL.data;
 const {lastPerf,lastModeFor,nextSets,deloadSets,modeOf}=IL.prog;
 
 // Working sets a movement deserves when you've never logged it: main lifts 4, other compounds 3,
@@ -107,6 +107,8 @@ function pickForGroup(g,per,seed,sessions,hints){
       sc+=e.tier===1?0.6:e.tier===2?0.3:0;
       sc+=(EQUIP_LOAD[e.equip]||0)/20;
       if(recent.indexOf(e.id)>=0)sc-=0.4;
+      // Phase D: a small nudge toward including one lengthened-position (stretch) movement per muscle
+      if(LONG_LENGTH&&LONG_LENGTH.has(e.id)&&!sel.some(x=>LONG_LENGTH.has(x.id)))sc+=0.7;
       if(fillsGap(e,hints))sc+=2;   // Phase C: prefer covering a gap Coach's Notes flagged
       sc+=((hashId(e.id)+seed)%5)/100;
       if(sc>bestScore){bestScore=sc;best=e;}

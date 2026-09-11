@@ -2,6 +2,14 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.20.0 — 2026-09-11 · Library expansion (Roadmap v4, Phase D)
+The exercise library grows from 77 to **103**, chosen to give the builder *meaningful* choices, not bulk.
+- **Variation families:** 2–3 close substitutes per region×pattern (e.g. machine incline press, Pendlay row, neutral-grip pulldown, EZ-bar/concentration curls, machine dip) so a rotation swaps *within a family* rather than jumping movement patterns.
+- **Lengthened-position (stretch) movements** — the strongest recent hypertrophy signal — added and tagged `LONG_LENGTH` (incline DB fly, dumbbell/cable pullover, Bayesian cable curl, overhead cable extension, sissy squat, leaning cable lateral…). The builder now gives a small preference to including one stretch-biased option per muscle.
+- **Unilateral options** tagged `UNILATERAL` (single-arm cable row/pushdown, reverse lunge, single-leg curl/hip-thrust/calf raise…) — diversifies rotation families and sets up future per-side volume handling.
+- **True anatomical gaps filled:** a **glute-medius** region (new, low-priority) with Hip Abduction; 45° back extension for the posterior chain; leg-press & single-leg calf raises; Pallof press & reverse crunch for core.
+- No schema break: `RAW`/`META` extended, plus `LONG_LENGTH`/`UNILATERAL` id-sets and the one new `Glutes:medius` region. 4 new tests (77 total); coverage, no-padding and churn guarantees all still hold. (Demo seed data unchanged — it already exercises the reaction system.)
+
 ## v0.19.0 — 2026-09-10 · The builder reacts to Coach's Notes (Roadmap v4, Phase C)
 The headline feature: "Build me a workout" now acts on the same findings the coach reports — without ever overriding continuity, and still with no AI. `analysis.buildHints()` turns findings into builder inputs; the builder reacts four ways:
 - **What to train** — a one-tap **"Coach suggests: …"** nudge on the New-workout screen pre-selects the muscles that are light or unbalanced this week (from `suggestGroups`). Highest-leverage, zero algorithm risk.
