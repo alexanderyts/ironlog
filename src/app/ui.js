@@ -136,7 +136,8 @@ function startWorkoutView(){
       <h2 style="font-size:24px;margin-top:6px">What are you training?</h2>
       <p class="muted" style="margin:7px 0 0">Pick your muscle groups (first pick leads the session) and I'll build a balanced plan — or start from scratch.</p>
     </div>
-    <div class="eyebrow" style="margin:22px 2px 10px">Target muscle groups</div>
+    <div style="height:18px"></div>${coachNudge()}
+    <div class="eyebrow" style="margin:16px 2px 10px">Target muscle groups</div>
     <div class="chips" id="groupPick">${GROUPS.map(g=>`<button class="chip ${pickedGroups.has(g)?'on':''}" data-g="${g}">${g}</button>`).join('')}</div>
     <div class="card settingrow" style="margin:18px 0 0;padding:14px 15px"><div><div style="font-weight:600">Deload / recovery session</div><div class="dim" style="font-size:12.5px">Sore or beat up? Build it ~60% lighter — full range, focus on the stretch. Won't count against your progress or PRs.</div></div><button class="sw ${deloadPicked?'on':''}" id="deloadToggle" aria-label="Deload session"></button></div>
     <div class="spacer"></div><div class="spacer"></div>
@@ -176,8 +177,8 @@ function recentTemplates(){
       <span class="ex-add" style="background:var(--surface-2)">↻</span></button>`).join('');
 }
 const SCHEMA=1;
-function newSession(exIds,deload){const s={id:S.uid(),schema:SCHEMA,date:Date.now(),updatedAt:Date.now(),completed:false,exercises:(exIds||[]).map(id=>B.seedExercise(id,state.sessions,null,U(),deload))};if(deload)s.deload=true;return s;}
-function startSession(exIds,msg,deload){S.setActive(newSession(exIds,deload));todayScreen='active';render();if(msg)toast(msg);}
+function newSession(exIds,deload,volumeBump){const s={id:S.uid(),schema:SCHEMA,date:Date.now(),updatedAt:Date.now(),completed:false,exercises:(exIds||[]).map(id=>B.seedExercise(id,state.sessions,null,U(),deload,volumeBump&&volumeBump.indexOf(id)>=0))};if(deload)s.deload=true;return s;}
+function startSession(exIds,msg,deload,volumeBump){S.setActive(newSession(exIds,deload,volumeBump));todayScreen='active';render();if(msg)toast(msg);}
 // Equipment picker for a logged exercise. Changing it re-scopes progression/PRs to that modality
 // (see modeOf/lastPerf); entered sets are kept (you're relabelling how it was done, not clearing it).
 // The choice is stored only when it differs from the exercise's native equipment, so data stays clean.
@@ -194,11 +195,28 @@ function openModePicker(ei){
 }
 function buildAndStart(fresh){
   const dl=deloadPicked;
-  const p=B.planWorkout([...pickedGroups],state.sessions,null,{fresh});pickedGroups.clear();deloadPicked=false;
+  // Coach's findings feed the builder (Phase C) — but never on a deload (recovery isn't the time to add volume/coverage).
+  const hints=dl?null:A.buildHints(state.sessions,Date.now(),bw());
+  const p=B.planWorkout([...pickedGroups],state.sessions,null,{fresh,hints});pickedGroups.clear();deloadPicked=false;
   let msg='Workout built — adjust anything';
   if(dl)msg='Deload built — lighter loads, focus on the stretch';
-  else if(p.mode==='continue')msg=p.rotation?`Plan continued · swapped ${EX[p.rotation.from].name} → ${EX[p.rotation.to].name} (${p.rotation.why})`:'Plan continued — weights progressed from last time';
-  startSession(p.ids,msg,dl);
+  else if(p.mode==='continue'){
+    const gapAdd=(p.reactions||[]).find(r=>r.type==='gap-add');
+    if(p.rotation&&p.rotation.anchor)msg=`Swapped ${EX[p.rotation.from].name} → ${EX[p.rotation.to].name} — it stalled through a deload`;
+    else if(p.rotation)msg=`Plan continued · swapped ${EX[p.rotation.from].name} → ${EX[p.rotation.to].name} (it stalled)`;
+    else if(gapAdd)msg=`Plan continued · added ${EX[gapAdd.exId].name} — ${gapAdd.why}`;
+    else if(p.volumeBump&&p.volumeBump.length)msg='Plan continued · +1 set where your volume was low';
+    else msg='Plan continued — weights progressed from last time';
+  }
+  startSession(p.ids,msg,dl,p.volumeBump);
+}
+// Reaction 1: a one-tap nudge toward the muscles the coach says are light or unbalanced this week.
+function coachNudge(){
+  const h=A.buildHints(state.sessions,Date.now(),bw());
+  if(!h.suggestGroups.length)return '';
+  return `<button class="btn ghost block" id="coachNudge" data-groups="${h.suggestGroups.join(',')}" style="justify-content:flex-start;gap:10px;margin:0 0 4px;height:auto;padding:12px 14px;border-style:dashed;text-align:left">
+    <span style="color:var(--accent);font-size:16px;flex-shrink:0">✦</span>
+    <span style="min-width:0"><span style="font-weight:700;display:block;font-size:13.5px">Coach suggests: ${esc(h.suggestGroups.join(' & '))}</span><span class="dim" style="font-size:12px">Light or unbalanced lately — tap to select</span></span></button>`;
 }
 
 /* ---------------- session editor (live workout or editing a past one) ---------------- */
@@ -760,6 +778,7 @@ function bind(){
   };
   const gp=$('#groupPick');if(gp)gp.addEventListener('click',e=>{const b=e.target.closest('[data-g]');if(!b)return;const g=b.dataset.g;pickedGroups.has(g)?pickedGroups.delete(g):pickedGroups.add(g);b.classList.toggle('on');
     const bb=$('#buildBtns');if(bb){bb.innerHTML=buildButtons();bindBuild();}});
+  bindClick('#coachNudge',()=>{const el=$('#coachNudge');if(!el)return;pickedGroups=new Set(el.dataset.groups.split(','));render();});
   bindBuild();
   bindClick('#btnBlank',()=>{const dl=deloadPicked;deloadPicked=false;startSession([],dl?'Deload — lighter loads, focus on the stretch':null,dl);});
   bindClick('#deloadToggle',()=>{deloadPicked=!deloadPicked;const b=$('#deloadToggle');if(b)b.classList.toggle('on',deloadPicked);});

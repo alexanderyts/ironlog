@@ -138,6 +138,26 @@ function buildTips(a,sessions,now,bw){
   pick('progression').forEach(f=>t.push(renderFinding(f)));
   return t.slice(0,5);   // may be empty — the caller owns empty-state copy (too little history vs. nothing to flag)
 }
+/* buildHints (Roadmap v4 Phase C): turn findings into inputs the WORKOUT BUILDER can act on — the
+   other half of the "coach and builder read the same scoreboard" idea. Pure data; the builder decides
+   how to use it and never lets a hint override continuity. Reactions the builder derives from this:
+     • gaps → a scoring bonus for exercises that fill a flagged region/pattern gap, and a possible
+       one-exercise ADDITION for a never-trained region (never a swap);
+     • undertrained → +1 set on a continued plan (self-limiting: the finding clears once volume is
+       adequate, so it accumulates toward the productive range then stops);
+     • imbalance/legsLow → suggestGroups for the start-screen "train this next" nudge. */
+function buildHints(sessions,now,bw){
+  const a=analyze(sessions,now);
+  const F=findings(a,sessions,now,bw);
+  const gaps=F.filter(f=>f.type==='region-gap'||f.type==='pattern-gap');
+  const undertrained=F.filter(f=>f.type==='volume-low').map(f=>f.group);
+  const imbalance=F.find(f=>f.type==='balance'&&f.lv==='warn')||null;
+  const legsLow=F.some(f=>f.type==='legs-low');
+  const suggest=new Set(undertrained);
+  if(legsLow)['Quads','Hamstrings','Glutes'].forEach(g=>suggest.add(g));
+  if(imbalance)(imbalance.dir==='push'?['Back']:['Chest','Shoulders']).forEach(g=>suggest.add(g));
+  return {gaps,undertrained,imbalance,legsLow,suggestGroups:[...suggest].slice(0,3)};
+}
 // Best set per exercise BY MODALITY (a Smith and a dumbbell overhead press are separate PRs) by
 // estimated 1RM. `showEst` is true only for compound lifts done with equipment whose 1RM estimate
 // is meaningful (barbell/smith/bodyweight) — cable/machine stacks show load instead of a bogus 1RM.
@@ -166,5 +186,5 @@ function muscleSetCounts(sessions){
   return Object.entries(cnt).sort((a,b)=>b[1]-a[1]);
 }
 
-IL.analysis={analyze,progressionStat,gapPrio,patPrio,findings,findingKey,withStatus,renderFinding,buildTips,personalRecords,weeklyVolumes,muscleSetCounts,MIN_COMPARATIVE_SESSIONS,MIN_COMPARATIVE_DAYS};
+IL.analysis={analyze,progressionStat,gapPrio,patPrio,findings,findingKey,withStatus,renderFinding,buildTips,buildHints,personalRecords,weeklyVolumes,muscleSetCounts,MIN_COMPARATIVE_SESSIONS,MIN_COMPARATIVE_DAYS};
 if(typeof module!=='undefined')module.exports=IL.analysis;

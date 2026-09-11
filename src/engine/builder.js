@@ -13,15 +13,17 @@ function prescribedSets(ex){if(!ex)return 3;if(ex.type===C)return ex.tier===1?4:
 // (see nextSets in progression.js), not a stale copy of last time. The modality the user last
 // performed this exercise with is remembered and carried onto the new instance, and the seed pulls
 // from that modality's history so the prescription is like-for-like.
-function seedExercise(id,sessions,excludeId,unit,deload){
+// extraSet (Phase C volume bump) duplicates the last set once, capped at MAX_SETS_PER_EX. Never on a
+// deload (a deload reduces work) — the caller already excludes deloads from volumeBump.
+function seedExercise(id,sessions,excludeId,unit,deload,extraSet){
   const ex=EX[id];const mode=lastModeFor(sessions,id);
   const inst={id,name:ex?ex.name:id};if(mode)inst.mode=mode;
   const lp=lastPerf(sessions||[],id,{excludeId,mode:mode||undefined});
-  if(lp&&lp.sets.length){
-    const sets=deload?deloadSets(lp.sets,ex,unit):nextSets(lp.sets,ex,unit).sets;
-    inst.sets=sets.map(s=>({w:s.w,r:s.r,done:false}));return inst;}
-  const n=prescribedSets(ex),r=ex?(deload?ex.rr[1]:ex.rr[0]):'';
-  inst.sets=Array.from({length:n},()=>({w:'',r:r,done:false}));return inst;
+  let sets;
+  if(lp&&lp.sets.length)sets=(deload?deloadSets(lp.sets,ex,unit):nextSets(lp.sets,ex,unit).sets).map(s=>({w:s.w,r:s.r,done:false}));
+  else{const n=prescribedSets(ex),r=ex?(deload?ex.rr[1]:ex.rr[0]):'';sets=Array.from({length:n},()=>({w:'',r:r,done:false}));}
+  if(extraSet&&!deload&&sets.length&&sets.length<MAX_SETS_PER_EX){const last=sets[sets.length-1];sets.push({w:last.w,r:last.r,done:false});}
+  inst.sets=sets;return inst;
 }
 // Exercise ids from the most recent completed session that trained this group
 function lastSessionIds(sessions,g){
@@ -63,7 +65,12 @@ function capHeavyAxial(ids){
 //     progressing if you have history, so progressive overload compounds week to week.
 //  2. fill to cover the muscle's regions/heads AND its complementary movement patterns.
 //  3. stop when nothing left adds real coverage — no padding with redundant movements.
-function pickForGroup(g,per,seed,sessions){
+// Does a coach hint flag this exercise as filling a gap for its group? (Phase C reaction 2.)
+function fillsGap(e,hints){
+  if(!hints||!hints.gaps)return false;
+  return hints.gaps.some(gp=>gp.group===e.group&&(gp.reg===e.reg||gp.pat===e.pat));
+}
+function pickForGroup(g,per,seed,sessions,hints){
   sessions=sessions||[];
   const pool=EXERCISES.filter(e=>e.group===g);
   if(!pool.length)return [];
@@ -100,6 +107,7 @@ function pickForGroup(g,per,seed,sessions){
       sc+=e.tier===1?0.6:e.tier===2?0.3:0;
       sc+=(EQUIP_LOAD[e.equip]||0)/20;
       if(recent.indexOf(e.id)>=0)sc-=0.4;
+      if(fillsGap(e,hints))sc+=2;   // Phase C: prefer covering a gap Coach's Notes flagged
       sc+=((hashId(e.id)+seed)%5)/100;
       if(sc>bestScore){bestScore=sc;best=e;}
     });
@@ -109,7 +117,7 @@ function pickForGroup(g,per,seed,sessions){
   return sel;
 }
 // groups: muscle groups in the order the user picked them (first = session focus)
-function buildRecommendation(groups,sessions,seed){
+function buildRecommendation(groups,sessions,seed,hints){
   groups=groups&&groups.length?groups.slice():['Chest','Back'];
   seed=seed==null?Math.floor(Math.random()*997):seed;
   const total=groups.length>=4?7:groups.length===3?7:groups.length===2?6:4;
@@ -120,7 +128,7 @@ function buildRecommendation(groups,sessions,seed){
   for(let i=0;i<rem;i++)per[bySize[i%bySize.length]]++;
   let out=[];
   groups.forEach(g=>{const cap=Math.min(per[g],Math.max((REGIONS[g]||['overall']).length,(IDEAL_PATS[g]||[]).length)+1,EXERCISES.filter(e=>e.group===g).length);
-    out.push(...pickForGroup(g,cap,seed,sessions).map(e=>e.id));});
+    out.push(...pickForGroup(g,cap,seed,sessions,hints).map(e=>e.id));});
   return orderByFatigue(capHeavyAxial(out),groups[0]);
 }
 // Suggest exercises that COMPLEMENT what's already chosen — always from a muscle group already in
@@ -174,7 +182,7 @@ function complementSuggestions(chosenIds,limit){
      • Exposure is measured in WEEKS (exerciseTenure), which normalizes by frequency: 8 sessions at
        2×/week and 4 at 1×/week are both "4 weeks" of the same movement — a high-frequency lifter is
        never churned by a raw session counter (the bug this phase fixes). */
-const CONTINUE_DAYS=10,STALL_MIN_DAYS=14,ANCHOR_STALL_WEEKS=3,ANCHOR_DELOAD_DAYS=21;
+const CONTINUE_DAYS=10,STALL_MIN_DAYS=14,ANCHOR_STALL_WEEKS=3,ANCHOR_DELOAD_DAYS=21,MAX_SESSION_EX=7,MAX_SETS_PER_EX=5;
 const WEEK=7*86400000;
 const {e1rm,nextSets:prescribe}=IL.prog;
 
@@ -238,10 +246,10 @@ function planAnchor(ids,g){
   const c=ids.map(id=>EX[id]).filter(e=>e&&e.group===g&&e.tier===1&&(IDEAL_PATS[g]||[]).indexOf(e.pat)>=0);
   return c.sort((a,b)=>perfPriority(b)-perfPriority(a))[0]||null;
 }
-function replacementFor(exId,planIds,seed){
+function replacementFor(exId,planIds,seed,hints){
   const e=EX[exId];
   const cands=EXERCISES.filter(x=>x.group===e.group&&x.id!==exId&&planIds.indexOf(x.id)<0);
-  return cands.map(x=>{let sc=(x.reg===e.reg?4:0)+(x.pat===e.pat?3:0)+(x.type===e.type?1:0)+(x.tier===1?.5:x.tier===2?.3:0)+((hashId(x.id)+(seed||0))%5)/100;return{x,sc};})
+  return cands.map(x=>{let sc=(x.reg===e.reg?4:0)+(x.pat===e.pat?3:0)+(x.type===e.type?1:0)+(x.tier===1?.5:x.tier===2?.3:0)+(fillsGap(x,hints)?2:0)+((hashId(x.id)+(seed||0))%5)/100;return{x,sc};})
     .sort((a,b)=>b.sc-a.sc)[0]?.x||null;
 }
 // A same-group, same-pattern tier-1 alternative for a stalled anchor (bench→incline, squat→front
@@ -251,14 +259,22 @@ function anchorVariation(exId,planIds,seed){
   const cands=EXERCISES.filter(x=>x.tier===1&&x.group===e.group&&x.pat===e.pat&&x.id!==exId&&planIds.indexOf(x.id)<0);
   return cands.sort((a,b)=>perfPriority(b)-perfPriority(a)||((hashId(a.id)+(seed||0))%5)-((hashId(b.id)+(seed||0))%5))[0]||null;
 }
-// What to train for these groups today. Returns {ids, mode:'continue'|'fresh', plan, rotation,
-// streak}. opts.fresh forces a fresh build (the "Start fresh" escape hatch).
+// An exercise id to cover a flagged gap that isn't already in the plan (Phase C reaction 4).
+function gapFillExercise(gp,ids){
+  if(gp.type==='pattern-gap'&&gp.exId&&ids.indexOf(gp.exId)<0)return gp.exId;
+  const cands=EXERCISES.filter(x=>x.group===gp.group&&ids.indexOf(x.id)<0&&(gp.reg?x.reg===gp.reg:x.pat===gp.pat));
+  return cands.sort((a,b)=>(a.tier-b.tier)||(perfPriority(b)-perfPriority(a)))[0]?.id||null;
+}
+// What to train for these groups today. Returns {ids, mode:'continue'|'fresh', plan, rotation, streak,
+// reactions, volumeBump}. opts.fresh forces a fresh build; opts.hints (from analysis.buildHints) lets
+// the builder REACT to Coach's findings — always additively/by scoring, never overriding continuity.
 function planWorkout(groups,sessions,seed,opts){
   opts=opts||{};sessions=sessions||[];
   groups=groups&&groups.length?groups.slice():['Chest','Back'];
   seed=seed==null?Math.floor(Math.random()*997):seed;
+  const hints=opts.hints,reactions=[],volumeBump=[];
   const plan=opts.fresh?null:findPlan(groups,sessions,opts.now);
-  if(!plan)return{ids:buildRecommendation(groups,sessions,seed),mode:'fresh',plan:null,rotation:null,streak:0};
+  if(!plan)return{ids:buildRecommendation(groups,sessions,seed,hints),mode:'fresh',plan:null,rotation:null,streak:0,reactions,volumeBump};
   let ids=plan.exercises.map(e=>e.id).filter(id=>EX[id]);
   const modeById={};plan.exercises.forEach(e=>{if(EX[e.id])modeById[e.id]=modeOf(e);});
   const anchors=new Set(groups.map(g=>planAnchor(ids,g)).filter(Boolean).map(e=>e.id));
@@ -274,17 +290,32 @@ function planWorkout(groups,sessions,seed,opts){
     }
   }
   // 2. Otherwise, rotate at most one STALLED accessory (the one in the plan longest). A progressing
-  //    accessory is never touched — continuity is the default.
+  //    accessory is never touched — continuity is the default. Prefer a gap-filling replacement.
   if(!rotation){
     const cands=ids.filter(id=>!anchors.has(id)).map(id=>({id,sessions:exerciseTenure(sessions,id).sessions,stalled:isStalled(sessions,id,modeById[id])}))
       .filter(c=>c.stalled).sort((a,b)=>b.sessions-a.sessions);
-    if(cands.length){const c=cands[0],to=replacementFor(c.id,ids,seed);
+    if(cands.length){const c=cands[0],to=replacementFor(c.id,ids,seed,hints);
       if(to){ids=ids.map(id=>id===c.id?to.id:id);rotation={from:c.id,to:to.id,why:'stalled',streak:c.sessions};}}
   }
+  // 3. Gap-ADD (never a swap): one exercise for a flagged region/pattern the plan doesn't cover, only
+  //    if there's room and we didn't already rotate. Self-limiting — once logged, the gap clears.
+  if(!rotation&&hints&&hints.gaps&&ids.length<MAX_SESSION_EX){
+    const covered=gp=>ids.some(id=>EX[id]&&EX[id].group===gp.group&&(gp.reg?EX[id].reg===gp.reg:EX[id].pat===gp.pat));
+    const gp=hints.gaps.filter(g=>groups.indexOf(g.group)>=0&&!covered(g)).sort((a,b)=>b.prio-a.prio)[0];
+    if(gp){const add=gapFillExercise(gp,ids);if(add&&EX[add]){ids.push(add);reactions.push({type:'gap-add',exId:add,group:gp.group,why:'covers '+(gp.reg?regLabel(gp.group,gp.reg):patLabel(gp.pat))});}}
+  }
+  // 4. Volume bump (+1 set) for an undertrained group — one exercise each, self-limiting (the finding
+  //    clears once weekly volume is adequate). seedExercise enforces the per-exercise set ceiling.
+  if(hints&&hints.undertrained){
+    hints.undertrained.forEach(g=>{if(groups.indexOf(g)<0)return;
+      const target=ids.find(id=>EX[id]&&EX[id].group===g&&anchors.has(id))||ids.find(id=>EX[id]&&EX[id].group===g);
+      if(target&&volumeBump.indexOf(target)<0){volumeBump.push(target);reactions.push({type:'volume',exId:target,group:g,why:g.toLowerCase()+' volume is low — added a set'});}
+    });
+  }
   const streak=Math.min(...ids.filter(id=>!rotation||id!==rotation.to).map(id=>exerciseStreak(sessions,id)));
-  return{ids:orderByFatigue(capHeavyAxial(ids),groups[0]),mode:'continue',plan,rotation,streak:isFinite(streak)?streak:0};
+  return{ids:orderByFatigue(capHeavyAxial(ids),groups[0]),mode:'continue',plan,rotation,streak:isFinite(streak)?streak:0,reactions,volumeBump};
 }
 
 IL.builder={prescribedSets,seedExercise,lastSessionIds,perfPriority,orderByFatigue,isHeavyAxial,capHeavyAxial,pickForGroup,buildRecommendation,complementSuggestions,
-  CONTINUE_DAYS,STALL_MIN_DAYS,ANCHOR_STALL_WEEKS,ANCHOR_DELOAD_DAYS,findPlan,exerciseTenure,exerciseStreak,isStalled,isProgressing,recentDeload,planAnchor,replacementFor,anchorVariation,planWorkout};
+  CONTINUE_DAYS,STALL_MIN_DAYS,ANCHOR_STALL_WEEKS,ANCHOR_DELOAD_DAYS,MAX_SESSION_EX,MAX_SETS_PER_EX,findPlan,exerciseTenure,exerciseStreak,isStalled,isProgressing,recentDeload,planAnchor,replacementFor,anchorVariation,fillsGap,gapFillExercise,planWorkout};
 if(typeof module!=='undefined')module.exports=IL.builder;

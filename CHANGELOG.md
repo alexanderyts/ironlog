@@ -2,6 +2,14 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.19.0 — 2026-09-10 · The builder reacts to Coach's Notes (Roadmap v4, Phase C)
+The headline feature: "Build me a workout" now acts on the same findings the coach reports — without ever overriding continuity, and still with no AI. `analysis.buildHints()` turns findings into builder inputs; the builder reacts four ways:
+- **What to train** — a one-tap **"Coach suggests: …"** nudge on the New-workout screen pre-selects the muscles that are light or unbalanced this week (from `suggestGroups`). Highest-leverage, zero algorithm risk.
+- **Which exercise** — candidates that fill a flagged region/pattern gap get a scoring bonus in `pickForGroup` (fresh builds) and are preferred as rotation replacements (`replacementFor`). Fixed when a slot opens, never by reshuffling.
+- **How much** — an undertrained muscle in a continued plan earns **+1 set** on one exercise (`volumeBump`), capped at 5 sets/exercise. Self-limiting: the finding clears once weekly volume is adequate, so it accumulates toward the productive range then stops. Never on a deload.
+- **Add, don't swap** — a never-covered flagged region gets **one added exercise** if the session is under 7 and nothing else rotated; also self-limiting (once logged, the gap is covered).
+- Every reaction carries a plain-English reason, surfaced in the build toast ("added Incline Barbell Press — covers upper chest"). Reactions never trigger a rotation and are deterministic across seeds (churn stays fixed from Phase B). 5 new tests (73 total).
+
 ## v0.18.0 — 2026-09-10 · Rotation & progression policy (Roadmap v4, Phase B)
 The builder's continuity rules now match the goal — *progress, not variety* — with three research-backed fixes to the mesocycle core (builder.js):
 - **Staleness is measured in weeks, not session count.** The old `ROTATE_AFTER=5 sessions` told a 3×/week lifter "time for a change" in under two weeks. Now exposure is tracked by calendar span (`exerciseTenure`), which normalizes by frequency — 8 sessions at 2×/week and 4 at 1×/week are both "4 weeks" of the same movement.
