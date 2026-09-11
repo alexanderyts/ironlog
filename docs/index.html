@@ -2,12 +2,13 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-7Rht2IL4v38nbSvMw0CpZ0Oswm8zVagl9X9L0sFlxJQ=' 'sha256-EkxoJS/XfnHAg4Tv4KlM2HO15VAwse2HF4NYsW84Gss='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-gdoDTbqegehD3WDMXU/o3k420mjAstxJbtyfGJDAEZA=' 'sha256-WPBob/luB2k1aalTWXpi6zk3SrIbj8GlZV7AlFdG7oA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Ironlog</title>
 <meta name="description" content="Ironlog — a smart, fast workout tracker.">
-<meta name="theme-color" content="#0d1219">
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#eef1f5">
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0d1219">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -170,20 +171,20 @@ html.standalone .tabbar{bottom:auto;top:calc(var(--screen-h,100vh) - var(--tab-h
 .log-ex-head{display:flex;align-items:center;gap:11px;padding:13px 15px 11px}
 .log-ex-head .ex-ic{width:38px;height:38px}
 .setgrid{padding:0 12px 6px}
-.set-hdr,.set-row{display:grid;grid-template-columns:34px 1fr 1fr 44px;gap:9px;align-items:center}
+.set-hdr,.set-row{display:grid;grid-template-columns:30px 1fr 1fr 40px;gap:8px;align-items:center}
 .set-hdr{padding:2px 4px 8px;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
 .set-hdr div:nth-child(2),.set-hdr div:nth-child(3){text-align:center}
 .set-row{margin-bottom:9px}
-.set-no{width:34px;height:44px;border-radius:10px;background:var(--surface-2);display:grid;place-items:center;font-weight:700;color:var(--ink-2);font-family:"IBM Plex Mono";font-size:14px}
+.set-no{width:30px;height:44px;border-radius:10px;background:var(--surface-2);display:grid;place-items:center;font-weight:700;color:var(--ink-2);font-family:"IBM Plex Mono";font-size:14px}
 .set-row.done .set-no{background:var(--good-soft);color:var(--good)}
 .set-no.warm,.set-row.done .set-no.warm{background:color-mix(in srgb,var(--warn) 20%,transparent);color:var(--warn)}
 .numwrap{display:flex;align-items:center;background:var(--surface-2);border:1.5px solid transparent;border-radius:11px;height:48px;overflow:hidden}
 .numwrap:focus-within{border-color:var(--accent);background:var(--surface)}
-.numwrap button{width:38px;height:100%;font-size:20px;color:var(--ink-3);font-weight:500}
+.numwrap button{width:28px;height:100%;font-size:20px;color:var(--ink-3);font-weight:500}
 .numwrap button:active{color:var(--accent)}
-.numwrap input{flex:1;min-width:0;text-align:center;border:none;background:none;height:100%;font-family:"IBM Plex Mono";font-size:18px;font-weight:600;color:var(--ink)}
+.numwrap input{flex:1;min-width:0;text-align:center;border:none;background:none;height:100%;font-family:"IBM Plex Mono";font-size:16px;font-weight:600;color:var(--ink)}
 .numwrap input:focus{outline:none}
-.set-check{width:44px;height:44px;border-radius:11px;border:1.5px solid var(--line);display:grid;place-items:center;color:var(--ink-3)}
+.set-check{width:40px;height:44px;border-radius:11px;border:1.5px solid var(--line);display:grid;place-items:center;color:var(--ink-3)}
 .set-check.on{background:var(--good);border-color:transparent;color:#fff}
 .set-actions{display:flex;gap:8px;padding:4px 3px 12px;flex-wrap:wrap}
 .linkbtn{font-size:13px;font-weight:600;color:var(--accent);padding:7px 4px;display:inline-flex;align-items:center;gap:5px}
@@ -365,8 +366,8 @@ html.standalone .tabbar{bottom:auto;top:calc(var(--screen-h,100vh) - var(--tab-h
 </div>
 
 <script>
-/* Ironlog v0.29.0 · site build */
-var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.29.0",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
+/* Ironlog v0.30.0 · site build */
+var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.30.0",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
 
 /* ===== src/data/exercises.js ===== */
 (function(){'use strict';
@@ -923,6 +924,7 @@ function lastSessionIds(sessions,g){
 // How much an exercise "deserves" to go early: biggest / most-loadable compounds while fresh,
 // isolation last, foundational before secondary, and the focus muscle's key lift leads.
 function perfPriority(ex,focus){
+  if(!ex)return -1;                    // unknown id (retired/imported) sorts last, never crashes ordering
   let p=(PAT_RANK[ex.pat]||1)*16;      // squat/hinge 96 · press/pull 64 · lunge 48 · iso 16
   if(ex.type===C)p+=15;
   p+=EQUIP_LOAD[ex.equip]||0;
@@ -2723,6 +2725,7 @@ function showSummary(sm){
 function finishWorkout(){
   const s=state.active;
   confirmUnchecked(s,()=>{
+    stopRest();
     cleanSets(s);
     if(!s.exercises.length){toast('Log at least one set first');return;}
     const sm=workoutSummary(s);
@@ -2791,7 +2794,7 @@ function bind(){
   bindClick('#btnFinish',finishWorkout);
   bindClick('#btnSaveEdit',finishEdit);
   bindClick('#btnDiscard',()=>showConfirm('Discard workout?','Nothing from this session will be saved.','Discard',()=>{
-    const copy=state.active;state.active=null;S.persistActive();todayScreen='home';render();
+    stopRest();const copy=state.active;state.active=null;S.persistActive();todayScreen='home';render();
     toast('Workout discarded',{label:'Undo',fn:()=>{S.setActive(copy);todayScreen='active';render();}});}));
   const ll=$('#logList');if(ll)bindLog(ll);
   // history
@@ -2800,14 +2803,14 @@ function bind(){
   v.querySelectorAll('[data-mon]').forEach(b=>b.addEventListener('click',()=>{calMonth+=+b.dataset.mon;selDay=null;render();}));
   // [data-sess] is handled by the delegated #view listener above (fires from History AND the Home card).
   // progress: PR rows open the lift's detail (with its progress trend)
-  const prc=$('#prCard');if(prc)prc.addEventListener('click',e=>{const r=e.target.closest('[data-openex]');if(r)openSheet(EX[r.dataset.openex].name,exerciseDetail(r.dataset.openex));});
+  const prc=$('#prCard');if(prc)prc.addEventListener('click',e=>{const r=e.target.closest('[data-openex]');if(r&&EX[r.dataset.openex])openSheet(EX[r.dataset.openex].name,exerciseDetail(r.dataset.openex));});
   // library
   const ls=$('#libSearch');if(ls)ls.addEventListener('input',()=>{libQuery=ls.value;const pos=ls.selectionStart;render();const n=$('#libSearch');if(n){n.focus();n.setSelectionRange(pos,pos);}});
   v.querySelectorAll('[data-lg]').forEach(b=>b.addEventListener('click',()=>{libGroup=b.dataset.lg;render();}));
   // library rows: the "+" adds straight to today's workout; the rest of the row opens details
   v.querySelectorAll('[data-open]').forEach(b=>b.addEventListener('click',e=>{
     if(e.target.closest('.ex-add')){addExerciseToCur(b.dataset.open);return;}
-    openSheet(EX[b.dataset.open].name,exerciseDetail(b.dataset.open));}));
+    if(EX[b.dataset.open])openSheet(EX[b.dataset.open].name,exerciseDetail(b.dataset.open));}));
 }
 function bindLog(root){
   root.addEventListener('click',e=>{
@@ -2827,7 +2830,7 @@ function bindLog(root){
     const kw=e.target.closest('[data-keepw]');if(kw){const ei=+kw.dataset.keepw;const ex=t.exercises[ei];const lp=P.lastPerf(state.sessions,ex.id,{beforeTs:t.date,excludeId:t.id,mode:modeOf(ex)});
       if(lp)ex.sets=lp.sets.map(s=>({w:s.w,r:s.r,done:false}));persistCur();render();toast('Using last time’s weights');return;}
     const mc=e.target.closest('[data-mode]');if(mc){openModePicker(+mc.dataset.mode);return;}
-    const oe=e.target.closest('[data-openex]');if(oe){openSheet(EX[oe.dataset.openex].name,exerciseDetail(oe.dataset.openex));return;}
+    const oe=e.target.closest('[data-openex]');if(oe){if(EX[oe.dataset.openex])openSheet(EX[oe.dataset.openex].name,exerciseDetail(oe.dataset.openex));return;}
   });
   root.addEventListener('input',e=>{const inp=e.target.closest('input[data-f]');if(!inp)return;const t=cur();if(!t)return;
     const ei=+inp.dataset.ei,si=+inp.dataset.s,f=inp.dataset.f;const val=P.parseWeightInput(inp.value);
@@ -2880,7 +2883,12 @@ function boot(){
   $('#sheetBody').addEventListener('click',e=>{const a=e.target.closest('[data-addto]');if(a){addExerciseToCur(a.dataset.addto);closeSheet();}});
   $('#btnSettings').addEventListener('click',openSettings);
   $('#restSkip').addEventListener('click',stopRest);
-  $('#restAdd').addEventListener('click',()=>{if(!restState)return;restState.end+=15000;restState.total+=15;$('#restbar').classList.remove('done');if(!restInt)restInt=setInterval(tickRest,300);tickRest();});
+  $('#restAdd').addEventListener('click',()=>{
+    if(!restState){   // during the "Go!" (done) grace state, +15s starts a fresh short rest instead of no-op
+      if($('#restbar').classList.contains('done')){restState={total:15,end:Date.now()+15000};$('#restbar').classList.remove('done');$('#restLbl').textContent='Rest';}
+      else return;
+    }else{restState.end+=15000;restState.total+=15;$('#restbar').classList.remove('done');}
+    if(!restInt)restInt=setInterval(tickRest,300);tickRest();});
   document.addEventListener('pointerdown',unlockAudio);
   $('#view').addEventListener('click',e=>{if(e.target.closest('[data-vol-info]'))toast('Volume = weight × reps, added up across your working sets');});
   // re-render on cloud changes, but never yank focus from someone typing a weight
@@ -2900,6 +2908,13 @@ try{boot();}catch(err){try{console.error('boot failed',err);}catch(e){}}
 })();
 
 </script>
-<script>if('serviceWorker' in navigator&&location.hostname!=='localhost'){navigator.serviceWorker.register('./sw.js').then(reg=>{reg.addEventListener('updatefound',()=>{const nw=reg.installing;if(!nw)return;nw.addEventListener('statechange',()=>{if(nw.state==='installed'&&navigator.serviceWorker.controller&&IL.ui)IL.ui.toast('Update ready',{label:'Reload',fn:()=>location.reload()});});});}).catch(()=>{});}</script>
+<script>if('serviceWorker' in navigator&&location.hostname!=='localhost'){navigator.serviceWorker.register('./sw.js').then(reg=>{
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')reg.update().catch(()=>{});});
+  reg.addEventListener('updatefound',()=>{const nw=reg.installing;if(!nw)return;nw.addEventListener('statechange',()=>{
+    if(nw.state==='installed'&&navigator.serviceWorker.controller){
+      try{const ch=new MessageChannel();ch.port1.onmessage=ev=>{if(ev.data&&ev.data.v&&ev.data.v!==(IL.config&&IL.config.VERSION)&&IL.ui)IL.ui.toast('Update ready',{label:'Reload',fn:()=>location.reload()});};nw.postMessage('version',[ch.port2]);}
+      catch(e){if(IL.ui)IL.ui.toast('Update ready',{label:'Reload',fn:()=>location.reload()});}
+    }});});
+}).catch(()=>{});}</script>
 </body>
 </html>

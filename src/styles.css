@@ -149,20 +149,20 @@ html.standalone .tabbar{bottom:auto;top:calc(var(--screen-h,100vh) - var(--tab-h
 .log-ex-head{display:flex;align-items:center;gap:11px;padding:13px 15px 11px}
 .log-ex-head .ex-ic{width:38px;height:38px}
 .setgrid{padding:0 12px 6px}
-.set-hdr,.set-row{display:grid;grid-template-columns:34px 1fr 1fr 44px;gap:9px;align-items:center}
+.set-hdr,.set-row{display:grid;grid-template-columns:30px 1fr 1fr 40px;gap:8px;align-items:center}
 .set-hdr{padding:2px 4px 8px;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
 .set-hdr div:nth-child(2),.set-hdr div:nth-child(3){text-align:center}
 .set-row{margin-bottom:9px}
-.set-no{width:34px;height:44px;border-radius:10px;background:var(--surface-2);display:grid;place-items:center;font-weight:700;color:var(--ink-2);font-family:"IBM Plex Mono";font-size:14px}
+.set-no{width:30px;height:44px;border-radius:10px;background:var(--surface-2);display:grid;place-items:center;font-weight:700;color:var(--ink-2);font-family:"IBM Plex Mono";font-size:14px}
 .set-row.done .set-no{background:var(--good-soft);color:var(--good)}
 .set-no.warm,.set-row.done .set-no.warm{background:color-mix(in srgb,var(--warn) 20%,transparent);color:var(--warn)}
 .numwrap{display:flex;align-items:center;background:var(--surface-2);border:1.5px solid transparent;border-radius:11px;height:48px;overflow:hidden}
 .numwrap:focus-within{border-color:var(--accent);background:var(--surface)}
-.numwrap button{width:38px;height:100%;font-size:20px;color:var(--ink-3);font-weight:500}
+.numwrap button{width:28px;height:100%;font-size:20px;color:var(--ink-3);font-weight:500}
 .numwrap button:active{color:var(--accent)}
-.numwrap input{flex:1;min-width:0;text-align:center;border:none;background:none;height:100%;font-family:"IBM Plex Mono";font-size:18px;font-weight:600;color:var(--ink)}
+.numwrap input{flex:1;min-width:0;text-align:center;border:none;background:none;height:100%;font-family:"IBM Plex Mono";font-size:16px;font-weight:600;color:var(--ink)}
 .numwrap input:focus{outline:none}
-.set-check{width:44px;height:44px;border-radius:11px;border:1.5px solid var(--line);display:grid;place-items:center;color:var(--ink-3)}
+.set-check{width:40px;height:44px;border-radius:11px;border:1.5px solid var(--line);display:grid;place-items:center;color:var(--ink-3)}
 .set-check.on{background:var(--good);border-color:transparent;color:#fff}
 .set-actions{display:flex;gap:8px;padding:4px 3px 12px;flex-wrap:wrap}
 .linkbtn{font-size:13px;font-weight:600;color:var(--accent);padding:7px 4px;display:inline-flex;align-items:center;gap:5px}

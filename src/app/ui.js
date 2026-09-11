@@ -791,6 +791,7 @@ function showSummary(sm){
 function finishWorkout(){
   const s=state.active;
   confirmUnchecked(s,()=>{
+    stopRest();
     cleanSets(s);
     if(!s.exercises.length){toast('Log at least one set first');return;}
     const sm=workoutSummary(s);
@@ -859,7 +860,7 @@ function bind(){
   bindClick('#btnFinish',finishWorkout);
   bindClick('#btnSaveEdit',finishEdit);
   bindClick('#btnDiscard',()=>showConfirm('Discard workout?','Nothing from this session will be saved.','Discard',()=>{
-    const copy=state.active;state.active=null;S.persistActive();todayScreen='home';render();
+    stopRest();const copy=state.active;state.active=null;S.persistActive();todayScreen='home';render();
     toast('Workout discarded',{label:'Undo',fn:()=>{S.setActive(copy);todayScreen='active';render();}});}));
   const ll=$('#logList');if(ll)bindLog(ll);
   // history
@@ -868,14 +869,14 @@ function bind(){
   v.querySelectorAll('[data-mon]').forEach(b=>b.addEventListener('click',()=>{calMonth+=+b.dataset.mon;selDay=null;render();}));
   // [data-sess] is handled by the delegated #view listener above (fires from History AND the Home card).
   // progress: PR rows open the lift's detail (with its progress trend)
-  const prc=$('#prCard');if(prc)prc.addEventListener('click',e=>{const r=e.target.closest('[data-openex]');if(r)openSheet(EX[r.dataset.openex].name,exerciseDetail(r.dataset.openex));});
+  const prc=$('#prCard');if(prc)prc.addEventListener('click',e=>{const r=e.target.closest('[data-openex]');if(r&&EX[r.dataset.openex])openSheet(EX[r.dataset.openex].name,exerciseDetail(r.dataset.openex));});
   // library
   const ls=$('#libSearch');if(ls)ls.addEventListener('input',()=>{libQuery=ls.value;const pos=ls.selectionStart;render();const n=$('#libSearch');if(n){n.focus();n.setSelectionRange(pos,pos);}});
   v.querySelectorAll('[data-lg]').forEach(b=>b.addEventListener('click',()=>{libGroup=b.dataset.lg;render();}));
   // library rows: the "+" adds straight to today's workout; the rest of the row opens details
   v.querySelectorAll('[data-open]').forEach(b=>b.addEventListener('click',e=>{
     if(e.target.closest('.ex-add')){addExerciseToCur(b.dataset.open);return;}
-    openSheet(EX[b.dataset.open].name,exerciseDetail(b.dataset.open));}));
+    if(EX[b.dataset.open])openSheet(EX[b.dataset.open].name,exerciseDetail(b.dataset.open));}));
 }
 function bindLog(root){
   root.addEventListener('click',e=>{
@@ -895,7 +896,7 @@ function bindLog(root){
     const kw=e.target.closest('[data-keepw]');if(kw){const ei=+kw.dataset.keepw;const ex=t.exercises[ei];const lp=P.lastPerf(state.sessions,ex.id,{beforeTs:t.date,excludeId:t.id,mode:modeOf(ex)});
       if(lp)ex.sets=lp.sets.map(s=>({w:s.w,r:s.r,done:false}));persistCur();render();toast('Using last time’s weights');return;}
     const mc=e.target.closest('[data-mode]');if(mc){openModePicker(+mc.dataset.mode);return;}
-    const oe=e.target.closest('[data-openex]');if(oe){openSheet(EX[oe.dataset.openex].name,exerciseDetail(oe.dataset.openex));return;}
+    const oe=e.target.closest('[data-openex]');if(oe){if(EX[oe.dataset.openex])openSheet(EX[oe.dataset.openex].name,exerciseDetail(oe.dataset.openex));return;}
   });
   root.addEventListener('input',e=>{const inp=e.target.closest('input[data-f]');if(!inp)return;const t=cur();if(!t)return;
     const ei=+inp.dataset.ei,si=+inp.dataset.s,f=inp.dataset.f;const val=P.parseWeightInput(inp.value);
@@ -948,7 +949,12 @@ function boot(){
   $('#sheetBody').addEventListener('click',e=>{const a=e.target.closest('[data-addto]');if(a){addExerciseToCur(a.dataset.addto);closeSheet();}});
   $('#btnSettings').addEventListener('click',openSettings);
   $('#restSkip').addEventListener('click',stopRest);
-  $('#restAdd').addEventListener('click',()=>{if(!restState)return;restState.end+=15000;restState.total+=15;$('#restbar').classList.remove('done');if(!restInt)restInt=setInterval(tickRest,300);tickRest();});
+  $('#restAdd').addEventListener('click',()=>{
+    if(!restState){   // during the "Go!" (done) grace state, +15s starts a fresh short rest instead of no-op
+      if($('#restbar').classList.contains('done')){restState={total:15,end:Date.now()+15000};$('#restbar').classList.remove('done');$('#restLbl').textContent='Rest';}
+      else return;
+    }else{restState.end+=15000;restState.total+=15;$('#restbar').classList.remove('done');}
+    if(!restInt)restInt=setInterval(tickRest,300);tickRest();});
   document.addEventListener('pointerdown',unlockAudio);
   $('#view').addEventListener('click',e=>{if(e.target.closest('[data-vol-info]'))toast('Volume = weight × reps, added up across your working sets');});
   // re-render on cloud changes, but never yank focus from someone typing a weight

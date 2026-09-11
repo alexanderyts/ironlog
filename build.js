@@ -25,7 +25,18 @@ const artifact=`<title>Ironlog</title>\n${FONTS}\n<style>\n${css}\n</style>\n${b
 const demo=`<title>Ironlog Demo</title>\n${FONTS}\n<style>\n${css}\n</style>\n${body}\n<script>\n${bundle('artifact',true)}\n</script>\n`;
 
 // --- Standalone site ---
-const SW_REG=`if('serviceWorker' in navigator&&location.hostname!=='localhost'){navigator.serviceWorker.register('./sw.js').then(reg=>{reg.addEventListener('updatefound',()=>{const nw=reg.installing;if(!nw)return;nw.addEventListener('statechange',()=>{if(nw.state==='installed'&&navigator.serviceWorker.controller&&IL.ui)IL.ui.toast('Update ready',{label:'Reload',fn:()=>location.reload()});});});}).catch(()=>{});}`;
+// Register the SW. On an update, only offer Reload if the waiting worker's version actually differs
+// from the running page's (network-first means the page HTML is often already current on the deploy
+// that also updates the SW — no need to nag). Also re-check for updates when the app is resumed, so
+// a long-suspended iOS PWA doesn't keep running stale code.
+const SW_REG=`if('serviceWorker' in navigator&&location.hostname!=='localhost'){navigator.serviceWorker.register('./sw.js').then(reg=>{
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')reg.update().catch(()=>{});});
+  reg.addEventListener('updatefound',()=>{const nw=reg.installing;if(!nw)return;nw.addEventListener('statechange',()=>{
+    if(nw.state==='installed'&&navigator.serviceWorker.controller){
+      try{const ch=new MessageChannel();ch.port1.onmessage=ev=>{if(ev.data&&ev.data.v&&ev.data.v!==(IL.config&&IL.config.VERSION)&&IL.ui)IL.ui.toast('Update ready',{label:'Reload',fn:()=>location.reload()});};nw.postMessage('version',[ch.port2]);}
+      catch(e){if(IL.ui)IL.ui.toast('Update ready',{label:'Reload',fn:()=>location.reload()});}
+    }});});
+}).catch(()=>{});}`;
 // Inline-script contents, hashed EXACTLY as they appear between the <script> tags so a strict CSP
 // (no 'unsafe-inline' for scripts) still lets the app's own code run while blocking any injected
 // inline handler (onerror=, onload=, …) — the primary XSS payload for rendered untrusted data.
@@ -53,7 +64,8 @@ const site=`<!doctype html>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Ironlog</title>
 <meta name="description" content="Ironlog — a smart, fast workout tracker.">
-<meta name="theme-color" content="#0d1219">
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#eef1f5">
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0d1219">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -83,6 +95,9 @@ const sw=`// Ironlog service worker — app shell cached for offline use; versio
 // an installed PWA could get stuck on an old version indefinitely once anything was cached, with no
 // way to notice a new deploy without the user manually clearing site data — this fixes that for good.
 const V='ironlog-${pkg.version}';
+const VER='${pkg.version}';
+// Report this worker's version so the page can decide whether an "Update ready" toast is warranted.
+self.addEventListener('message',e=>{if(e.data==='version'&&e.ports&&e.ports[0])e.ports[0].postMessage({v:VER});});
 const ASSETS=['./','./index.html','./manifest.webmanifest','./icon-192.png','./icon-512.png','./apple-touch-icon.png'];
 self.addEventListener('install',e=>{e.waitUntil(caches.open(V).then(c=>c.addAll(ASSETS)).then(()=>self.skipWaiting()));});
 self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==V).map(k=>caches.delete(k)))).then(()=>self.clients.claim()));});

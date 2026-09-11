@@ -2,6 +2,14 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.30.0 — 2026-09-11 · Robustness & polish (Roadmap v5, Phase 8 — final)
+- **Weights fit on small phones.** A number like "102.5" no longer gets clipped in the weight box on a 375-px screen (verified). (styles.css: tighter set-row columns, 28-px steppers, 16-px input.)
+- **No crash from a retired exercise.** A workout or import that references an exercise id the app no longer knows can no longer crash Auto-order or the exercise-info tap. (builder.js `perfPriority` guards unknown ids; ui.js guards the detail taps.)
+- **The status bar tints correctly in light mode** (was always dark). (build.js: light/dark `theme-color` metas.)
+- **The rest timer stops when you finish or discard a workout** (it used to keep counting), and **+15s during the "Go!" state now starts a fresh rest** instead of doing nothing. (ui.js.)
+- **Fewer needless "Update ready" nudges**, and the app checks for a new version when you reopen it (so a long-suspended install doesn't run stale code). (build.js service-worker registration.)
+- The Home "Last session" card fix from earlier this pass is confirmed working. 107 tests.
+
 ## v0.29.0 — 2026-09-11 · Multi-device sync fixes (Roadmap v5, Phase 7)
 For people who use Ironlog on more than one device (Dropbox sync or the cloud artifact).
 - **A workout you finished on one device no longer comes back as "Resume" on another.** Finishing now records *when* you ended it, and that "ended" moment is compared against the other device's open workout — the more recent action wins, so a stale open session can't resurrect a completed one. (store.js `activeClearedAt`; sync.js pure `resolveActive`.)

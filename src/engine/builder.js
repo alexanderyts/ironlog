@@ -36,6 +36,7 @@ function lastSessionIds(sessions,g){
 // How much an exercise "deserves" to go early: biggest / most-loadable compounds while fresh,
 // isolation last, foundational before secondary, and the focus muscle's key lift leads.
 function perfPriority(ex,focus){
+  if(!ex)return -1;                    // unknown id (retired/imported) sorts last, never crashes ordering
   let p=(PAT_RANK[ex.pat]||1)*16;      // squat/hinge 96 · press/pull 64 · lunge 48 · iso 16
   if(ex.type===C)p+=15;
   p+=EQUIP_LOAD[ex.equip]||0;
