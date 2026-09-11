@@ -2,6 +2,12 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.26.0 — 2026-09-11 · The builder stops "fixing" what's working (Roadmap v5, Phase 4)
+- **The builder no longer swaps out a lift right after you add weight to it.** When you bump the weight, you drop reps back down — which briefly lowers the estimated 1-rep-max, and the old stall check misread that dip as a plateau and could rotate the lift away. Now a heavier top-set weight always counts as progress, so a working lift is left alone. (builder.js `isStalled`: compares top weight, bounded to the current training run.)
+- **Coming back after time off no longer looks like a stall.** The stall check now only considers your current unbroken run of an exercise, not heavier sessions from months ago. (builder.js `exerciseTenure` ends a run at a long gap; `recentPerfs` is bounded to it.)
+- **An anchor lift is only swapped after a deload of that same muscle** — a legs-only deload no longer unlocks a bench-press swap. (builder.js `recentDeload` checks which muscle was deloaded.)
+- Net effect: fewer rotations, more continuity — the intended design. 3 new adversarial tests (102).
+
 ## v0.25.0 — 2026-09-11 · Deload actually deloads (Roadmap v5, Phase 3)
 Fixes the reported bug where turning on "Deload" still built a normal, progressed workout. Browser-verified.
 - **A deload now continues your exact plan, just lighter.** Before, the deload toggle never reached the workout builder, so on a continued plan it still showed "Session N," could swap an exercise out, and (via Repeat / Routine) even pre-filled *heavier* progressed weights. Now a deload keeps the same exercises, cuts the load to ~60%, caps each exercise at 3 sets, and makes no swaps or additions — from every start button. (builder.js `planWorkout` honours `opts.deload`; `seedExercise` caps deload sets at 3.)

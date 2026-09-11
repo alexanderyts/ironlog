@@ -1,9 +1,35 @@
 // Phase F — adversarial audit of the builder. Each block attacks an invariant the whole v4 design
 // depends on. If one fails it's a real bug to fix, not a test to loosen.
 const test=require('node:test'),assert=require('node:assert/strict');
-const {IL,session,set}=require('./load.js');
+const {IL,session,set,history,weekly}=require('./load.js');
 const A=IL.analysis,B=IL.builder,{EX}=IL.data;
 const now=Date.now();
+
+test('PROGRESS IS NOT A STALL: a weight bump (reps reset) never reads as a plateau (Phase 4)',()=>{
+  // Double progression: 185×8 -> bump to 190, reps reset to 6, then climb 190×6 -> 190×7. e1RM dips
+  // right after the bump, but the heavier top weight is progress — must NOT be called stalled.
+  const bumped=weekly([['barbell-bench-press',w=>[set([190,190,185][w],[7,6,8][w])]]],3,{now});
+  assert.equal(B.isStalled(bumped,'barbell-bench-press'),false,'added weight is progress, not a stall');
+  // genuinely flat for 3 weeks IS a stall
+  const flat=weekly([['barbell-bench-press',()=>[set(185,6)]]],3,{now});
+  assert.equal(B.isStalled(flat,'barbell-bench-press'),true,'no weight or rep gain for 3 weeks is a stall');
+});
+
+test('STALL is bounded to the current run: a fresh short run after a layoff is not a stall (Phase 4)',()=>{
+  const back=history(
+    ...weekly([['barbell-bench-press',()=>[set(185,6)]]],2,{now,start:3}),    // just back: days 3,10
+    ...weekly([['barbell-bench-press',()=>[set(225,5)]]],6,{now,start:45})     // ancient heavy block
+  );
+  assert.equal(B.isStalled(back,'barbell-bench-press'),false,'the layoff ends the run; old 225s do not make the return a stall');
+});
+
+test('ANCHOR SWAP needs a deload OF THAT MUSCLE, not just any deload (Phase 4)',()=>{
+  const benchStall=[7,14,21,28,35].map(d=>session(d,[['barbell-bench-press',[set(185,5),set(185,5)]],['cable-crossover',[set(40,12)]]],{now}));
+  const legDeload=history(...benchStall,session(9,[['back-squat',[set(135,8)]]],{now,deload:true}));
+  assert.ok(!((B.planWorkout(['Chest'],legDeload,2,{now}).rotation)||{}).anchor,'a legs-only deload does NOT unlock a bench anchor swap');
+  const benchDeload=history(...benchStall,session(9,[['barbell-bench-press',[set(110,8)]]],{now,deload:true}));
+  assert.ok(((B.planWorkout(['Chest'],benchDeload,2,{now}).rotation)||{}).anchor,'a bench deload DOES unlock the swap');
+});
 const PUSH=['barbell-bench-press','incline-dumbbell-press','overhead-press','cable-crossover','tricep-pushdown'];
 const climb=(id,d)=>[set(200-d,6),set(200-d,6)];            // heavier toward the present → progressing
 const day=(d,mod)=>session(d,PUSH.map(id=>[id,(mod&&mod(id,d))||climb(id,d)]),{now});

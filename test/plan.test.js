@@ -95,7 +95,12 @@ test('streak and stall helpers',()=>{
   assert.equal(B.exerciseStreak(hist,'barbell-bench-press'),4);
   assert.equal(B.exerciseStreak(hist,'cable-crossover'),2,'broken by the bench-only session');
   assert.equal(B.exerciseStreak(hist,'deadlift'),0);
-  assert.equal(B.isStalled(hist,'cable-crossover'),true,'flat 100×8 for 3 sessions');
+  // isStalled needs an UNBROKEN run spanning >=2 weeks (the tenure guard). In `hist` the crossover
+  // run is broken by the bench-only session (streak 2 / 1 week), so it is NOT stalled — a separate
+  // clean 3-week flat run is a stall.
+  assert.equal(B.isStalled(hist,'cable-crossover'),false,'a 1-week run is too short to be a stall');
+  const flatRun=[7,14,21].map(d=>session(d,[['cable-crossover',[set(40,12)]]],{now}));
+  assert.equal(B.isStalled(flatRun,'cable-crossover'),true,'flat 40×12 across 3 weeks is a stall');
   const up=[session(7,[['barbell-curl',[set(60,10)]]],{now}),session(14,[['barbell-curl',[set(55,10)]]],{now}),session(21,[['barbell-curl',[set(50,10)]]],{now})];
   assert.equal(B.isStalled(up,'barbell-curl'),false);
 });

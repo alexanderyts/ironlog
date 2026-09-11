@@ -209,42 +209,54 @@ function findPlan(groups,sessions,now){
 // group that included it, and the calendar SPAN of that run in weeks (see the policy note above).
 // Deloads are transparent to it.
 function exerciseTenure(sessions,exId){
-  const ex=EX[exId];if(!ex)return{sessions:0,weeks:0};
+  const ex=EX[exId];if(!ex)return{sessions:0,weeks:0,oldest:0};
   let n=0,newest=0,oldest=0;
   for(const s of real(sessions)){
     if(!s.exercises.some(e=>EX[e.id]&&EX[e.id].group===ex.group))continue;
-    if(s.exercises.some(e=>e.id===exId)){if(!n)newest=s.date;oldest=s.date;n++;}else break;
+    if(!s.exercises.some(e=>e.id===exId))break;              // a group session that dropped it ends the run
+    if(n&&(oldest-s.date)>CONTINUE_DAYS*DAY)break;           // a long break (returning after time off) ends the run
+    if(!n)newest=s.date;oldest=s.date;n++;
   }
-  return{sessions:n,weeks:n?(newest-oldest)/WEEK:0};
+  return{sessions:n,weeks:n?(newest-oldest)/WEEK:0,oldest};
 }
 function exerciseStreak(sessions,exId){return exerciseTenure(sessions,exId).sessions;}
-// The last n performances as {date, score}, newest first. score = best-set estimated 1RM, which
-// already folds reps in (a rep PR at the same load raises it), so no separate reps check is needed.
+// The last n performances, newest first, as {date, score, top}. score = best-set estimated 1RM
+// (folds reps in); top = heaviest working weight that session. opts: {n, mode, since}. `since` bounds
+// the scan to the current tenure run so ancient heavier history can't defeat the recent window.
 // Mode-scoped so alternating equipment doesn't produce a meaningless sequence.
-function recentPerfs(sessions,exId,n,mode){
-  const out=[];let before;
-  for(let i=0;i<(n||3);i++){
-    const lp=lastPerf(sessions,exId,{beforeTs:before,mode});if(!lp)break;
-    out.push({date:lp.date,score:Math.max(...lp.sets.map(s=>s.w>0?e1rm(s.w,s.r):s.r))});before=lp.date;
+function recentPerfs(sessions,exId,opts){
+  opts=opts||{};const n=opts.n||3,out=[];let before;
+  for(let i=0;i<n;i++){
+    const lp=lastPerf(sessions,exId,{beforeTs:before,mode:opts.mode});if(!lp)break;
+    if(opts.since&&lp.date<opts.since)break;
+    out.push({date:lp.date,score:Math.max(...lp.sets.map(s=>s.w>0?e1rm(s.w,s.r):s.r)),top:Math.max(...lp.sets.map(s=>+s.w||0))});
+    before=lp.date;
   }
   return out;
 }
-// Stalled = your best in the last ~2 weeks hasn't beaten your best from BEFORE that. Comparing a
-// recent window to an earlier one (rather than the 3 most-recent sessions) is the Phase F fix: a
-// 3×/week lifter's three most-recent sessions span only a few days, so the old check could never
-// flag them stalled — this judges the plateau in calendar time, fair across any training frequency.
-function isStalled(sessions,exId,mode){
-  const p=recentPerfs(sessions,exId,8,mode);
+// Stalled = your best in the last ~2 weeks hasn't beaten your best from before that, judged in
+// CALENDAR time (fair across frequency). Three guards keep it from mistaking progress for a plateau:
+//   • the run must span at least STALL_MIN_DAYS (a fresh/short run can't be "stalled");
+//   • only performances within the current tenure run count (ancient heavier sessions are excluded);
+//   • a HEAVIER top weight in the recent window is progress regardless of e1RM — double progression
+//     drops reps (and thus estimated 1RM) right after a weight bump, which must NOT read as a stall.
+function isStalled(sessions,exId,opts){
+  opts=opts||{};
+  const t=exerciseTenure(sessions,exId);
+  if(t.weeks*7<STALL_MIN_DAYS)return false;                       // not enough calendar time in this run
+  const p=recentPerfs(sessions,exId,{n:8,mode:opts.mode,since:t.oldest});
   if(p.length<3)return false;
   const cutoff=p[0].date-STALL_MIN_DAYS*DAY;
   const recent=p.filter(x=>x.date>cutoff),old=p.filter(x=>x.date<=cutoff);
-  if(!recent.length||!old.length)return false;   // not enough calendar span yet
+  if(!recent.length||!old.length)return false;                   // not enough calendar span yet
+  if(Math.max(...recent.map(x=>x.top))>Math.max(...old.map(x=>x.top)))return false;  // added weight = progressing
   return Math.max(...recent.map(x=>x.score))<=Math.max(...old.map(x=>x.score));
 }
-// A deload taken within `days` (that the user tried, so a still-stalled anchor is genuinely stuck).
-function recentDeload(sessions,now,days){
-  now=now||Date.now();const cut=now-(days||ANCHOR_DELOAD_DAYS)*DAY;
-  return (sessions||[]).some(s=>s.deload&&s.completed!==false&&s.date>=cut&&s.date<now);
+// A deload taken within `days` that (when exId is given) actually trained that exercise's muscle —
+// a legs-only deload doesn't count as having tried to unstick a bench press. opts: {now, days, exId}.
+function recentDeload(sessions,opts){
+  opts=opts||{};const now=opts.now||Date.now(),cut=now-(opts.days||ANCHOR_DELOAD_DAYS)*DAY,g=opts.exId&&EX[opts.exId]&&EX[opts.exId].group;
+  return (sessions||[]).some(s=>s.deload&&s.completed!==false&&s.date>=cut&&s.date<now&&(!opts.exId||s.exercises.some(e=>EX[e.id]&&EX[e.id].group===g)));
 }
 function planAnchor(ids,g){
   const c=ids.map(id=>EX[id]).filter(e=>e&&e.group===g&&e.tier===1&&(IDEAL_PATS[g]||[]).indexOf(e.pat)>=0);
@@ -289,31 +301,31 @@ function planWorkout(groups,sessions,seed,opts){
   if(deload)return{ids:orderByFatigue(capHeavyAxial(ids),groups[0]),mode:'continue',plan,rotation:null,streak:0,reactions,volumeBump,deload:true};
   const modeById={};plan.exercises.forEach(e=>{if(EX[e.id])modeById[e.id]=modeOf(e);});
   const anchors=new Set(groups.map(g=>planAnchor(ids,g)).filter(Boolean).map(e=>e.id));
-  let rotation=null;
-  // 1. Anchor variation swap — rare: a long-stalled main lift a recent deload didn't unstick.
-  if(recentDeload(sessions,opts.now,ANCHOR_DELOAD_DAYS)){
-    for(const aid of anchors){
-      const t=exerciseTenure(sessions,aid);
-      if(t.weeks>=ANCHOR_STALL_WEEKS&&isStalled(sessions,aid,modeById[aid])){
-        const to=anchorVariation(aid,ids,seed);
-        if(to){ids=ids.map(id=>id===aid?to.id:id);rotation={from:aid,to:to.id,why:'anchor-stalled',anchor:true};break;}
-      }
+  let rotation=null,structural=false;   // at most ONE structural change per session (swap OR gap-add)
+  // 1. Anchor variation swap — rare: a long-stalled main lift that a recent deload OF THAT MUSCLE
+  //    didn't unstick.
+  for(const aid of anchors){
+    if(!recentDeload(sessions,{now:opts.now,exId:aid}))continue;
+    const t=exerciseTenure(sessions,aid);
+    if(t.weeks>=ANCHOR_STALL_WEEKS&&isStalled(sessions,aid,{mode:modeById[aid],now:opts.now})){
+      const to=anchorVariation(aid,ids,seed);
+      if(to){ids=ids.map(id=>id===aid?to.id:id);rotation={from:aid,to:to.id,why:'anchor-stalled',anchor:true};structural=true;break;}
     }
   }
   // 2. Otherwise, rotate at most one STALLED accessory (the one in the plan longest). A progressing
   //    accessory is never touched — continuity is the default. Prefer a gap-filling replacement.
-  if(!rotation){
-    const cands=ids.filter(id=>!anchors.has(id)).map(id=>({id,sessions:exerciseTenure(sessions,id).sessions,stalled:isStalled(sessions,id,modeById[id])}))
+  if(!structural){
+    const cands=ids.filter(id=>!anchors.has(id)).map(id=>({id,sessions:exerciseTenure(sessions,id).sessions,stalled:isStalled(sessions,id,{mode:modeById[id],now:opts.now})}))
       .filter(c=>c.stalled).sort((a,b)=>b.sessions-a.sessions);
     if(cands.length){const c=cands[0],to=replacementFor(c.id,ids,seed,hints);
-      if(to){ids=ids.map(id=>id===c.id?to.id:id);rotation={from:c.id,to:to.id,why:'stalled',streak:c.sessions};}}
+      if(to){ids=ids.map(id=>id===c.id?to.id:id);rotation={from:c.id,to:to.id,why:'stalled',streak:c.sessions};structural=true;}}
   }
   // 3. Gap-ADD (never a swap): one exercise for a flagged region/pattern the plan doesn't cover, only
-  //    if there's room and we didn't already rotate. Self-limiting — once logged, the gap clears.
-  if(!rotation&&hints&&hints.gaps&&ids.length<MAX_SESSION_EX){
+  //    if there's room and no structural change happened yet. Self-limiting — once logged, gap clears.
+  if(!structural&&hints&&hints.gaps&&ids.length<MAX_SESSION_EX){
     const covered=gp=>ids.some(id=>EX[id]&&EX[id].group===gp.group&&(gp.reg?EX[id].reg===gp.reg:EX[id].pat===gp.pat));
     const gp=hints.gaps.filter(g=>groups.indexOf(g.group)>=0&&!covered(g)).sort((a,b)=>b.prio-a.prio)[0];
-    if(gp){const add=gapFillExercise(gp,ids);if(add&&EX[add]){ids.push(add);reactions.push({type:'gap-add',exId:add,group:gp.group,why:'covers '+(gp.reg?regLabel(gp.group,gp.reg):patLabel(gp.pat))});}}
+    if(gp){const add=gapFillExercise(gp,ids);if(add&&EX[add]){ids.push(add);structural=true;reactions.push({type:'gap-add',exId:add,group:gp.group,why:'covers '+(gp.reg?regLabel(gp.group,gp.reg):patLabel(gp.pat))});}}
   }
   // 4. Volume bump (+1 set) for an undertrained group — one exercise each, self-limiting (the finding
   //    clears once weekly volume is adequate). seedExercise enforces the per-exercise set ceiling.
