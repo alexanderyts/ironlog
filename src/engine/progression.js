@@ -19,6 +19,20 @@ function isWorking(st){return st.done!==false&&!st.warm;}
 function setLoad(exId,w,bw){const f=BW_FACTOR[exId]||0;return (+w||0)+(bw&&f?Math.round(bw*f):0);}
 function sessionVolume(s,bw){let v=0;s.exercises.forEach(e=>e.sets.forEach(st=>{if(isWorking(st))v+=setLoad(e.id,st.w,bw)*(+st.r||0);}));return v;}
 function sessionSets(s){let n=0;s.exercises.forEach(e=>e.sets.forEach(st=>{if(isWorking(st))n++;}));return n;}
+// What actually gets SAVED when a workout is finished: only sets the user checked done. A prefilled
+// prescription (weight filled in, not ticked) must NOT be saved as performed — that was the bug that
+// polluted history/PRs/volume. `t` is the transient "edited but not ticked" flag; stripped here.
+// Pure: returns a new exercises array (drops exercises left with no done sets). The UI prompts about
+// edited-but-unticked sets BEFORE calling this, marking them done if the user says so.
+function finalizeSets(exercises){
+  return (exercises||[]).map(e=>{
+    const sets=e.sets.filter(st=>st.done===true).map(st=>{const o=Object.assign({},st);delete o.t;o.done=true;return o;});
+    return Object.assign({},e,{sets});
+  }).filter(e=>e.sets.length);
+}
+// Sanitize a weight input string: accept a comma as the decimal separator (European keyboards) and
+// strip anything that isn't a digit or dot, so "12,5" reads as 12.5 rather than 125.
+function parseWeightInput(str){return String(str==null?'':str).replace(',','.').replace(/[^0-9.]/g,'');}
 // Comma-format up to 99,999 (a lifter reads "12,480 lb" faster than "12.5k lb" — the ambiguous "k"
 // only earns its keep once a number is genuinely too long to read at a glance).
 function fmtVol(v){
@@ -210,5 +224,5 @@ function calcStreak(sessions,now){
   return n;
 }
 
-IL.prog={DAY,startOfDay,e1rm,isWorking,setLoad,sessionVolume,sessionSets,fmtVol,modeOf,real,lastPerf,lastModeFor,exerciseSeries,bestE1rmBefore,setPattern,fmtPerf,nextSets,deloadSets,suggestion,unitIncrement,convertWeight,convertSessions,calcStreak};
+IL.prog={DAY,startOfDay,e1rm,isWorking,setLoad,sessionVolume,sessionSets,finalizeSets,parseWeightInput,fmtVol,modeOf,real,lastPerf,lastModeFor,exerciseSeries,bestE1rmBefore,setPattern,fmtPerf,nextSets,deloadSets,suggestion,unitIncrement,convertWeight,convertSessions,calcStreak};
 if(typeof module!=='undefined')module.exports=IL.prog;

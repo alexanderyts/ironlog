@@ -2,6 +2,14 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.23.0 — 2026-09-11 · Only the sets you did get saved (Roadmap v5, Phase 1)
+The most important fix in this pass. Browser-verified end to end.
+- **Finishing a workout now saves only the sets you checked off.** Before, when the app pre-filled your weights, any set with a weight in it was saved as "done" even if you never touched it — so checking 2 of 3 sets could quietly log all 3, inflating your history, volume, PRs and streak. Now an unchecked pre-filled set is never saved. (ui.js `cleanSets` → progression.js `finalizeSets`; setsOf/Finish already counted correctly.)
+- **If you typed numbers on a set but forgot to check it off, the app asks** ("Save them as done, or leave them out?") instead of silently dropping them.
+- **Comma decimals work:** "12,5" is read as 12.5, not 125. (progression.js `parseWeightInput`.)
+- **Starting a new workout while one is in progress now asks first** before discarding your logged sets (Repeat / Routine / Build).
+- Note: sessions logged before this version may contain sets you didn't actually do. They are **not** auto-changed (a phantom set looks identical to a real one) — edit a session from the History tab if a number looks off. New sessions are clean.
+
 ## v0.22.4 — 2026-09-11 · Internal groundwork, part 3 (Roadmap v5, Phase 0.5-F/G)
 Mostly internal, with one real fix. Browser-verified; no console errors.
 - **Fixed:** the "Last session" card on the Home screen now opens that workout when tapped (it did nothing before — the tap only worked on the History tab).

@@ -2,6 +2,31 @@ const test=require('node:test'),assert=require('node:assert/strict');
 const {IL,session,set}=require('./load.js');
 const P=IL.prog;
 
+test('finalizeSets saves only checked-off sets — a prefilled prescription is never saved as done',()=>{
+  const ex=[
+    {id:'barbell-bench-press',name:'Bench',sets:[
+      {w:135,r:8,done:true},        // ticked → kept
+      {w:135,r:8,done:false,t:1},   // edited but not ticked → dropped (the old bug saved this)
+      {w:135,r:8,done:false}        // untouched prefill → dropped
+    ]},
+    {id:'overhead-press',name:'OHP',sets:[{w:95,r:8,done:false}]}  // nothing done → whole exercise dropped
+  ];
+  const out=P.finalizeSets(ex);
+  assert.equal(out.length,1,'exercise with no done sets is dropped');
+  assert.equal(out[0].sets.length,1,'only the one ticked set survives');
+  assert.deepEqual(out[0].sets[0],{w:135,r:8,done:true});
+  assert.ok(!('t'in out[0].sets[0]),'transient touch flag is stripped');
+  // done bodyweight set (no weight) is still kept
+  assert.equal(P.finalizeSets([{id:'pull-up',name:'Pull-up',sets:[{w:'',r:8,done:true}]}])[0].sets.length,1);
+});
+
+test('parseWeightInput accepts a comma decimal and strips junk',()=>{
+  assert.equal(P.parseWeightInput('12,5'),'12.5');
+  assert.equal(P.parseWeightInput('102.5'),'102.5');
+  assert.equal(P.parseWeightInput('1a2b'),'12');
+  assert.equal(P.parseWeightInput(''),'');
+});
+
 test('lastPerf returns the most recent working sets, respecting exclusions',()=>{
   const now=Date.now();
   const older=session(10,[['barbell-bench-press',[set(135,8),set(135,8)]]],{now});

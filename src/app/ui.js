@@ -187,10 +187,18 @@ function newSession(exIds,deload,volumeBump){const s={id:S.uid(),schema:SCHEMA,d
 // from Phase 1, the discard guard) live in one place instead of at each call site.
 function startSession(spec){
   spec=spec||{};
-  S.setActive(newSession(spec.ids||[],!!spec.deload,spec.volumeBump));
-  resetDraft();
-  todayScreen='active';render();
-  if(spec.msg)toast(spec.msg);
+  const begin=()=>{
+    S.setActive(newSession(spec.ids||[],!!spec.deload,spec.volumeBump));
+    resetDraft();
+    todayScreen='active';render();
+    if(spec.msg)toast(spec.msg);
+  };
+  // Guard: don't silently overwrite a workout that already has logged sets (Repeat/Routine/Build).
+  if(spec.source!=='add'&&state.active&&setsOf(state.active)>0){
+    showConfirm('Discard the workout in progress?','Your current workout has logged sets. Starting a new one will discard them.','Discard & start',begin);
+    return;
+  }
+  begin();
 }
 // Equipment picker for a logged exercise. Changing it re-scopes progression/PRs to that modality
 // (see modeOf/lastPerf); entered sets are kept (you're relabelling how it was done, not clearing it).
@@ -727,11 +735,22 @@ function reorderCur(){
   t.exercises=B.orderByFatigue(t.exercises.map(e=>e.id),focus).map(id=>map[id]);
   persistCur();render();toast('Ordered for best performance');
 }
-// A set counts as performed if it was ticked done or has a weight entered. Prefilled reps alone
-// never count — otherwise untouched prescribed sets would pollute history.
-function cleanSets(s){
-  s.exercises.forEach(e=>{e.sets=e.sets.filter(st=>st.done||+st.w).map(st=>Object.assign(st,{done:true}));});
-  s.exercises=s.exercises.filter(e=>e.sets.length);
+// Only sets the user actually checked done are saved (see finalizeSets). Edited-but-unticked sets are
+// resolved by confirmUnchecked() before this runs.
+function cleanSets(s){s.exercises=P.finalizeSets(s.exercises);}
+// How many sets were edited (numbers entered/stepped) but never checked off.
+function pendingSets(s){return s.exercises.reduce((n,e)=>n+e.sets.filter(st=>st.t&&!st.done).length,0);}
+// Before finishing, if there are edited-but-unticked sets, ask whether to keep them. Otherwise they'd
+// silently vanish (only done sets save). Two explicit choices; closing the sheet cancels the finish.
+function confirmUnchecked(s,commit){
+  const pending=pendingSets(s);
+  if(!pending){commit();return;}
+  const them=pending>1?'them':'it',n=pending+' set'+(pending>1?'s':'');
+  openSheet('Unchecked sets',`<div class="dim" style="font-size:13.5px;margin:-2px 2px 15px;line-height:1.5">You entered numbers on ${n} without checking ${them} off. Save ${them} as done, or leave ${them} out of this workout?</div>
+    <button class="btn primary block" id="finSaveAll" style="margin-bottom:9px">Save ${them} as done</button>
+    <button class="btn ghost block" id="finLeaveOut">Leave ${them} out</button>`);
+  const go=markDone=>{closeSheet();if(markDone)s.exercises.forEach(e=>e.sets.forEach(st=>{if(st.t&&!st.done)st.done=true;}));commit();};
+  const a=$('#finSaveAll'),b=$('#finLeaveOut');if(a)a.addEventListener('click',()=>go(true));if(b)b.addEventListener('click',()=>go(false));
 }
 // Recap of a just-finished session, computed BEFORE it's saved (so history = prior sessions).
 function workoutSummary(s){
@@ -758,19 +777,25 @@ function showSummary(sm){
   const d=$('#sumDone');if(d)d.addEventListener('click',()=>{closeSheet();setTab('history');});
 }
 function finishWorkout(){
-  const s=state.active;cleanSets(s);
-  if(!s.exercises.length){toast('Log at least one set first');return;}
-  const sm=workoutSummary(s);
-  s.completed=true;s.updatedAt=Date.now();
-  S.upsertSession(s,false);state.active=null;S.persistActive();todayScreen='home';
-  render();showSummary(sm);
+  const s=state.active;
+  confirmUnchecked(s,()=>{
+    cleanSets(s);
+    if(!s.exercises.length){toast('Log at least one set first');return;}
+    const sm=workoutSummary(s);
+    s.completed=true;s.updatedAt=Date.now();
+    S.upsertSession(s,false);state.active=null;S.persistActive();todayScreen='home';
+    render();showSummary(sm);
+  });
 }
 function startEdit(s){editSession=JSON.parse(JSON.stringify(s));editDirty=false;todayScreen='edit';setTab('today');}
 function finishEdit(){
-  const s=editSession;cleanSets(s);
-  if(!s.exercises.length){toast('Keep at least one set, or delete the session instead');return;}
-  s.updatedAt=Date.now();S.upsertSession(s,false);
-  editSession=null;editDirty=false;todayScreen='home';toast('Changes saved');setTab('history');
+  const s=editSession;
+  confirmUnchecked(s,()=>{
+    cleanSets(s);
+    if(!s.exercises.length){toast('Keep at least one set, or delete the session instead');return;}
+    s.updatedAt=Date.now();S.upsertSession(s,false);
+    editSession=null;editDirty=false;todayScreen='home';toast('Changes saved');setTab('history');
+  });
 }
 function leaveEditor(){
   if(todayScreen==='edit'){
@@ -843,7 +868,7 @@ function bindLog(root){
     const chk=e.target.closest('[data-check]');if(chk){const ei=+chk.dataset.check,si=+chk.dataset.s;const st=t.exercises[ei].sets[si];st.done=!st.done;
       if(st.done&&todayScreen==='active'&&state.settings.rest.auto&&!st.warm)startRest(restSecondsFor(t.exercises[ei].id));persistCur();render();return;}
     const wm=e.target.closest('[data-warm]');if(wm){const ei=+wm.dataset.warm,si=+wm.dataset.s;const st=t.exercises[ei].sets[si];st.warm=!st.warm;persistCur();render();toast(st.warm?'Marked as warm-up':'Counted as a working set');return;}
-    const step=e.target.closest('[data-step]');if(step){const ei=+step.dataset.ei,si=+step.dataset.s,f=step.dataset.step,d=+step.dataset.d;const st=t.exercises[ei].sets[si];let v=+st[f]||0;v+=f==='w'?d*inc():d;if(v<0)v=0;st[f]=v;persistCur();const inp=$(`input[data-f="${f}"][data-ei="${ei}"][data-s="${si}"]`);if(inp)inp.value=v;return;}
+    const step=e.target.closest('[data-step]');if(step){const ei=+step.dataset.ei,si=+step.dataset.s,f=step.dataset.step,d=+step.dataset.d;const st=t.exercises[ei].sets[si];let v=+st[f]||0;v+=f==='w'?d*inc():d;if(v<0)v=0;st[f]=v;st.t=1;persistCur();const inp=$(`input[data-f="${f}"][data-ei="${ei}"][data-s="${si}"]`);if(inp)inp.value=v;return;}
     const add=e.target.closest('[data-addset]');if(add){const ei=+add.dataset.addset;const sets=t.exercises[ei].sets;const last=sets[sets.length-1]||{w:'',r:''};sets.push({w:last.w,r:last.r,done:false});persistCur();render();return;}
     const rem=e.target.closest('[data-delset]');if(rem){const ei=+rem.dataset.delset;const sets=t.exercises[ei].sets;if(sets.length<=1)return;
       const idx=sets.length-1;
@@ -858,8 +883,11 @@ function bindLog(root){
     const oe=e.target.closest('[data-openex]');if(oe){openSheet(EX[oe.dataset.openex].name,exerciseDetail(oe.dataset.openex));return;}
   });
   root.addEventListener('input',e=>{const inp=e.target.closest('input[data-f]');if(!inp)return;const t=cur();if(!t)return;
-    const ei=+inp.dataset.ei,si=+inp.dataset.s,f=inp.dataset.f;const val=inp.value.replace(/[^0-9.]/g,'');
-    t.exercises[ei].sets[si][f]=val===''?'':(f==='r'?parseInt(val)||val:parseFloat(val)||val);persistCur();});
+    const ei=+inp.dataset.ei,si=+inp.dataset.s,f=inp.dataset.f;const val=P.parseWeightInput(inp.value);
+    if(val!==inp.value)inp.value=val;   // reflect the sanitized value back (e.g. "12,5" -> "12.5")
+    const st=t.exercises[ei].sets[si];st[f]=val===''?'':(f==='r'?parseInt(val)||val:parseFloat(val)||val);
+    st.t=1;   // edited but not necessarily ticked — Finish will ask before dropping it
+    persistCur();});
 }
 
 /* ---------------- rest timer ---------------- */
