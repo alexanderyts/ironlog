@@ -116,7 +116,15 @@ function importBackup(json){
   return state.sessions.length-before;
 }
 
-/* ---- cloud adapters ---- */
+/* ---- cloud adapters ----
+   Both backends (artifact DB, Dropbox file) implement the SAME shape:
+     {name, init():Promise<bool>, pushSession, deleteSession, pushRoutine, deleteRoutine,
+      pushSettings, pushActive, flush, syncNow}
+   The contract: an adapter only MOVES BYTES to/from its backend. It must never merge — absorbRemote()
+   is the single source of merge truth (tombstones, active, settings, routines). A new backend
+   implements the methods above and routes incoming remote data through absorbRemote(); it adds no
+   merge logic of its own. (Phase 7 makes the artifact adapter obey this — today it still inlines a
+   merge in onSnapshot.) */
 function artifactAdapter(){
   let db=null;
   const A={name:'artifact',

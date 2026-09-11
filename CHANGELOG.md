@@ -2,6 +2,12 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.22.4 — 2026-09-11 · Internal groundwork, part 3 (Roadmap v5, Phase 0.5-F/G)
+Mostly internal, with one real fix. Browser-verified; no console errors.
+- **Fixed:** the "Last session" card on the Home screen now opens that workout when tapped (it did nothing before — the tap only worked on the History tab).
+- The New-workout screen's buttons now use one shared click system, so adding a button (like next update's one-tap Full body / Push / Pull presets) is just markup — no wiring. (ui.js: delegated `data-action` table on `#view`, installed once.)
+- Wrote down the rule both cloud backends follow ("adapters move bytes; one function merges") so the sync fixes later can't drift. (store.js comment.)
+
 ## v0.22.3 — 2026-09-11 · Internal groundwork, part 2 (Roadmap v5, Phase 0.5-D/E)
 No user-visible change — verified in the browser that every way of starting a workout still works. Sets up the deload and safety fixes coming next.
 - Every way to start a workout (Build, Start from scratch, Repeat, Routine, repeat-from-history) now goes through one function, so behaviour is consistent and the next fixes touch one place instead of five. (ui.js: `startSession(spec)`.)

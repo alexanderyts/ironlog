@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-1SHYO6kLkPmBAizCXAXuQqhT3K575PuihxSOdhkqVdQ=' 'sha256-EkxoJS/XfnHAg4Tv4KlM2HO15VAwse2HF4NYsW84Gss='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-aSnU3MG52JLF0uQHwYzNY0LfBybKYPkKN9k7Sidefeo=' 'sha256-EkxoJS/XfnHAg4Tv4KlM2HO15VAwse2HF4NYsW84Gss='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Ironlog</title>
@@ -365,8 +365,8 @@ html.standalone .tabbar{bottom:auto;top:calc(var(--screen-h,100vh) - var(--tab-h
 </div>
 
 <script>
-/* Ironlog v0.22.3 · site build */
-var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.22.3",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
+/* Ironlog v0.22.4 · site build */
+var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.22.4",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
 
 /* ===== src/data/exercises.js ===== */
 (function(){'use strict';
@@ -1726,7 +1726,15 @@ function importBackup(json){
   return state.sessions.length-before;
 }
 
-/* ---- cloud adapters ---- */
+/* ---- cloud adapters ----
+   Both backends (artifact DB, Dropbox file) implement the SAME shape:
+     {name, init():Promise<bool>, pushSession, deleteSession, pushRoutine, deleteRoutine,
+      pushSettings, pushActive, flush, syncNow}
+   The contract: an adapter only MOVES BYTES to/from its backend. It must never merge — absorbRemote()
+   is the single source of merge truth (tombstones, active, settings, routines). A new backend
+   implements the methods above and routes incoming remote data through absorbRemote(); it adds no
+   merge logic of its own. (Phase 7 makes the artifact adapter obey this — today it still inlines a
+   merge in onSnapshot.) */
 function artifactAdapter(){
   let db=null;
   const A={name:'artifact',
@@ -1942,18 +1950,18 @@ function homeView(){
       <div class="card stat" style="padding:14px 12px"><div class="k">Streak</div><div class="v mono">${streak}<small>wk</small></div></div>
       <div class="card stat" style="padding:14px 12px"><div class="k">${volLabel()}</div><div class="v mono">${fmtVol(wkVol)}</div></div>
     </div>
-    ${state.active?'':`<button class="btn primary block" id="btnStartFlow" style="height:56px;font-size:16px">
+    ${state.active?'':`<button class="btn primary block" id="btnStartFlow" data-action="startFlow" style="height:56px;font-size:16px">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg> Start a workout</button>`}
     ${last?`<div class="eyebrow" style="margin:26px 2px 10px">Last session</div>${sessCard(last)}`:emptyHome()}
     <div class="eyebrow" style="margin:24px 2px 10px">Jump in</div>
-    <button class="btn ghost block" id="btnGoLibrary" style="justify-content:space-between">
+    <button class="btn ghost block" id="btnGoLibrary" data-action="goLibrary" style="justify-content:space-between">
       <span>Browse exercise library</span><span class="dim mono">${EXERCISES.length} exercises ›</span></button>
   </div>`;
 }
 function emptyHome(){return `<div class="card" style="padding:26px 18px;text-align:center;margin-top:20px"><div class="dim">No workouts logged yet.<br>Tap <b style="color:var(--accent)">Start a workout</b> above to log your first session.</div></div>`;}
 function resumeCard(){
   const s=state.active;const sets=setsOf(s);
-  return `<button class="resume" id="btnResume">
+  return `<button class="resume" id="btnResume" data-action="resume">
     <span class="tri"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></span>
     <span style="flex:1;min-width:0"><span style="font-weight:700;display:block">Resume your workout</span><span class="dim" style="font-size:13px">${s.exercises.length} exercise${s.exercises.length!==1?'s':''} · ${sets} set${sets!==1?'s':''} logged</span></span>
     <span style="color:var(--accent);font-size:20px;flex-shrink:0">→</span></button>`;
@@ -1961,7 +1969,7 @@ function resumeCard(){
 function startWorkoutView(){
   return `
   <div class="section">
-    <div class="topbar"><button class="backbtn" id="btnBackHome">${ICON_BACK} Home</button></div>
+    <div class="topbar"><button class="backbtn" id="btnBackHome" data-action="backHome">${ICON_BACK} Home</button></div>
     <div style="padding:0 2px">
       <div class="eyebrow">New workout</div>
       <h2 style="font-size:24px;margin-top:6px">What are you training?</h2>
@@ -1970,11 +1978,11 @@ function startWorkoutView(){
     <div style="height:18px"></div>${coachNudge()}
     <div class="eyebrow" style="margin:16px 2px 10px">Target muscle groups</div>
     <div class="chips" id="groupPick">${GROUPS.map(g=>`<button class="chip ${draft.groups.has(g)?'on':''}" data-g="${g}">${g}</button>`).join('')}</div>
-    <div class="card settingrow" style="margin:18px 0 0;padding:14px 15px"><div><div style="font-weight:600">Deload / recovery session</div><div class="dim" style="font-size:12.5px">Sore or beat up? Build it ~60% lighter — full range, focus on the stretch. Won't count against your progress or PRs.</div></div><button class="sw ${draft.deload?'on':''}" id="deloadToggle" aria-label="Deload session"></button></div>
+    <div class="card settingrow" style="margin:18px 0 0;padding:14px 15px"><div><div style="font-weight:600">Deload / recovery session</div><div class="dim" style="font-size:12.5px">Sore or beat up? Build it ~60% lighter — full range, focus on the stretch. Won't count against your progress or PRs.</div></div><button class="sw ${draft.deload?'on':''}" id="deloadToggle" data-action="deloadToggle" aria-label="Deload session"></button></div>
     <div class="spacer"></div><div class="spacer"></div>
     <div id="buildBtns">${buildButtons()}</div>
     <div style="height:10px"></div>
-    <button class="btn ghost block" id="btnBlank">Start from scratch</button>
+    <button class="btn ghost block" id="btnBlank" data-action="blank">Start from scratch</button>
     ${routineList()}
     ${recentTemplates()}
   </div>`;
@@ -1984,13 +1992,13 @@ function startWorkoutView(){
 const ICON_BUILD='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2 2M16.4 16.4l2 2M18.4 5.6l-2 2M7.6 16.4l-2 2"/><circle cx="12" cy="12" r="3.2"/></svg>';
 function buildButtons(){
   const plan=draft.groups.size?B.findPlan([...draft.groups],state.sessions):null;
-  if(!plan)return `<button class="btn primary block" id="btnRecommend" style="height:56px;font-size:16px">${ICON_BUILD} Build me a workout</button>`;
+  if(!plan)return `<button class="btn primary block" id="btnRecommend" data-action="build" style="height:56px;font-size:16px">${ICON_BUILD} Build me a workout</button>`;
   const wk=Math.min(...plan.exercises.map(e=>B.exerciseStreak(state.sessions,e.id)))+1;
-  return `<button class="btn primary block" id="btnRecommend" style="height:auto;padding:12px 16px;font-size:16px;flex-direction:column;gap:2px">
+  return `<button class="btn primary block" id="btnRecommend" data-action="build" style="height:auto;padding:12px 16px;font-size:16px;flex-direction:column;gap:2px">
       <span style="display:flex;align-items:center;gap:8px">${ICON_BUILD} Continue your plan</span>
       <span style="font-size:12.5px;font-weight:500;opacity:.85">Session ${wk} · ${plan.exercises.length} exercises from ${relDay(plan.date).toLowerCase()}</span></button>
     <div style="height:8px"></div>
-    <button class="btn ghost block" id="btnFresh">Build a fresh plan instead</button>`;
+    <button class="btn ghost block" id="btnFresh" data-action="buildFresh">Build a fresh plan instead</button>`;
 }
 // Re-render just the build buttons in place (their label depends on the picked groups / deload).
 function refreshBuildBtns(){const bb=$('#buildBtns');if(bb)bb.innerHTML=buildButtons();}
@@ -2056,7 +2064,7 @@ function buildAndStart(fresh){
 function coachNudge(){
   const h=A.buildHints(state.sessions,Date.now(),bw());
   if(!h.suggestGroups.length)return '';
-  return `<button class="btn ghost block" id="coachNudge" data-groups="${h.suggestGroups.join(',')}" style="justify-content:flex-start;gap:10px;margin:0 0 4px;height:auto;padding:12px 14px;border-style:dashed;text-align:left">
+  return `<button class="btn ghost block" id="coachNudge" data-action="coachNudge" data-groups="${h.suggestGroups.join(',')}" style="justify-content:flex-start;gap:10px;margin:0 0 4px;height:auto;padding:12px 14px;border-style:dashed;text-align:left">
     <span style="color:var(--accent);font-size:16px;flex-shrink:0">✦</span>
     <span style="min-width:0"><span style="font-weight:700;display:block;font-size:13.5px">Coach suggests: ${esc(h.suggestGroups.join(' & '))}</span><span class="dim" style="font-size:12px">Light or unbalanced lately — tap to select</span></span></button>`;
 }
@@ -2066,7 +2074,7 @@ function editorView(s,mode){
   const vol=volOf(s),sets=setsOf(s),edit=mode==='edit';
   return `
   <div class="section">
-    <div class="topbar"><button class="backbtn" id="btnBackHome">${ICON_BACK} ${edit?'Cancel':'Home'}</button>
+    <div class="topbar"><button class="backbtn" id="btnBackHome" data-action="backHome">${ICON_BACK} ${edit?'Cancel':'Home'}</button>
       ${edit?'':'<button class="linkbtn dim" id="btnDiscard">Discard</button>'}</div>
     <div style="padding:0 2px 2px"><div class="eyebrow">${edit?'Editing · '+fmtDate(s.date):'Workout in progress · saves automatically'}</div>
       <h2 style="font-size:23px;margin-top:4px">${new Date(s.date).toLocaleDateString(undefined,{weekday:'long'})}'s session${s.deload?' <span class="deload-badge">Deload</span>':''}</h2></div>
@@ -2610,22 +2618,29 @@ function leaveEditor(){
 
 /* ---------------- bind ---------------- */
 function bindClick(sel,fn){const el=$(sel);if(el)el.addEventListener('click',fn);}
+// Delegated view actions: a click on any element carrying data-action="name" (or inside one) runs
+// ACTIONS[name](el, ev). One listener on #view covers every view and survives re-renders, so a new
+// button is just markup + a table row — no per-view rebinding. (The editor, sheets and bindLog keep
+// their own handlers; those are scoped to regions that change wholesale.)
+const ACTIONS={
+  startFlow:()=>{todayScreen='start';render();},
+  resume:()=>{todayScreen='active';render();},
+  goLibrary:()=>setTab('library'),
+  backHome:()=>leaveEditor(),
+  build:()=>buildAndStart(false),
+  buildFresh:()=>buildAndStart(true),
+  coachNudge:el=>{draft.groups=new Set(el.dataset.groups.split(','));render();},
+  blank:()=>startSession({ids:[],msg:draft.deload?'Deload — lighter loads, focus on the stretch':null,deload:draft.deload,source:'blank'}),
+  deloadToggle:el=>{draft.deload=!draft.deload;el.classList.toggle('on',draft.deload);}
+};
 function bind(){
   const v=$('#view');
-  bindClick('#btnStartFlow',()=>{todayScreen='start';render();});
-  bindClick('#btnResume',()=>{todayScreen='active';render();});
-  bindClick('#btnGoLibrary',()=>setTab('library'));
-  bindClick('#btnBackHome',leaveEditor);
-  const bindBuild=()=>{
-    bindClick('#btnRecommend',()=>buildAndStart(false));
-    bindClick('#btnFresh',()=>buildAndStart(true));
-  };
+  if(!v.__delegated){v.__delegated=true;v.addEventListener('click',e=>{
+    const a=e.target.closest('[data-action]');if(a&&ACTIONS[a.dataset.action]){ACTIONS[a.dataset.action](a,e);return;}
+    const sc=e.target.closest('[data-sess]');if(sc){openSessionDetail(sc.dataset.sess);return;}   // works from Home's last-session card AND History
+  });}
   const gp=$('#groupPick');if(gp)gp.addEventListener('click',e=>{const b=e.target.closest('[data-g]');if(!b)return;const g=b.dataset.g;draft.groups.has(g)?draft.groups.delete(g):draft.groups.add(g);b.classList.toggle('on');
-    refreshBuildBtns();bindBuild();});
-  bindClick('#coachNudge',()=>{const el=$('#coachNudge');if(!el)return;draft.groups=new Set(el.dataset.groups.split(','));render();});
-  bindBuild();
-  bindClick('#btnBlank',()=>startSession({ids:[],msg:draft.deload?'Deload — lighter loads, focus on the stretch':null,deload:draft.deload,source:'blank'}));
-  bindClick('#deloadToggle',()=>{draft.deload=!draft.deload;const b=$('#deloadToggle');if(b)b.classList.toggle('on',draft.deload);});
+    refreshBuildBtns();});
   v.querySelectorAll('[data-repeat]').forEach(b=>b.addEventListener('click',()=>{const s=state.sessions.find(x=>x.id===b.dataset.repeat);if(s)startSession({ids:s.exercises.map(e=>e.id),msg:'Loaded — weights prefilled from history',source:'repeat'});}));
   v.querySelectorAll('[data-routine]').forEach(el=>el.addEventListener('click',e=>{
     if(e.target.closest('[data-delroutine]'))return;
@@ -2645,10 +2660,10 @@ function bind(){
     toast('Workout discarded',{label:'Undo',fn:()=>{S.setActive(copy);todayScreen='active';render();}});}));
   const ll=$('#logList');if(ll)bindLog(ll);
   // history
-  const sl=$('#sessList'),cal=v.querySelector('.cal-grid');
+  const cal=v.querySelector('.cal-grid');
   if(cal)cal.addEventListener('click',e=>{const c=e.target.closest('[data-day]');if(!c)return;const d=+c.dataset.day;selDay=selDay===d?null:d;render();});
   v.querySelectorAll('[data-mon]').forEach(b=>b.addEventListener('click',()=>{calMonth+=+b.dataset.mon;selDay=null;render();}));
-  if(sl)sl.addEventListener('click',e=>{const c=e.target.closest('[data-sess]');if(c)openSessionDetail(c.dataset.sess);});
+  // [data-sess] is handled by the delegated #view listener above (fires from History AND the Home card).
   // progress: PR rows open the lift's detail (with its progress trend)
   const prc=$('#prCard');if(prc)prc.addEventListener('click',e=>{const r=e.target.closest('[data-openex]');if(r)openSheet(EX[r.dataset.openex].name,exerciseDetail(r.dataset.openex));});
   // library
