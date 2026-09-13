@@ -196,13 +196,46 @@ Changelog: "See how long you train, how you split your time, and how long you re
   sets:'auto'|'straight'|'ramp',                 // how fresh prescriptions are shaped
   push:'auto'|'guide'|'quiet' }                  // 'quiet' = never suggest a heavier weight, just record
 ```
-- `cleanSettings` whitelists each field with an enum check; unknown values → dropped (auto).
-- `saveSettingsCloud()` already syncs settings; nothing new.
-- **Onboarding sheet** on first launch (no sessions, no profile): five taps, skippable, every
-  answer defaults to auto. Same sheet reachable from Settings → "Training profile". Avoid/protect
-  are pickers (exercise search / group chips).
-- No engine change in this phase. Tests: sanitizer enums; a profile round-trips through export/import.
-Changelog: "Tell the app how you train (once); the next updates make it listen."
+**The profile is optional. Nobody has to touch it.** The default for every field is `auto`, which
+is byte-for-byte today's behaviour — call it **"Balanced"** in the UI. A user who never opens the
+profile gets the same app they have now.
+
+**How users meet it — one card, two buttons, once:**
+- `settings.seen` (object, synced with settings, sanitized as `{[key]: true}`): `seen.profileIntro`
+  is set the first time the card is dismissed by either button, so it never shows again on any of
+  the user's devices. Reusable for future announcements (`seen.<feature>`).
+- On the Home screen, when `!settings.seen.profileIntro` (existing users AND new users — both need
+  the intro), render a card **above** the start button:
+  > **New: a training profile** — Tell Ironlog your goal, the kind of gym you use, days per week
+  > and anything you're protecting, and it builds around that. Skip it and you get the balanced
+  > default, which is what it does today.
+  > [ **Take me there** ]  [ I'm good ]
+  `data-action="profileGo"` → mark seen, open the profile sheet. `data-action="profileSkip"` →
+  mark seen, re-render (card gone). Both call `S.saveSettingsCloud()`.
+- **Profile sheet** (`openProfile()`, from the card and from Settings → "Training profile"): one
+  question per row, each a `.seg` control with "Balanced" as the first option; `avoid` is the
+  existing add-exercise search returning ids; `protect` is the muscle-group chip row. A
+  "Reset to balanced" ghost button clears the profile. Every change saves immediately
+  (`saveSettingsCloud`), no Save button, so partial answers are fine.
+- **Discoverability afterwards:** the New-workout screen shows one dim line under the muscle chips:
+  "Profile: Balanced · change" (or "Profile: Size · Machine-focused gym · change") →
+  `data-action="profileOpen"`. Settings has the same row.
+- No engine change in this phase; the sheet writes data that P2/P3 will read.
+
+Acceptance (all automated in `test/ui.test.js` via the Phase 0 harness, plus one screenshot):
+1. fresh state → Home shows the intro card; `I'm good` → card gone, `settings.seen.profileIntro===true`,
+   `settings.profile` unchanged (absent).
+2. fresh state → `Take me there` → sheet open, seen flag set; choose `gym:'machine'` → sheet stays
+   open, `settings.profile.gym==='machine'`, `settingsUpdatedAt` advanced.
+3. New-workout line reads "Profile: Balanced · change" with no profile and
+   "Profile: Machine-focused gym · change" after (2).
+4. `cleanSettings({profile:{gym:'planetfitness',goal:'size',avoid:['x','back-squat'],days:9}})` →
+   `{goal:'size', avoid:['back-squat']}` only (bad enum dropped, unknown id dropped, days out of
+   range dropped); `seen:{profileIntro:true,junk:1}` → `{profileIntro:true}`.
+5. export → import round-trips `profile` and `seen`.
+6. Building a workout with a saved profile yields the **same** plan as with none (engine untouched
+   in P1) — a control that P2 will then flip.
+Changelog: "New (optional): a training profile. Skip it and nothing changes."
 
 ### Phase P2 — The builder listens  (v0.38.0 · medium-high risk · builder.js)
 
@@ -288,6 +321,23 @@ Tests in findings.test.js per lever.
   explain any surprising pick.
 - **Not doing:** auto-ending workouts (never), background notifications the platform can't deliver,
   reading health data from a PWA.
+
+## Execution checklist — every phase, in this order (Opus 4.8)
+
+1. Re-read the phase, ROADMAP-v5 Ground rules, and the Testing standard above. Note the stop
+   conditions (v5 rule 10) — stop and report rather than improvise.
+2. `node --test test/*.test.js` → record the passing count. It must never go down.
+3. Write the tests first: oracle + negative control (+ property where seeds/configs exist). Run
+   them; watch them fail for the right reason.
+4. Implement with the smallest diff. New fields are optional; `auto`/absent = today's behaviour.
+5. Tests green. Audit blocks green. For UI phases: `test/ui.test.js` flow green, then
+   `preview_start name:"ironlog"`, mobile preset, screenshot of the new screen.
+6. `node tools/review.js data/<owner-backup>.json --why` — if any *fresh* build or coach line for
+   the owner's real history changed and the phase didn't intend it, stop and report.
+7. Bump `package.json`, plain-language `CHANGELOG.md` entry ending with one line: "Not verified:
+   …" (what wasn't automated — e.g. background notification delivery on iOS).
+8. `node build.js`, commit (identity flags + trailer), push, republish both artifacts **with `url`**.
+9. Update memory `roadmap-v2-status.md` with the phase's status.
 
 ## Dependency map
 Phase 0 first (it is the safety net for everything after). Then T1 → T2 → T3 (each derives from the last), then P1 → P2 → P3 → P4. T and P are independent; ship T1–T3
