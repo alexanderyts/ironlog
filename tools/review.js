@@ -35,6 +35,17 @@ line(`${R.deloads} of the last ${R.total} sessions were deloads · last deload $
 line(`deload loads vs working loads on ${R.sharedLifts} shared lift(s): ${R.loadPct==null?'n/a':R.loadPct+'%'}`);
 line(`exercises seen ONLY on deloads (${R.onlyOnDeload.length}): ${R.onlyOnDeload.join(', ')||'none'}`);
 
+H('TIME (from set timestamps — sessions without stamps are skipped)');
+const tt=A.timeTrends(sessions,now);
+if(!tt.n)line('no timed sessions yet');
+else{
+  line(`timed sessions: ${tt.n} · avg length ${tt.avgDuration} min · density ${tt.density==null?'-':tt.density} sets/10min`);
+  line(`rest taken — compounds ${tt.restCompound==null?'-':tt.restCompound+'s'} · isolation ${tt.restIsolation==null?'-':tt.restIsolation+'s'}`);
+  line(`time by muscle (28d): ${tt.byGroup.map(([g,m])=>g+' '+m+'min').join(' · ')||'-'}`);
+}
+sessions.forEach(s=>{const d=P.sessionDuration(s);if(d==null)return;
+  line(`  ${fmtD(s.date)}${s.deload?' [DL]':''}  ${d} min · ${A.sessionDensity(s)} sets/10min · ${Object.entries(A.timeByGroup(s)).map(([g,m])=>g+' '+Math.round(m)).join(', ')}`);});
+
 H('STREAK / WEEKS');
 line(`Streak: ${P.calcStreak(sessions,now)} wk  ·  sessions in the last 7 days: ${sessions.filter(s=>s.completed!==false&&now-s.date<7*DAY).length}`);
 const a=A.analyze(sessions,now);

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-Kc4YF7b0/OelxO+3oETfDyr48C+WSvJsmlO4IYhs74w=' 'sha256-WPBob/luB2k1aalTWXpi6zk3SrIbj8GlZV7AlFdG7oA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-9MsYJYMBXDyHTkqE8/eiSVsDl9rdnxB9jhVLzm5D00Q=' 'sha256-WPBob/luB2k1aalTWXpi6zk3SrIbj8GlZV7AlFdG7oA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Ironlog</title>
@@ -383,8 +383,8 @@ html.standalone .tabbar{bottom:auto;top:calc(var(--screen-h,100vh) - var(--tab-h
 </div>
 
 <script>
-/* Ironlog v0.36.0 · site build */
-var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.36.0",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
+/* Ironlog v0.37.0 · site build */
+var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.37.0",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
 
 /* ===== src/data/exercises.js ===== */
 (function(){'use strict';
@@ -1319,7 +1319,7 @@ var IL=globalThis.IL||(globalThis.IL={});
 if(typeof require==='function'&&!IL.data)require('../data/exercises.js');
 if(typeof require==='function'&&!IL.prog)require('./progression.js');
 const {EX,EXERCISES,REGIONS,IDEAL_PATS,LOWER_GROUPS,MODES,regLabel,patLabel,exampleFor,hashId}=IL.data;
-const {DAY,startOfDay,e1rm,isWorking,setLoad,sessionVolume,modeOf,calcStreak,real,weekIndex,weekStart,lastPerf}=IL.prog;
+const {DAY,startOfDay,e1rm,isWorking,setLoad,sessionVolume,sessionSets,sessionDuration,setTimeline,modeOf,calcStreak,real,weekIndex,weekStart,lastPerf}=IL.prog;
 
 // completed() INCLUDES deloads on purpose — volume/frequency/PR-window analysis wants everything the
 // user actually did. Progression-only scans use real() (completed AND not a deload) instead.
@@ -1592,12 +1592,50 @@ function deloadStats(sessions,now){
     sharedLifts:ratios.length,
     onlyOnDeload:[...onlyOnDeload].map(id=>EX[id].name)};
 }
+/* ── Time analytics (T3): everything derived from the per-set `at` stamps and session start/end.
+   Sessions with no stamps (logged before timing existed) contribute nothing and are simply skipped. */
+const MAX_GAP_MIN=15;   // a single gap longer than this (a phone call, a chat) isn't credited as training time
+function median(arr){if(!arr.length)return null;const a=arr.slice().sort((x,y)=>x-y),m=a.length>>1;return a.length%2?a[m]:Math.round((a[m-1]+a[m])/2);}
+// Minutes attributed to each muscle group: each stamped set owns the time since the previous stamped
+// set (or the session start), each interval capped at MAX_GAP_MIN. Returns {group: minutes}.
+function timeByGroup(s){
+  const tl=setTimeline(s);if(!tl.length)return {};
+  const cap=MAX_GAP_MIN*60000,out={};let prev=+s.date;
+  tl.forEach(x=>{const dt=Math.min(Math.max(0,x.at-prev),cap);if(x.group)out[x.group]=(out[x.group]||0)+dt/60000;prev=x.at;});
+  return out;
+}
+// Rest gaps (seconds) between consecutive stamped sets of the SAME exercise, split compound/isolation.
+function restGaps(s){const all=[],comp=[],iso=[];
+  (s.exercises||[]).forEach(e=>{const ex=EX[e.id];const t=e.sets.map(st=>+st.at).filter(a=>a>0).sort((a,b)=>a-b);
+    for(let i=1;i<t.length;i++){const g=(t[i]-t[i-1])/1000;all.push(g);if(ex&&ex.type==='compound')comp.push(g);else if(ex)iso.push(g);}});
+  return {all,comp,iso};}
+// Median rest actually taken (seconds), overall and by lift type. null when too few stamped sets.
+function restTaken(s){const g=restGaps(s);return {median:median(g.all),compound:median(g.comp),isolation:median(g.iso),n:g.all.length};}
+// Working sets per 10 minutes; null when the workout isn't timed.
+function sessionDensity(s){const d=sessionDuration(s);return (d&&d>0)?+(sessionSets(s)/d*10).toFixed(1):null;}
+// Median rest (seconds) for ONE exercise across all its stamped history — for the exercise detail sheet.
+function exerciseRest(sessions,id){const gaps=[];completed(sessions).forEach(s=>{const e=s.exercises.find(x=>x.id===id);if(!e)return;
+  const t=e.sets.map(st=>+st.at).filter(a=>a>0).sort((a,b)=>a-b);for(let i=1;i<t.length;i++)gaps.push((t[i]-t[i-1])/1000);});return median(gaps);}
+// 28-day time picture for the Progress "Time" card: how long, how dense, how much rest, split by muscle.
+function timeTrends(sessions,now){
+  now=now||Date.now();
+  const done=completed(sessions).filter(s=>s.date<now&&s.date>=now-28*DAY&&sessionDuration(s)!=null);
+  if(!done.length)return {n:0};
+  let totMin=0,totSets=0;const comp=[],iso=[],grp={};
+  done.forEach(s=>{totMin+=sessionDuration(s);totSets+=sessionSets(s);
+    const g=restGaps(s);comp.push(...g.comp);iso.push(...g.iso);
+    const tg=timeByGroup(s);Object.keys(tg).forEach(k=>grp[k]=(grp[k]||0)+tg[k]);});
+  return {n:done.length,avgDuration:Math.round(totMin/done.length),
+    density:totMin>0?+(totSets/totMin*10).toFixed(1):null,
+    restCompound:median(comp),restIsolation:median(iso),
+    byGroup:Object.entries(grp).map(([g,m])=>[g,Math.round(m)]).sort((a,b)=>b[1]-a[1])};
+}
 function muscleSetCounts(sessions){
   const cnt={};completed(sessions).forEach(s=>s.exercises.forEach(e=>{const g=EX[e.id]?EX[e.id].group:'Other';cnt[g]=(cnt[g]||0)+e.sets.filter(isWorking).length;}));
   return Object.entries(cnt).sort((a,b)=>b[1]-a[1]);
 }
 
-IL.analysis={analyze,progressionStat,gapPrio,patPrio,findings,findingKey,withStatus,renderFinding,buildTips,buildHints,personalRecords,weeklyVolumes,muscleSetCounts,deloadStats,MIN_COMPARATIVE_SESSIONS,MIN_COMPARATIVE_DAYS};
+IL.analysis={analyze,progressionStat,gapPrio,patPrio,findings,findingKey,withStatus,renderFinding,buildTips,buildHints,personalRecords,weeklyVolumes,muscleSetCounts,deloadStats,timeByGroup,restTaken,sessionDensity,exerciseRest,timeTrends,MIN_COMPARATIVE_SESSIONS,MIN_COMPARATIVE_DAYS};
 if(typeof module!=='undefined')module.exports=IL.analysis;
 
 })();
@@ -2058,6 +2096,8 @@ function fmtDur(min){min=Math.max(0,Math.round(min||0));if(min<60)return min+' m
 function fmtElapsed(startTs){const m=Math.floor((Date.now()-startTs)/60000);return m<1?'just started':fmtDur(m);}
 // A wall-clock time like "7:42 PM" (for the forgotten-Finish end-time choice).
 function fmtClock(ts){return new Date(ts).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});}
+// Seconds → "2:10" (rest durations).
+function fmtSec(s){s=Math.round(s||0);return Math.floor(s/60)+':'+String(s%60).padStart(2,'0');}
 function fmtDate(ts){return new Date(ts).toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'});}
 function relDay(ts){const t=startOfDay(Date.now()),d=startOfDay(ts);const diff=Math.round((t-d)/DAY);
   if(diff===0)return'Today';if(diff===1)return'Yesterday';if(diff<7)return diff+' days ago';return fmtDate(ts);}
@@ -2494,6 +2534,7 @@ function viewProgress(){
     </div>
     ${coachCard(done)}
     ${recoveryCard()}
+    ${timeCard()}
     <div class="eyebrow" style="margin:24px 2px 10px">Weekly volume · last 8 weeks</div>
     <div class="card" style="padding:14px 12px 10px">${volumeChart()}</div>
     <div class="eyebrow" style="margin:24px 2px 10px">Personal records</div>
@@ -2565,6 +2606,23 @@ function recoveryCard(){
     <div class="card" style="padding:14px 16px"><div style="font-size:13.5px;line-height:1.55">${rows.map(r=>`<div style="padding:4px 0">${r}</div>`).join('')}</div>
     <div class="dim" style="font-size:12px;margin-top:8px">Deloads never affect your progression, PRs or the builder — this is just so you can see your own pattern.</div></div>`;
 }
+// Time card (T3): how long you train, how dense, how long you rest, and where the time goes — all
+// from the per-set stamps. Shows nothing until at least one timed workout exists.
+function timeCard(){
+  const t=A.timeTrends(state.sessions,Date.now());
+  if(!t.n)return '';
+  const rest=[];if(t.restCompound!=null)rest.push('compounds ~'+fmtSec(t.restCompound));if(t.restIsolation!=null)rest.push('isolation ~'+fmtSec(t.restIsolation));
+  const maxG=Math.max(1,...t.byGroup.map(g=>g[1]));
+  return `<div class="eyebrow" style="margin:24px 2px 10px">Time · last 4 weeks</div>
+    <div class="card" style="padding:15px 16px">
+      <div class="row-between" style="font-size:13.5px;margin-bottom:${rest.length||t.byGroup.length?'12':'0'}px">
+        <span class="muted">Avg workout <b class="mono">${fmtDur(t.avgDuration)}</b></span>
+        <span class="muted">${t.density!=null?`<b class="mono">${t.density}</b> sets / 10 min`:''}</span></div>
+      ${rest.length?`<div class="dim" style="font-size:12.5px;margin-bottom:${t.byGroup.length?'13':'0'}px">You rest about ${rest.join(' · ')} between sets.</div>`:''}
+      ${t.byGroup.length?`<div class="eyebrow" style="margin:2px 0 9px">Where your time goes</div>
+        ${t.byGroup.map(([g,m])=>`<div style="margin-bottom:9px"><div class="row-between" style="margin-bottom:4px"><span style="font-weight:600;font-size:13px">${g}</span><span class="mono dim" style="font-size:12px">${fmtDur(m)}</span></div><div style="height:6px;background:var(--surface-2);border-radius:3px;overflow:hidden"><div style="height:100%;width:${Math.round(m/maxG*100)}%;background:var(--accent);border-radius:3px"></div></div></div>`).join('')}`:''}
+    </div>`;
+}
 function muscleBreakdown(mo){
   const arr=A.muscleSetCounts(mo);if(!arr.length)return'';
   const max=Math.max(...arr.map(a=>a[1]));
@@ -2606,6 +2664,7 @@ function notesCard(id){
 function exerciseDetail(id){
   const e=EX[id];const lp=P.lastPerf(state.sessions,id,{excludeId:state.active&&state.active.id});
   const target=cur();const inWorkout=target&&target.exercises.some(x=>x.id===id);
+  const rest=A.exerciseRest(state.sessions,id);   // T3: median rest you actually take here
   return `<div style="display:flex;gap:13px;align-items:center;margin-bottom:16px">
       <div class="ex-ic" style="width:52px;height:52px">${exIcon(e.group)}</div>
       <div><div class="mono dim" style="font-size:12px">${e.equip} · ${e.type}${e.tier===1?' · foundational lift':''}</div>
@@ -2616,6 +2675,7 @@ function exerciseDetail(id){
     <div class="card" style="padding:12px 15px;margin:16px 0">
       <div class="row-between"><span class="eyebrow">Target rep range</span><span class="mono" style="font-weight:600">${e.rr[0]}–${e.rr[1]}</span></div>
       ${lp?`<div class="row-between" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line)"><span class="eyebrow">Last time</span><span class="mono" style="font-weight:600">${esc(P.fmtPerf(lp.sets,U()))}</span></div>`:''}
+      ${rest!=null?`<div class="row-between" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line)"><span class="eyebrow">Rest you usually take</span><span class="mono" style="font-weight:600">~${fmtSec(rest)}</span></div>`:''}
     </div>
     <a class="btn ghost block" href="${demoURL(id)}" target="_blank" rel="noopener noreferrer" style="margin-bottom:10px;text-decoration:none">▶ Watch a demo video</a>
     <button class="btn primary block" data-addto="${id}">${inWorkout?'✓ Already in this workout':'＋ Add to '+(todayScreen==='edit'?'this session':'today’s workout')}</button>`;

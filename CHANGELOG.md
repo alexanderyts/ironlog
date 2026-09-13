@@ -2,6 +2,15 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.37.0 — 2026-09-13 · See how you spend your time (Roadmap v6, Phase T3)
+A new **Time card on the Progress tab**, all from the timestamps added in the last two updates:
+- **Average workout length** and **density** (working sets per 10 minutes).
+- **How long you actually rest** between sets — split by compound lifts vs isolation — which you can now compare to your rest-timer setting.
+- **Where your time goes**, as a bar per muscle group over the last 4 weeks.
+- Each exercise's detail sheet now shows **the rest you typically take on that lift** (e.g. "~3:00").
+- All of it ignores sessions logged before timing existed, and any single break over 15 minutes is capped so a phone call doesn't get counted as training. (analysis.js `timeByGroup`/`restTaken`/`sessionDensity`/`timeTrends`.)
+- Not verified on-device: nothing behavioural — the card and numbers were checked in the browser against a hand-built fixture.
+
 ## v0.36.0 — 2026-09-13 · If you forget to press Finish (Roadmap v6, Phase T2)
 The app never ends a workout on its own — it just notices and asks.
 - **A "Still training?" banner** appears on a workout that's been idle a long time (no set checked for over an hour), with Finish and Discard right there. The Home "Resume" card and the header show the idle time too.

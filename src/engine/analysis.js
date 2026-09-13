@@ -3,7 +3,7 @@ var IL=globalThis.IL||(globalThis.IL={});
 if(typeof require==='function'&&!IL.data)require('../data/exercises.js');
 if(typeof require==='function'&&!IL.prog)require('./progression.js');
 const {EX,EXERCISES,REGIONS,IDEAL_PATS,LOWER_GROUPS,MODES,regLabel,patLabel,exampleFor,hashId}=IL.data;
-const {DAY,startOfDay,e1rm,isWorking,setLoad,sessionVolume,modeOf,calcStreak,real,weekIndex,weekStart,lastPerf}=IL.prog;
+const {DAY,startOfDay,e1rm,isWorking,setLoad,sessionVolume,sessionSets,sessionDuration,setTimeline,modeOf,calcStreak,real,weekIndex,weekStart,lastPerf}=IL.prog;
 
 // completed() INCLUDES deloads on purpose — volume/frequency/PR-window analysis wants everything the
 // user actually did. Progression-only scans use real() (completed AND not a deload) instead.
@@ -276,10 +276,48 @@ function deloadStats(sessions,now){
     sharedLifts:ratios.length,
     onlyOnDeload:[...onlyOnDeload].map(id=>EX[id].name)};
 }
+/* ── Time analytics (T3): everything derived from the per-set `at` stamps and session start/end.
+   Sessions with no stamps (logged before timing existed) contribute nothing and are simply skipped. */
+const MAX_GAP_MIN=15;   // a single gap longer than this (a phone call, a chat) isn't credited as training time
+function median(arr){if(!arr.length)return null;const a=arr.slice().sort((x,y)=>x-y),m=a.length>>1;return a.length%2?a[m]:Math.round((a[m-1]+a[m])/2);}
+// Minutes attributed to each muscle group: each stamped set owns the time since the previous stamped
+// set (or the session start), each interval capped at MAX_GAP_MIN. Returns {group: minutes}.
+function timeByGroup(s){
+  const tl=setTimeline(s);if(!tl.length)return {};
+  const cap=MAX_GAP_MIN*60000,out={};let prev=+s.date;
+  tl.forEach(x=>{const dt=Math.min(Math.max(0,x.at-prev),cap);if(x.group)out[x.group]=(out[x.group]||0)+dt/60000;prev=x.at;});
+  return out;
+}
+// Rest gaps (seconds) between consecutive stamped sets of the SAME exercise, split compound/isolation.
+function restGaps(s){const all=[],comp=[],iso=[];
+  (s.exercises||[]).forEach(e=>{const ex=EX[e.id];const t=e.sets.map(st=>+st.at).filter(a=>a>0).sort((a,b)=>a-b);
+    for(let i=1;i<t.length;i++){const g=(t[i]-t[i-1])/1000;all.push(g);if(ex&&ex.type==='compound')comp.push(g);else if(ex)iso.push(g);}});
+  return {all,comp,iso};}
+// Median rest actually taken (seconds), overall and by lift type. null when too few stamped sets.
+function restTaken(s){const g=restGaps(s);return {median:median(g.all),compound:median(g.comp),isolation:median(g.iso),n:g.all.length};}
+// Working sets per 10 minutes; null when the workout isn't timed.
+function sessionDensity(s){const d=sessionDuration(s);return (d&&d>0)?+(sessionSets(s)/d*10).toFixed(1):null;}
+// Median rest (seconds) for ONE exercise across all its stamped history — for the exercise detail sheet.
+function exerciseRest(sessions,id){const gaps=[];completed(sessions).forEach(s=>{const e=s.exercises.find(x=>x.id===id);if(!e)return;
+  const t=e.sets.map(st=>+st.at).filter(a=>a>0).sort((a,b)=>a-b);for(let i=1;i<t.length;i++)gaps.push((t[i]-t[i-1])/1000);});return median(gaps);}
+// 28-day time picture for the Progress "Time" card: how long, how dense, how much rest, split by muscle.
+function timeTrends(sessions,now){
+  now=now||Date.now();
+  const done=completed(sessions).filter(s=>s.date<now&&s.date>=now-28*DAY&&sessionDuration(s)!=null);
+  if(!done.length)return {n:0};
+  let totMin=0,totSets=0;const comp=[],iso=[],grp={};
+  done.forEach(s=>{totMin+=sessionDuration(s);totSets+=sessionSets(s);
+    const g=restGaps(s);comp.push(...g.comp);iso.push(...g.iso);
+    const tg=timeByGroup(s);Object.keys(tg).forEach(k=>grp[k]=(grp[k]||0)+tg[k]);});
+  return {n:done.length,avgDuration:Math.round(totMin/done.length),
+    density:totMin>0?+(totSets/totMin*10).toFixed(1):null,
+    restCompound:median(comp),restIsolation:median(iso),
+    byGroup:Object.entries(grp).map(([g,m])=>[g,Math.round(m)]).sort((a,b)=>b[1]-a[1])};
+}
 function muscleSetCounts(sessions){
   const cnt={};completed(sessions).forEach(s=>s.exercises.forEach(e=>{const g=EX[e.id]?EX[e.id].group:'Other';cnt[g]=(cnt[g]||0)+e.sets.filter(isWorking).length;}));
   return Object.entries(cnt).sort((a,b)=>b[1]-a[1]);
 }
 
-IL.analysis={analyze,progressionStat,gapPrio,patPrio,findings,findingKey,withStatus,renderFinding,buildTips,buildHints,personalRecords,weeklyVolumes,muscleSetCounts,deloadStats,MIN_COMPARATIVE_SESSIONS,MIN_COMPARATIVE_DAYS};
+IL.analysis={analyze,progressionStat,gapPrio,patPrio,findings,findingKey,withStatus,renderFinding,buildTips,buildHints,personalRecords,weeklyVolumes,muscleSetCounts,deloadStats,timeByGroup,restTaken,sessionDensity,exerciseRest,timeTrends,MIN_COMPARATIVE_SESSIONS,MIN_COMPARATIVE_DAYS};
 if(typeof module!=='undefined')module.exports=IL.analysis;

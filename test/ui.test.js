@@ -147,6 +147,25 @@ test('UI: T2 — finishing a normal (not-idle) workout does NOT prompt for the e
   }finally{h.teardown();}
 });
 
+test('UI: T3 — the Progress Time card summarises duration, rest and time-by-muscle',()=>{
+  const h=launch();
+  try{
+    const now=Date.now(),M=60000,D=86400000;
+    h.state.sessions=[
+      {id:'a',schema:1,date:now-2*D,updatedAt:1,completed:true,endedAt:now-2*D+40*M,exercises:[{id:'barbell-bench-press',name:'B',sets:[{w:135,r:8,done:true,at:now-2*D+10*M},{w:135,r:8,done:true,at:now-2*D+13*M}]}]},
+      {id:'b',schema:1,date:now-5*D,updatedAt:1,completed:true,endedAt:now-5*D+20*M,exercises:[{id:'lateral-raise',name:'L',sets:[{w:15,r:12,done:true,at:now-5*D+2*M},{w:15,r:12,done:true,at:now-5*D+3*M}]}]}
+    ];
+    h.IL.ui.render();
+    h.click(h.$$('[data-tab]').find(b=>b.dataset.tab==='progress'));
+    const txt=h.text('#view');
+    assert.ok(txt.includes('Time · last 4 weeks'),'Time card present');
+    assert.ok(txt.includes('30 min'),'avg workout (40+20)/2 = 30 min');
+    assert.ok(txt.includes('compounds ~3:00'),'compound rest 3:00 (bench 180s gap)');
+    assert.ok(txt.includes('isolation ~1:00'),'isolation rest 1:00 (lateral 60s gap)');
+    assert.ok(txt.includes('Chest')&&txt.includes('Shoulders'),'time-by-muscle lists both groups');
+  }finally{h.teardown();}
+});
+
 // ── Phase U1: controls & input usability ─────────────────────────────────────────────────────────
 const wait=ms=>new Promise(r=>setTimeout(r,ms));
 

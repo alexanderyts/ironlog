@@ -72,6 +72,7 @@ function viewProgress(){
     </div>
     ${coachCard(done)}
     ${recoveryCard()}
+    ${timeCard()}
     <div class="eyebrow" style="margin:24px 2px 10px">Weekly volume · last 8 weeks</div>
     <div class="card" style="padding:14px 12px 10px">${volumeChart()}</div>
     <div class="eyebrow" style="margin:24px 2px 10px">Personal records</div>
@@ -143,6 +144,23 @@ function recoveryCard(){
     <div class="card" style="padding:14px 16px"><div style="font-size:13.5px;line-height:1.55">${rows.map(r=>`<div style="padding:4px 0">${r}</div>`).join('')}</div>
     <div class="dim" style="font-size:12px;margin-top:8px">Deloads never affect your progression, PRs or the builder — this is just so you can see your own pattern.</div></div>`;
 }
+// Time card (T3): how long you train, how dense, how long you rest, and where the time goes — all
+// from the per-set stamps. Shows nothing until at least one timed workout exists.
+function timeCard(){
+  const t=A.timeTrends(state.sessions,Date.now());
+  if(!t.n)return '';
+  const rest=[];if(t.restCompound!=null)rest.push('compounds ~'+fmtSec(t.restCompound));if(t.restIsolation!=null)rest.push('isolation ~'+fmtSec(t.restIsolation));
+  const maxG=Math.max(1,...t.byGroup.map(g=>g[1]));
+  return `<div class="eyebrow" style="margin:24px 2px 10px">Time · last 4 weeks</div>
+    <div class="card" style="padding:15px 16px">
+      <div class="row-between" style="font-size:13.5px;margin-bottom:${rest.length||t.byGroup.length?'12':'0'}px">
+        <span class="muted">Avg workout <b class="mono">${fmtDur(t.avgDuration)}</b></span>
+        <span class="muted">${t.density!=null?`<b class="mono">${t.density}</b> sets / 10 min`:''}</span></div>
+      ${rest.length?`<div class="dim" style="font-size:12.5px;margin-bottom:${t.byGroup.length?'13':'0'}px">You rest about ${rest.join(' · ')} between sets.</div>`:''}
+      ${t.byGroup.length?`<div class="eyebrow" style="margin:2px 0 9px">Where your time goes</div>
+        ${t.byGroup.map(([g,m])=>`<div style="margin-bottom:9px"><div class="row-between" style="margin-bottom:4px"><span style="font-weight:600;font-size:13px">${g}</span><span class="mono dim" style="font-size:12px">${fmtDur(m)}</span></div><div style="height:6px;background:var(--surface-2);border-radius:3px;overflow:hidden"><div style="height:100%;width:${Math.round(m/maxG*100)}%;background:var(--accent);border-radius:3px"></div></div></div>`).join('')}`:''}
+    </div>`;
+}
 function muscleBreakdown(mo){
   const arr=A.muscleSetCounts(mo);if(!arr.length)return'';
   const max=Math.max(...arr.map(a=>a[1]));
@@ -184,6 +202,7 @@ function notesCard(id){
 function exerciseDetail(id){
   const e=EX[id];const lp=P.lastPerf(state.sessions,id,{excludeId:state.active&&state.active.id});
   const target=cur();const inWorkout=target&&target.exercises.some(x=>x.id===id);
+  const rest=A.exerciseRest(state.sessions,id);   // T3: median rest you actually take here
   return `<div style="display:flex;gap:13px;align-items:center;margin-bottom:16px">
       <div class="ex-ic" style="width:52px;height:52px">${exIcon(e.group)}</div>
       <div><div class="mono dim" style="font-size:12px">${e.equip} · ${e.type}${e.tier===1?' · foundational lift':''}</div>
@@ -194,6 +213,7 @@ function exerciseDetail(id){
     <div class="card" style="padding:12px 15px;margin:16px 0">
       <div class="row-between"><span class="eyebrow">Target rep range</span><span class="mono" style="font-weight:600">${e.rr[0]}–${e.rr[1]}</span></div>
       ${lp?`<div class="row-between" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line)"><span class="eyebrow">Last time</span><span class="mono" style="font-weight:600">${esc(P.fmtPerf(lp.sets,U()))}</span></div>`:''}
+      ${rest!=null?`<div class="row-between" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line)"><span class="eyebrow">Rest you usually take</span><span class="mono" style="font-weight:600">~${fmtSec(rest)}</span></div>`:''}
     </div>
     <a class="btn ghost block" href="${demoURL(id)}" target="_blank" rel="noopener noreferrer" style="margin-bottom:10px;text-decoration:none">▶ Watch a demo video</a>
     <button class="btn primary block" data-addto="${id}">${inWorkout?'✓ Already in this workout':'＋ Add to '+(todayScreen==='edit'?'this session':'today’s workout')}</button>`;
