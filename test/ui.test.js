@@ -94,6 +94,58 @@ test('UI: with a plan, toggling deload builds the same exercises lighter (no "Se
   }finally{h.teardown();}
 });
 
+// ── Phase U1: controls & input usability ─────────────────────────────────────────────────────────
+const wait=ms=>new Promise(r=>setTimeout(r,ms));
+
+test('UI: tapping a number selects it, so typing replaces the old value (Phase U1)',async()=>{
+  const h=launch();
+  try{
+    pushHistory(h.state,h.S);h.IL.ui.render();buildWorkout(h,['Chest']);
+    const inp=h.$$('input[data-f="w"]')[0];
+    assert.ok(inp.value.length>0,'prefilled weight present: '+inp.value);
+    inp.focus();await wait(5);   // the iOS-safe range set is deferred
+    assert.equal(inp.selectionStart,0);assert.equal(inp.selectionEnd,inp.value.length,'whole value selected on focus');
+    // control: the value itself is untouched by focusing (nothing is cleared until the user types)
+    assert.equal(h.state.active.exercises[0].sets[0].w,+inp.value);
+  }finally{h.teardown();}
+});
+
+test('UI: Enter moves weight → reps → next set → done (Phase U1)',()=>{
+  const h=launch();
+  try{
+    pushHistory(h.state,h.S);h.IL.ui.render();buildWorkout(h,['Chest']);
+    const enter=el=>el.dispatchEvent(new h.win.KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true}));
+    const w0=h.$('input[data-f="w"][data-ei="0"][data-s="0"]');w0.focus();
+    enter(w0);assert.equal(h.doc.activeElement,h.$('input[data-f="r"][data-ei="0"][data-s="0"]'),'weight → reps');
+    enter(h.doc.activeElement);assert.equal(h.doc.activeElement,h.$('input[data-f="w"][data-ei="0"][data-s="1"]'),'reps → next set\'s weight');
+    const last=h.$$('input[data-f="r"][data-ei="0"]').pop();last.focus();enter(last);
+    assert.notEqual(h.doc.activeElement,last,'Enter on the last reps field blurs');
+  }finally{h.teardown();}
+});
+
+test('UI: one tap on + is exactly one increment; a hold repeats and adds nothing extra on release (Phase U1)',async()=>{
+  const h=launch();
+  try{
+    pushHistory(h.state,h.S);h.IL.ui.render();buildWorkout(h,['Chest']);
+    const set0=()=>h.state.active.exercises[0].sets[0];
+    const plus=()=>h.$('[data-step="w"][data-d="1"][data-ei="0"][data-s="0"]');
+    const start=set0().w;
+    h.click(plus());
+    assert.equal(set0().w,start+5,'one tap = +5 lb');
+    // hold: pointerdown, wait past the delay + two repeats, then release like a browser does (pointerup, then click)
+    const ev=n=>new h.win.Event(n,{bubbles:true});
+    plus().dispatchEvent(ev('pointerdown'));
+    await wait(650);                                  // 400 delay + repeats at 510, 620 → 2 steps
+    const afterHold=set0().w;
+    assert.ok(afterHold>=start+5+10,'hold repeated at least twice ('+afterHold+')');
+    h.doc.dispatchEvent(ev('pointerup'));plus().dispatchEvent(ev('click'));
+    const afterRelease=set0().w;
+    assert.equal(afterRelease,afterHold,'the trailing click after a hold adds nothing');
+    await wait(250);
+    assert.equal(set0().w,afterRelease,'and it stopped repeating');
+  }finally{h.teardown();}
+});
+
 test('UI: a preset selects its muscle groups and re-tapping clears them',()=>{
   const h=launch();
   try{

@@ -116,7 +116,7 @@ html.standalone .tabbar{bottom:auto;top:calc(var(--screen-h,100vh) - var(--tab-h
 .btn.danger{background:#d33a26;color:#fff;border-color:transparent}
 .btn.block{display:flex;width:100%}
 .btn.sm{height:40px;font-size:14px;padding:0 14px;border-radius:11px}
-.chip{display:inline-flex;align-items:center;gap:6px;height:38px;padding:0 15px;border-radius:20px;border:1.5px solid var(--line);background:var(--surface);font-size:14px;font-weight:600;color:var(--ink-2)}
+.chip{display:inline-flex;align-items:center;gap:6px;height:40px;padding:0 15px;border-radius:20px;border:1.5px solid var(--line);background:var(--surface);font-size:14px;font-weight:600;color:var(--ink-2)}
 .chip.on{background:var(--accent);color:var(--accent-ink);border-color:transparent}
 .chips{display:flex;flex-wrap:wrap;gap:9px}
 .chips.hscroll{flex-wrap:nowrap;overflow-x:auto;padding-bottom:4px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
@@ -153,19 +153,31 @@ html.standalone .tabbar{bottom:auto;top:calc(var(--screen-h,100vh) - var(--tab-h
 .set-hdr{padding:2px 4px 8px;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
 .set-hdr div:nth-child(2),.set-hdr div:nth-child(3){text-align:center}
 .set-row{margin-bottom:9px}
-.set-no{width:30px;height:44px;border-radius:10px;background:var(--surface-2);display:grid;place-items:center;font-weight:700;color:var(--ink-2);font-family:"IBM Plex Mono";font-size:14px}
+.set-no{width:30px;height:44px;border-radius:10px;background:var(--surface-2);display:grid;place-items:center;font-weight:700;color:var(--ink-2);font-family:"IBM Plex Mono";font-size:14px;position:relative}
+.set-no::after{content:"";position:absolute;inset:-4px -7px}
+.set-no:active{transform:scale(.94)}
 .set-row.done .set-no{background:var(--good-soft);color:var(--good)}
 .set-no.warm,.set-row.done .set-no.warm{background:color-mix(in srgb,var(--warn) 20%,transparent);color:var(--warn)}
-.numwrap{display:flex;align-items:center;background:var(--surface-2);border:1.5px solid transparent;border-radius:11px;height:48px;overflow:hidden}
+.numwrap{display:flex;align-items:center;background:var(--surface-2);border:1.5px solid transparent;border-radius:11px;height:48px;overflow:visible;min-width:0}   /* visible: the steppers' hit-slop must not be clipped. min-width:0 is REQUIRED with it — without overflow:hidden a grid item's automatic minimum becomes the input's intrinsic width (~200px) and the row overflows the phone */
 .numwrap:focus-within{border-color:var(--accent);background:var(--surface)}
-.numwrap button{width:28px;height:100%;font-size:20px;color:var(--ink-3);font-weight:500}
-.numwrap button:active{color:var(--accent)}
+/* Tap targets (Phase U1): the visual stays compact so "102.5" still fits on a 375-px phone, but every
+   control's HIT area is >= 44pt via a transparent ::after overlay that extends past the visual box. */
+.numwrap button{width:28px;height:100%;font-size:20px;color:var(--ink-3);font-weight:500;position:relative}
+/* 28×48 visual → 39×56 hit: 8px inward over the number box's empty margin, 3px outward (the boxes
+   are 8px apart, so 3px each side never lets neighbouring steppers' overlays collide) */
+.numwrap button::after{content:"";position:absolute;inset:-4px -8px}
+.numwrap button:first-child::after{left:-3px}
+.numwrap button:last-child::after{right:-3px}
+.numwrap button:active{color:var(--accent);transform:scale(1.15)}
 .numwrap input{flex:1;min-width:0;text-align:center;border:none;background:none;height:100%;font-family:"IBM Plex Mono";font-size:16px;font-weight:600;color:var(--ink)}
 .numwrap input:focus{outline:none}
-.set-check{width:40px;height:44px;border-radius:11px;border:1.5px solid var(--line);display:grid;place-items:center;color:var(--ink-3)}
+.set-check{width:40px;height:44px;border-radius:11px;border:1.5px solid var(--line);display:grid;place-items:center;color:var(--ink-3);position:relative}
+.set-check::after{content:"";position:absolute;inset:-4px}
+.set-check:active{transform:scale(.94)}
 .set-check.on{background:var(--good);border-color:transparent;color:#fff}
 .set-actions{display:flex;gap:8px;padding:4px 3px 12px;flex-wrap:wrap}
-.linkbtn{font-size:13px;font-weight:600;color:var(--accent);padding:7px 4px;display:inline-flex;align-items:center;gap:5px}
+.linkbtn{font-size:13px;font-weight:600;color:var(--accent);min-height:40px;padding:8px 6px;display:inline-flex;align-items:center;gap:5px;border-radius:9px}
+.linkbtn:active{background:var(--surface-2)}
 .linkbtn.dim{color:var(--ink-3)}
 .hint{font-size:11.5px;color:var(--ink-3);padding:0 4px 8px}
 
@@ -229,7 +241,9 @@ html.standalone .tabbar{bottom:auto;top:calc(var(--screen-h,100vh) - var(--tab-h
 .sheet-head{display:flex;align-items:center;justify-content:space-between;padding:8px 18px 12px;border-bottom:1px solid var(--line)}
 .sheet-head h3{font-size:18px}
 .sheet-body{overflow-y:auto;overscroll-behavior:contain;padding:16px 18px calc(24px + var(--safe-b));-webkit-overflow-scrolling:touch}
-.sheet-x{width:34px;height:34px;border-radius:50%;background:var(--surface-2);display:grid;place-items:center;color:var(--ink-2)}
+.sheet-x{width:34px;height:34px;border-radius:50%;background:var(--surface-2);display:grid;place-items:center;color:var(--ink-2);position:relative}
+.sheet-x::after{content:"";position:absolute;inset:-6px}
+.sheet-x:active{transform:scale(.92)}
 
 /* misc */
 .list{overflow:hidden}
@@ -254,7 +268,9 @@ html.standalone .tabbar{bottom:auto;top:calc(var(--screen-h,100vh) - var(--tab-h
 .tri{width:44px;height:44px;border-radius:12px;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;flex-shrink:0}
 .routine{display:flex;align-items:center;gap:12px;width:100%;text-align:left;padding:12px 14px;border:1px solid var(--line);border-radius:13px;background:var(--surface);margin-bottom:9px}
 .routine .ex-ic{width:38px;height:38px}
-.routine .del{margin-left:auto;color:var(--ink-3);width:32px;height:32px;border-radius:8px;display:grid;place-items:center;flex-shrink:0}
+.routine .del{margin-left:auto;color:var(--ink-3);width:32px;height:32px;border-radius:8px;display:grid;place-items:center;flex-shrink:0;position:relative}
+.routine .del::after{content:"";position:absolute;inset:-6px}
+.routine .del:active{background:var(--surface-2)}
 /* rest timer */
 .restbar{position:fixed;left:0;right:0;bottom:calc(74px + var(--safe-b) - var(--deficit));transform:translateZ(0);z-index:40;display:none}
 .restbar.on{display:block}
@@ -266,7 +282,8 @@ html.standalone .tabbar{bottom:auto;top:calc(var(--screen-h,100vh) - var(--tab-h
 .rest-prog{flex:1;height:6px;background:rgba(255,255,255,.22);border-radius:3px;overflow:hidden}
 .rest-prog span{display:block;height:100%;width:0;background:var(--accent);border-radius:3px;transition:width .3s linear}
 .restbar.done .rest-prog span{background:#fff}
-.rest-btn{background:rgba(255,255,255,.16);color:inherit;height:34px;padding:0 12px;border-radius:9px;font-weight:600;font-size:13px;flex-shrink:0}
+.rest-btn{background:rgba(255,255,255,.16);color:inherit;height:34px;padding:0 12px;border-radius:9px;font-weight:600;font-size:13px;flex-shrink:0;position:relative}
+.rest-btn::after{content:"";position:absolute;inset:-5px 0}
 .rest-btn:active{background:rgba(255,255,255,.28)}
 /* toggle switch + steppers */
 .sw{width:50px;height:30px;border-radius:15px;background:var(--line);position:relative;flex-shrink:0;transition:background .15s}
@@ -274,7 +291,7 @@ html.standalone .tabbar{bottom:auto;top:calc(var(--screen-h,100vh) - var(--tab-h
 .sw::after{content:"";position:absolute;top:3px;left:3px;width:24px;height:24px;border-radius:50%;background:#fff;transition:left .15s;box-shadow:0 1px 3px rgba(0,0,0,.3)}
 .sw.on::after{left:23px}
 .stepper{display:inline-flex;align-items:center;gap:2px;background:var(--surface-2);border-radius:10px;padding:3px}
-.stepper button{width:34px;height:32px;border-radius:8px;font-size:18px;color:var(--ink-2);font-weight:500}
+.stepper button{width:40px;height:40px;border-radius:8px;font-size:18px;color:var(--ink-2);font-weight:500}
 .stepper button:active{color:var(--accent)}
 .stepper .val{min-width:52px;text-align:center;font-weight:600}
 .cloud{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;color:var(--ink-3)}

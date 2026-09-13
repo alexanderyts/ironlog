@@ -154,13 +154,45 @@ function bind(){
     if(e.target.closest('.ex-add')){addExerciseToCur(b.dataset.open);return;}
     if(EX[b.dataset.open])openSheet(EX[b.dataset.open].name,exerciseDetail(b.dataset.open));}));
 }
+// One stepper tick on a set's weight/reps (shared by tap and hold-to-repeat).
+function stepSet(ei,si,f,d){
+  const t=cur();if(!t||!t.exercises[ei]||!t.exercises[ei].sets[si])return;const st=t.exercises[ei].sets[si];
+  let v=+st[f]||0;v+=f==='w'?d*inc():d;if(v<0)v=0;st[f]=v;st.t=1;persistCur();
+  const inp=$(`input[data-f="${f}"][data-ei="${ei}"][data-s="${si}"]`);if(inp)inp.value=v;refreshStats();
+  try{if(navigator.vibrate)navigator.vibrate(8);}catch(e){}   // light haptic where the platform has one (Android); iOS Safari has none
+}
+// Hold-to-repeat state: after HOLD_DELAY the stepper repeats every HOLD_EVERY until the pointer lifts.
+// A hold that repeated at least once suppresses the trailing click, so a hold never adds one extra.
+const HOLD_DELAY=400,HOLD_EVERY=110,HOLD_MAX=60;
+let holdT=null,holdI=null,holdSteps=0,heldRepeat=false;
+function stopHold(){clearTimeout(holdT);clearInterval(holdI);holdT=holdI=null;}
 function bindLog(root){
+  stopHold();   // a re-render replaces the buttons mid-hold; never let a timer outlive its button
+  if(!document.__holdWired){document.__holdWired=true;['pointerup','pointercancel'].forEach(ev=>document.addEventListener(ev,stopHold));}
+  root.addEventListener('pointerdown',e=>{const b=e.target.closest('[data-step]');if(!b)return;
+    stopHold();holdSteps=0;heldRepeat=false;
+    const ei=+b.dataset.ei,si=+b.dataset.s,f=b.dataset.step,d=+b.dataset.d;
+    holdT=setTimeout(()=>{holdI=setInterval(()=>{if(++holdSteps>HOLD_MAX){stopHold();return;}heldRepeat=true;stepSet(ei,si,f,d);},HOLD_EVERY);},HOLD_DELAY);});
+  root.addEventListener('pointerleave',stopHold);
+  // Tapping a number selects it, so typing REPLACES the old value instead of inserting into it.
+  // iOS Safari ignores a synchronous select() inside the focus handler — hence the deferred range set.
+  const selectAll=inp=>{try{inp.select();}catch(x){}setTimeout(()=>{try{if(document.activeElement===inp)inp.setSelectionRange(0,inp.value.length);}catch(x){}},0);};
+  root.addEventListener('focusin',e=>{const inp=e.target.closest&&e.target.closest('input[data-f]');if(inp)selectAll(inp);});
+  // Also on every TAP (after the browser has placed its caret): tapping an already-focused number
+  // re-selects it too, so "tap, type" always replaces — the behaviour the owner asked for.
+  root.addEventListener('pointerup',e=>{const inp=e.target.closest&&e.target.closest('input[data-f]');if(inp)selectAll(inp);});
+  // Enter / "Done" moves on: weight → reps → next set's weight → done.
+  root.addEventListener('keydown',e=>{if(e.key!=='Enter')return;const inp=e.target.closest&&e.target.closest('input[data-f]');if(!inp)return;e.preventDefault();
+    const ei=+inp.dataset.ei,si=+inp.dataset.s,f=inp.dataset.f;
+    const next=f==='w'?$(`input[data-f="r"][data-ei="${ei}"][data-s="${si}"]`):$(`input[data-f="w"][data-ei="${ei}"][data-s="${si+1}"]`);
+    if(next)next.focus();else inp.blur();});
   root.addEventListener('click',e=>{
     const t=cur();if(!t)return;
     const chk=e.target.closest('[data-check]');if(chk){const ei=+chk.dataset.check,si=+chk.dataset.s;const st=t.exercises[ei].sets[si];st.done=!st.done;
       if(st.done&&todayScreen==='active'&&state.settings.rest.auto&&!st.warm)startRest(restSecondsFor(t.exercises[ei].id));persistCur();render();return;}
     const wm=e.target.closest('[data-warm]');if(wm){const ei=+wm.dataset.warm,si=+wm.dataset.s;const st=t.exercises[ei].sets[si];st.warm=!st.warm;persistCur();render();toast(st.warm?'Marked as warm-up':'Counted as a working set');return;}
-    const step=e.target.closest('[data-step]');if(step){const ei=+step.dataset.ei,si=+step.dataset.s,f=step.dataset.step,d=+step.dataset.d;const st=t.exercises[ei].sets[si];let v=+st[f]||0;v+=f==='w'?d*inc():d;if(v<0)v=0;st[f]=v;st.t=1;persistCur();const inp=$(`input[data-f="${f}"][data-ei="${ei}"][data-s="${si}"]`);if(inp)inp.value=v;refreshStats();return;}
+    const step=e.target.closest('[data-step]');if(step){if(heldRepeat){heldRepeat=false;return;}   // the click after a hold is not one more step
+      stepSet(+step.dataset.ei,+step.dataset.s,step.dataset.step,+step.dataset.d);return;}
     const add=e.target.closest('[data-addset]');if(add){const ei=+add.dataset.addset;const sets=t.exercises[ei].sets;const last=sets[sets.length-1]||{w:'',r:''};sets.push({w:last.w,r:last.r,done:false});persistCur();render();return;}
     const rem=e.target.closest('[data-delset]');if(rem){const ei=+rem.dataset.delset;const sets=t.exercises[ei].sets;if(sets.length<=1)return;
       const idx=sets.length-1;

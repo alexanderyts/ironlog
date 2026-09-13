@@ -2,6 +2,12 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.34.0 — 2026-09-13 · Easier to tap, easier to type (Roadmap v6, Phase U1)
+- **Tapping a weight or rep number now selects the whole number**, so you just type the new one — no more caret landing mid-number and digits going in the wrong place. Tapping an already-selected number selects it again. Enter/Done jumps to the next field (weight → reps → next set).
+- **+ and − are much easier to hit.** They look the same size (so "102.5" still fits on a small phone) but their touch area is ~40% larger and reaches the full row height. **Hold either one to keep counting.**
+- **Every small control got a bigger touch area** — set numbers, the check button, sheet close, delete buttons, the rest-timer buttons, the settings steppers, text buttons — with a visible press state. Apple's 44-pt minimum was the target; visuals didn't grow.
+- Not verified on-device: haptic tick on step (Android only; iOS Safari has none) and the exact feel of hold-to-repeat timing — tell me if 0.4 s to start / 9 per second is wrong.
+
 ## v0.33.0 — 2026-09-13 · Foundation for what's next (Roadmap v6, Phase 0)
 No user-visible change — this is groundwork so the coming features (workout timing, an optional training profile) are built safely.
 - **The app finally has automated UI tests.** Until now, screen behaviour was only ever checked by hand. A test harness (jsdom) now boots the real app and runs the five flows that matter — finishing saves only your checked sets, the "unchecked sets" prompt, comma decimals, the deload build, presets — so they can't silently break. (120 tests, up from 112.)

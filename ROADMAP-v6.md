@@ -96,9 +96,67 @@ positional context (`profile`) on top of `sessions, seed, hints, now`.
 
 ---
 
+## Phase U1 — Controls & input usability  (v0.34.0 · low-medium risk · css + ui-bind + ui-today)
+
+Owner report: tapping a weight/rep number lands the caret in the middle of the existing value so typing
+produces wrong numbers; the +/− steppers are hard to hit. Root causes (verified): there is **no
+select-on-focus** anywhere; the steppers are **28 px wide** (v0.30 shrank them from 38 so "102.5"
+fits on a 375-px phone — a width win that cost tap accuracy); and several other controls sit under
+Apple's 44-pt minimum (set number 30 px, sheet close 34, routine delete 32, settings steppers 34×32,
+text link-buttons with 7-px padding).
+
+**Principle for the whole app: the visual can stay compact; the HIT area is ≥ 44 pt.** Grow tap
+targets with padding or a `::after` hit-slop overlay, never by widening the layout (that would undo
+the small-phone width fix). Every interactive element gets a visible `:active` state.
+
+1. **Number fields replace, not insert.** On `focusin` of any `input[data-f]`, select the whole
+   value (`select()` plus a deferred `setSelectionRange(0,len)` for iOS Safari, which ignores a
+   synchronous select in the focus handler). Typing then replaces; the caret keys still edit. Keep
+   16-px font (below that iOS zooms on focus) and the existing `inputmode` (decimal / numeric).
+2. **Enter/Done advances:** weight → reps of the same set → weight of the next set → blur on the
+   last. `keydown Enter` handler on the same root; prevent the default (no form submit anyway).
+3. **Steppers:** visual width unchanged (28 px); `::after` hit-slop 8 px inward (over the number
+   box's empty side margin — the digits sit in the centre ~30 px) and 3 px outward, full row height
+   → **39×56 pt** (measured). Outward is capped at 3 px because the boxes are 8 px apart and two
+   overlays must never collide (the later element would win every tap in the gap — found in the
+   first measurement and fixed). Requires `.numwrap{overflow:visible; min-width:0}` — the
+   `min-width:0` is load-bearing: without `overflow:hidden`, a grid item's automatic minimum
+   becomes the input's intrinsic width and the row overflows a 375-px phone.
+   **Hold to repeat:** `pointerdown` → after 400 ms repeat every 110 ms; `pointerup/leave/cancel`
+   stops; the trailing `click` after a hold is suppressed so a hold never adds one extra. Light
+   haptic (`navigator.vibrate(8)`, guarded — Android only; iOS Safari has none) per step.
+4. **App-wide tap-target pass (CSS only):** set-number button, set-check, sheet close, routine
+   delete, exercise-remove ✕, settings steppers (→ 40×40, no width constraint there), link-buttons
+   (`min-height:40px; padding:8px 6px`), chips 38 → 40 px tall. Rest bar buttons already 34 px tall
+   → hit-slop to 44.
+
+Ramifications:
+- **Width vs accuracy tension resolved by hit-slop, not layout** — the 375-px "102.5 fits"
+  guarantee from v0.30 is unchanged (assert it in the browser: input clientWidth ≥ scrollWidth).
+- **Select-all changes muscle memory once**: tap + type now *replaces*. That is what was asked for,
+  and it's the platform convention for numeric fields. Editing a digit in place still works
+  (tap again to place the caret, or use the arrow keys).
+- **The "touched" flag (`st.t`) still fires** on typing after select-all — Finish's unchecked-sets
+  prompt keeps working. No data-model change.
+- **Hold-to-repeat must be unstoppable-proof**: clear timers on every pointer end event and on
+  `render()` (a re-render replaces the buttons mid-hold). Cap a single hold at 60 steps.
+- **jsdom can prove** select-on-focus (`selectionStart===0 && selectionEnd===value.length` after
+  a `focus` event), Enter-advance (`document.activeElement`), single-step, and hold-repeat with
+  real 600-ms waits. It **cannot measure** pseudo-element hit areas — verify those in the browser
+  with `document.elementFromPoint(x±6, y)` at the button edges, plus a screenshot.
+- Not changed: the tab bar and the iOS viewport code (rule 4).
+
+Tests: `test/ui.test.js` +4 (focus selects all; Enter advances weight→reps→next weight; one click
+= one increment; a 600-ms hold = ≥2 increments and no extra step on release). Browser:
+`elementFromPoint` 6 px outside each stepper returns the stepper; "102.5" still unclipped at 375 px.
+Changelog: "Tapping a number now selects it so you just type the new one; +/− are easier to hit;
+hold to repeat."
+
+---
+
 ## Part 1 — Time
 
-### Phase T1 — Timestamps + duration  (v0.34.0 · low risk · progression/sync/ui)
+### Phase T1 — Timestamps + duration  (v0.35.0 · low risk · progression/sync/ui)
 
 Schema (additive):
 - `set.at` — ms timestamp written when a set is **checked done** (cleared when unchecked).
@@ -126,7 +184,7 @@ Tests: `sessionDuration` with/without `endedAt`; `cleanSet` keeps/drops `at`; fi
 Verify: check a set → `at` present; uncheck → gone; finish → `endedAt`; History shows minutes.
 Changelog: "Workouts now record how long they took."
 
-### Phase T2 — Safeguards: forgotten Finish  (v0.35.0 · low-medium risk · ui only)
+### Phase T2 — Safeguards: forgotten Finish  (v0.36.0 · low-medium risk · ui only)
 
 Principle: the app never ends a workout by itself; it **notices**, **tells you**, and **estimates well**.
 
@@ -151,7 +209,7 @@ Tests: `staleness` thresholds. Verify: set `active.date` back 3 h in the console
 banner; finish → estimation sheet → History shows the earlier time.
 Changelog: "If you forget to press Finish, the app notices and lets you log the real end time."
 
-### Phase T3 — Time analytics  (v0.36.0 · low risk · analysis + ui + tools)
+### Phase T3 — Time analytics  (v0.37.0 · low risk · analysis + ui + tools)
 
 All derived from `set.at`, pure, in `analysis.js`:
 - `timeByGroup(s)` — minutes attributed per muscle group: each set owns the interval from the
@@ -177,7 +235,7 @@ Changelog: "See how long you train, how you split your time, and how long you re
 
 ## Part 2 — Profile
 
-### Phase P1 — Profile data + onboarding  (v0.37.0 · low risk · sync/store/ui)
+### Phase P1 — Profile data + onboarding  (v0.38.0 · low risk · sync/store/ui)
 
 `settings.profile` (all optional; absent = auto = today's behaviour):
 ```js
@@ -237,7 +295,7 @@ Acceptance (all automated in `test/ui.test.js` via the Phase 0 harness, plus one
    in P1) — a control that P2 will then flip.
 Changelog: "New (optional): a training profile. Skip it and nothing changes."
 
-### Phase P2 — The builder listens  (v0.38.0 · medium-high risk · builder.js)
+### Phase P2 — The builder listens  (v0.39.0 · medium-high risk · builder.js)
 
 `planWorkout(groups, sessions, seed, opts)` gains `opts.profile`; it passes it to
 `buildRecommendation` → `pickForGroup` → `seedExercise`. **Each lever is one `if` and one test.**
@@ -271,7 +329,7 @@ lever set, individually and with `commercial+protect Shoulders+short` together.
 Ramification to state plainly in the changelog: a `commercial` profile can change a continued
 plan's anchors (barbell bench → machine chest press). The reason toast says so once.
 
-### Phase P3 — The coach listens  (v0.39.0 · low-medium risk · analysis.js)
+### Phase P3 — The coach listens  (v0.40.0 · low-medium risk · analysis.js)
 
 - `days` → `freq-low` threshold: with 2 days/week, don't nag about 1×/week frequency for muscles
   that only fit once; with ≥4, keep today's rule.
@@ -283,7 +341,7 @@ plan's anchors (barbell bench → machine chest press). The reason toast says so
 - `push:'quiet'` → the `progression` finding is descriptive only ("3 of 5 lifts went up").
 Tests in findings.test.js per lever.
 
-### Phase P4 — Review tool + adversarial audit of the profile  (v0.40.0)
+### Phase P4 — Review tool + adversarial audit of the profile  (v0.41.0)
 
 - `tools/review.js --profile '{"equipment":"commercial"}'` overlays a profile on a backup and prints
   the builds and coach output side by side with the auto profile — the before/after the owner asked
@@ -340,5 +398,5 @@ Tests in findings.test.js per lever.
 9. Update memory `roadmap-v2-status.md` with the phase's status.
 
 ## Dependency map
-Phase 0 first (it is the safety net for everything after). Then T1 → T2 → T3 (each derives from the last), then P1 → P2 → P3 → P4. T and P are independent; ship T1–T3
+Phase 0 first (it is the safety net for everything after), then U1 (small, daily-use value). Then T1 → T2 → T3 (each derives from the last), then P1 → P2 → P3 → P4. T and P are independent; ship T1–T3
 first (smaller, immediately useful to the owner's testing), then P1–P4.

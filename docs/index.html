@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-QNCNhvP4RQVtJrxX/U5QwO/ytMQKL69xww70WQIZB/U=' 'sha256-WPBob/luB2k1aalTWXpi6zk3SrIbj8GlZV7AlFdG7oA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-10rg2+DC0aapLaN/YGXCmIO6f7olaO7ntfWQaJj5vIk=' 'sha256-WPBob/luB2k1aalTWXpi6zk3SrIbj8GlZV7AlFdG7oA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Ironlog</title>
@@ -138,7 +138,7 @@ html.standalone .tabbar{bottom:auto;top:calc(var(--screen-h,100vh) - var(--tab-h
 .btn.danger{background:#d33a26;color:#fff;border-color:transparent}
 .btn.block{display:flex;width:100%}
 .btn.sm{height:40px;font-size:14px;padding:0 14px;border-radius:11px}
-.chip{display:inline-flex;align-items:center;gap:6px;height:38px;padding:0 15px;border-radius:20px;border:1.5px solid var(--line);background:var(--surface);font-size:14px;font-weight:600;color:var(--ink-2)}
+.chip{display:inline-flex;align-items:center;gap:6px;height:40px;padding:0 15px;border-radius:20px;border:1.5px solid var(--line);background:var(--surface);font-size:14px;font-weight:600;color:var(--ink-2)}
 .chip.on{background:var(--accent);color:var(--accent-ink);border-color:transparent}
 .chips{display:flex;flex-wrap:wrap;gap:9px}
 .chips.hscroll{flex-wrap:nowrap;overflow-x:auto;padding-bottom:4px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
@@ -175,19 +175,31 @@ html.standalone .tabbar{bottom:auto;top:calc(var(--screen-h,100vh) - var(--tab-h
 .set-hdr{padding:2px 4px 8px;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
 .set-hdr div:nth-child(2),.set-hdr div:nth-child(3){text-align:center}
 .set-row{margin-bottom:9px}
-.set-no{width:30px;height:44px;border-radius:10px;background:var(--surface-2);display:grid;place-items:center;font-weight:700;color:var(--ink-2);font-family:"IBM Plex Mono";font-size:14px}
+.set-no{width:30px;height:44px;border-radius:10px;background:var(--surface-2);display:grid;place-items:center;font-weight:700;color:var(--ink-2);font-family:"IBM Plex Mono";font-size:14px;position:relative}
+.set-no::after{content:"";position:absolute;inset:-4px -7px}
+.set-no:active{transform:scale(.94)}
 .set-row.done .set-no{background:var(--good-soft);color:var(--good)}
 .set-no.warm,.set-row.done .set-no.warm{background:color-mix(in srgb,var(--warn) 20%,transparent);color:var(--warn)}
-.numwrap{display:flex;align-items:center;background:var(--surface-2);border:1.5px solid transparent;border-radius:11px;height:48px;overflow:hidden}
+.numwrap{display:flex;align-items:center;background:var(--surface-2);border:1.5px solid transparent;border-radius:11px;height:48px;overflow:visible;min-width:0}   /* visible: the steppers' hit-slop must not be clipped. min-width:0 is REQUIRED with it — without overflow:hidden a grid item's automatic minimum becomes the input's intrinsic width (~200px) and the row overflows the phone */
 .numwrap:focus-within{border-color:var(--accent);background:var(--surface)}
-.numwrap button{width:28px;height:100%;font-size:20px;color:var(--ink-3);font-weight:500}
-.numwrap button:active{color:var(--accent)}
+/* Tap targets (Phase U1): the visual stays compact so "102.5" still fits on a 375-px phone, but every
+   control's HIT area is >= 44pt via a transparent ::after overlay that extends past the visual box. */
+.numwrap button{width:28px;height:100%;font-size:20px;color:var(--ink-3);font-weight:500;position:relative}
+/* 28×48 visual → 39×56 hit: 8px inward over the number box's empty margin, 3px outward (the boxes
+   are 8px apart, so 3px each side never lets neighbouring steppers' overlays collide) */
+.numwrap button::after{content:"";position:absolute;inset:-4px -8px}
+.numwrap button:first-child::after{left:-3px}
+.numwrap button:last-child::after{right:-3px}
+.numwrap button:active{color:var(--accent);transform:scale(1.15)}
 .numwrap input{flex:1;min-width:0;text-align:center;border:none;background:none;height:100%;font-family:"IBM Plex Mono";font-size:16px;font-weight:600;color:var(--ink)}
 .numwrap input:focus{outline:none}
-.set-check{width:40px;height:44px;border-radius:11px;border:1.5px solid var(--line);display:grid;place-items:center;color:var(--ink-3)}
+.set-check{width:40px;height:44px;border-radius:11px;border:1.5px solid var(--line);display:grid;place-items:center;color:var(--ink-3);position:relative}
+.set-check::after{content:"";position:absolute;inset:-4px}
+.set-check:active{transform:scale(.94)}
 .set-check.on{background:var(--good);border-color:transparent;color:#fff}
 .set-actions{display:flex;gap:8px;padding:4px 3px 12px;flex-wrap:wrap}
-.linkbtn{font-size:13px;font-weight:600;color:var(--accent);padding:7px 4px;display:inline-flex;align-items:center;gap:5px}
+.linkbtn{font-size:13px;font-weight:600;color:var(--accent);min-height:40px;padding:8px 6px;display:inline-flex;align-items:center;gap:5px;border-radius:9px}
+.linkbtn:active{background:var(--surface-2)}
 .linkbtn.dim{color:var(--ink-3)}
 .hint{font-size:11.5px;color:var(--ink-3);padding:0 4px 8px}
 
@@ -251,7 +263,9 @@ html.standalone .tabbar{bottom:auto;top:calc(var(--screen-h,100vh) - var(--tab-h
 .sheet-head{display:flex;align-items:center;justify-content:space-between;padding:8px 18px 12px;border-bottom:1px solid var(--line)}
 .sheet-head h3{font-size:18px}
 .sheet-body{overflow-y:auto;overscroll-behavior:contain;padding:16px 18px calc(24px + var(--safe-b));-webkit-overflow-scrolling:touch}
-.sheet-x{width:34px;height:34px;border-radius:50%;background:var(--surface-2);display:grid;place-items:center;color:var(--ink-2)}
+.sheet-x{width:34px;height:34px;border-radius:50%;background:var(--surface-2);display:grid;place-items:center;color:var(--ink-2);position:relative}
+.sheet-x::after{content:"";position:absolute;inset:-6px}
+.sheet-x:active{transform:scale(.92)}
 
 /* misc */
 .list{overflow:hidden}
@@ -276,7 +290,9 @@ html.standalone .tabbar{bottom:auto;top:calc(var(--screen-h,100vh) - var(--tab-h
 .tri{width:44px;height:44px;border-radius:12px;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;flex-shrink:0}
 .routine{display:flex;align-items:center;gap:12px;width:100%;text-align:left;padding:12px 14px;border:1px solid var(--line);border-radius:13px;background:var(--surface);margin-bottom:9px}
 .routine .ex-ic{width:38px;height:38px}
-.routine .del{margin-left:auto;color:var(--ink-3);width:32px;height:32px;border-radius:8px;display:grid;place-items:center;flex-shrink:0}
+.routine .del{margin-left:auto;color:var(--ink-3);width:32px;height:32px;border-radius:8px;display:grid;place-items:center;flex-shrink:0;position:relative}
+.routine .del::after{content:"";position:absolute;inset:-6px}
+.routine .del:active{background:var(--surface-2)}
 /* rest timer */
 .restbar{position:fixed;left:0;right:0;bottom:calc(74px + var(--safe-b) - var(--deficit));transform:translateZ(0);z-index:40;display:none}
 .restbar.on{display:block}
@@ -288,7 +304,8 @@ html.standalone .tabbar{bottom:auto;top:calc(var(--screen-h,100vh) - var(--tab-h
 .rest-prog{flex:1;height:6px;background:rgba(255,255,255,.22);border-radius:3px;overflow:hidden}
 .rest-prog span{display:block;height:100%;width:0;background:var(--accent);border-radius:3px;transition:width .3s linear}
 .restbar.done .rest-prog span{background:#fff}
-.rest-btn{background:rgba(255,255,255,.16);color:inherit;height:34px;padding:0 12px;border-radius:9px;font-weight:600;font-size:13px;flex-shrink:0}
+.rest-btn{background:rgba(255,255,255,.16);color:inherit;height:34px;padding:0 12px;border-radius:9px;font-weight:600;font-size:13px;flex-shrink:0;position:relative}
+.rest-btn::after{content:"";position:absolute;inset:-5px 0}
 .rest-btn:active{background:rgba(255,255,255,.28)}
 /* toggle switch + steppers */
 .sw{width:50px;height:30px;border-radius:15px;background:var(--line);position:relative;flex-shrink:0;transition:background .15s}
@@ -296,7 +313,7 @@ html.standalone .tabbar{bottom:auto;top:calc(var(--screen-h,100vh) - var(--tab-h
 .sw::after{content:"";position:absolute;top:3px;left:3px;width:24px;height:24px;border-radius:50%;background:#fff;transition:left .15s;box-shadow:0 1px 3px rgba(0,0,0,.3)}
 .sw.on::after{left:23px}
 .stepper{display:inline-flex;align-items:center;gap:2px;background:var(--surface-2);border-radius:10px;padding:3px}
-.stepper button{width:34px;height:32px;border-radius:8px;font-size:18px;color:var(--ink-2);font-weight:500}
+.stepper button{width:40px;height:40px;border-radius:8px;font-size:18px;color:var(--ink-2);font-weight:500}
 .stepper button:active{color:var(--accent)}
 .stepper .val{min-width:52px;text-align:center;font-weight:600}
 .cloud{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;color:var(--ink-3)}
@@ -366,8 +383,8 @@ html.standalone .tabbar{bottom:auto;top:calc(var(--screen-h,100vh) - var(--tab-h
 </div>
 
 <script>
-/* Ironlog v0.33.0 · site build */
-var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.33.0",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
+/* Ironlog v0.34.0 · site build */
+var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.34.0",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
 
 /* ===== src/data/exercises.js ===== */
 (function(){'use strict';
@@ -2941,13 +2958,45 @@ function bind(){
     if(e.target.closest('.ex-add')){addExerciseToCur(b.dataset.open);return;}
     if(EX[b.dataset.open])openSheet(EX[b.dataset.open].name,exerciseDetail(b.dataset.open));}));
 }
+// One stepper tick on a set's weight/reps (shared by tap and hold-to-repeat).
+function stepSet(ei,si,f,d){
+  const t=cur();if(!t||!t.exercises[ei]||!t.exercises[ei].sets[si])return;const st=t.exercises[ei].sets[si];
+  let v=+st[f]||0;v+=f==='w'?d*inc():d;if(v<0)v=0;st[f]=v;st.t=1;persistCur();
+  const inp=$(`input[data-f="${f}"][data-ei="${ei}"][data-s="${si}"]`);if(inp)inp.value=v;refreshStats();
+  try{if(navigator.vibrate)navigator.vibrate(8);}catch(e){}   // light haptic where the platform has one (Android); iOS Safari has none
+}
+// Hold-to-repeat state: after HOLD_DELAY the stepper repeats every HOLD_EVERY until the pointer lifts.
+// A hold that repeated at least once suppresses the trailing click, so a hold never adds one extra.
+const HOLD_DELAY=400,HOLD_EVERY=110,HOLD_MAX=60;
+let holdT=null,holdI=null,holdSteps=0,heldRepeat=false;
+function stopHold(){clearTimeout(holdT);clearInterval(holdI);holdT=holdI=null;}
 function bindLog(root){
+  stopHold();   // a re-render replaces the buttons mid-hold; never let a timer outlive its button
+  if(!document.__holdWired){document.__holdWired=true;['pointerup','pointercancel'].forEach(ev=>document.addEventListener(ev,stopHold));}
+  root.addEventListener('pointerdown',e=>{const b=e.target.closest('[data-step]');if(!b)return;
+    stopHold();holdSteps=0;heldRepeat=false;
+    const ei=+b.dataset.ei,si=+b.dataset.s,f=b.dataset.step,d=+b.dataset.d;
+    holdT=setTimeout(()=>{holdI=setInterval(()=>{if(++holdSteps>HOLD_MAX){stopHold();return;}heldRepeat=true;stepSet(ei,si,f,d);},HOLD_EVERY);},HOLD_DELAY);});
+  root.addEventListener('pointerleave',stopHold);
+  // Tapping a number selects it, so typing REPLACES the old value instead of inserting into it.
+  // iOS Safari ignores a synchronous select() inside the focus handler — hence the deferred range set.
+  const selectAll=inp=>{try{inp.select();}catch(x){}setTimeout(()=>{try{if(document.activeElement===inp)inp.setSelectionRange(0,inp.value.length);}catch(x){}},0);};
+  root.addEventListener('focusin',e=>{const inp=e.target.closest&&e.target.closest('input[data-f]');if(inp)selectAll(inp);});
+  // Also on every TAP (after the browser has placed its caret): tapping an already-focused number
+  // re-selects it too, so "tap, type" always replaces — the behaviour the owner asked for.
+  root.addEventListener('pointerup',e=>{const inp=e.target.closest&&e.target.closest('input[data-f]');if(inp)selectAll(inp);});
+  // Enter / "Done" moves on: weight → reps → next set's weight → done.
+  root.addEventListener('keydown',e=>{if(e.key!=='Enter')return;const inp=e.target.closest&&e.target.closest('input[data-f]');if(!inp)return;e.preventDefault();
+    const ei=+inp.dataset.ei,si=+inp.dataset.s,f=inp.dataset.f;
+    const next=f==='w'?$(`input[data-f="r"][data-ei="${ei}"][data-s="${si}"]`):$(`input[data-f="w"][data-ei="${ei}"][data-s="${si+1}"]`);
+    if(next)next.focus();else inp.blur();});
   root.addEventListener('click',e=>{
     const t=cur();if(!t)return;
     const chk=e.target.closest('[data-check]');if(chk){const ei=+chk.dataset.check,si=+chk.dataset.s;const st=t.exercises[ei].sets[si];st.done=!st.done;
       if(st.done&&todayScreen==='active'&&state.settings.rest.auto&&!st.warm)startRest(restSecondsFor(t.exercises[ei].id));persistCur();render();return;}
     const wm=e.target.closest('[data-warm]');if(wm){const ei=+wm.dataset.warm,si=+wm.dataset.s;const st=t.exercises[ei].sets[si];st.warm=!st.warm;persistCur();render();toast(st.warm?'Marked as warm-up':'Counted as a working set');return;}
-    const step=e.target.closest('[data-step]');if(step){const ei=+step.dataset.ei,si=+step.dataset.s,f=step.dataset.step,d=+step.dataset.d;const st=t.exercises[ei].sets[si];let v=+st[f]||0;v+=f==='w'?d*inc():d;if(v<0)v=0;st[f]=v;st.t=1;persistCur();const inp=$(`input[data-f="${f}"][data-ei="${ei}"][data-s="${si}"]`);if(inp)inp.value=v;refreshStats();return;}
+    const step=e.target.closest('[data-step]');if(step){if(heldRepeat){heldRepeat=false;return;}   // the click after a hold is not one more step
+      stepSet(+step.dataset.ei,+step.dataset.s,step.dataset.step,+step.dataset.d);return;}
     const add=e.target.closest('[data-addset]');if(add){const ei=+add.dataset.addset;const sets=t.exercises[ei].sets;const last=sets[sets.length-1]||{w:'',r:''};sets.push({w:last.w,r:last.r,done:false});persistCur();render();return;}
     const rem=e.target.closest('[data-delset]');if(rem){const ei=+rem.dataset.delset;const sets=t.exercises[ei].sets;if(sets.length<=1)return;
       const idx=sets.length-1;
