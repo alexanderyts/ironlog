@@ -133,13 +133,18 @@ function makeIcon(size){
   return Buffer.concat([Buffer.from([137,80,78,71,13,10,26,10]),chunk('IHDR',ihdr),chunk('IDAT',zlib.deflateSync(raw)),chunk('IEND',Buffer.alloc(0))]);
 }
 
-console.log('Building Ironlog v'+pkg.version+(cfg.DROPBOX_APP_KEY?' (Dropbox key set)':' (no Dropbox key — cloud backup off in site build)'));
-write('dist/app.html',artifact);
-write('dist/demo.html',demo);
-write('docs/index.html',site);
-write('docs/sw.js',sw);
-write('docs/manifest.webmanifest',manifest);
-write('docs/icon-192.png',makeIcon(192));
-write('docs/icon-512.png',makeIcon(512));
-write('docs/apple-touch-icon.png',makeIcon(180));
-console.log('Done.');
+// Exported so the test harness can assemble the exact bundle the browser runs (test/ui-harness.js)
+// without a separate build step. Writing files only happens when run directly (`node build.js`).
+module.exports={bundle,css,body,artifact,demo,site,sw,FONTS};
+if(require.main===module){
+  console.log('Building Ironlog v'+pkg.version+(cfg.DROPBOX_APP_KEY?' (Dropbox key set)':' (no Dropbox key — cloud backup off in site build)'));
+  write('dist/app.html',artifact);
+  write('dist/demo.html',demo);
+  write('docs/index.html',site);
+  write('docs/sw.js',sw);
+  write('docs/manifest.webmanifest',manifest);
+  write('docs/icon-192.png',makeIcon(192));
+  write('docs/icon-512.png',makeIcon(512));
+  write('docs/apple-touch-icon.png',makeIcon(180));
+  console.log('Done.');
+}

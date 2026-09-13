@@ -3,3 +3,6 @@ dist/
 _check.js
 .DS_Store
 Thumbs.db
+package-lock.json
+# Private real-user backups used as regression fixtures — never commit (repo is public)
+data/

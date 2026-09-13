@@ -13,7 +13,7 @@ if(!file){console.error('usage: node tools/review.js <backup.json> [--why]   (--
 const d=IL.sync.parseImport(fs.readFileSync(file,'utf8'));
 const unit=(d.settings&&d.settings.unit)||'lb',bw=(d.settings&&d.settings.bodyweight)||0;
 const sessions=d.sessions.slice().sort((a,b)=>b.date-a.date);
-const now=Date.now(),DAY=86400000;
+const now=process.env.REVIEW_NOW?+process.env.REVIEW_NOW:Date.now(),DAY=86400000;   // REVIEW_NOW pins the clock for deterministic snapshots
 const fmtD=ts=>new Date(ts).toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
 const strip=h=>String(h).replace(/<[^>]+>/g,'');
 const line=(t)=>console.log(t);const H=(t)=>{line('');line('== '+t+' ==');};
