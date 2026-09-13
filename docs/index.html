@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-10rg2+DC0aapLaN/YGXCmIO6f7olaO7ntfWQaJj5vIk=' 'sha256-WPBob/luB2k1aalTWXpi6zk3SrIbj8GlZV7AlFdG7oA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-4Nnv/IpqzlbD3TiKr1ZlHCueMOUhgK8cVp8bbQ3pvLU=' 'sha256-WPBob/luB2k1aalTWXpi6zk3SrIbj8GlZV7AlFdG7oA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Ironlog</title>
@@ -383,8 +383,8 @@ html.standalone .tabbar{bottom:auto;top:calc(var(--screen-h,100vh) - var(--tab-h
 </div>
 
 <script>
-/* Ironlog v0.34.0 · site build */
-var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.34.0",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
+/* Ironlog v0.35.0 · site build */
+var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.35.0",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
 
 /* ===== src/data/exercises.js ===== */
 (function(){'use strict';
@@ -675,6 +675,13 @@ function isWorking(st){return st.done!==false&&!st.warm;}
 function setLoad(exId,w,bw){const f=BW_FACTOR[exId]||0;return (+w||0)+(bw&&f?Math.round(bw*f):0);}
 function sessionVolume(s,bw){let v=0;s.exercises.forEach(e=>e.sets.forEach(st=>{if(isWorking(st))v+=setLoad(e.id,st.w,bw)*(+st.r||0);}));return v;}
 function sessionSets(s){let n=0;s.exercises.forEach(e=>e.sets.forEach(st=>{if(isWorking(st))n++;}));return n;}
+// How long a finished workout took, in whole minutes. `date` is the start (set at newSession); a set
+// gets `at` when checked; `endedAt` is stamped at Finish. Returns null when the session predates
+// timing (no endedAt) or the stamps are nonsense — so time stats simply skip old sessions.
+function sessionDuration(s){const a=+s.date,b=+s.endedAt;return (b>a&&isFinite(a)&&isFinite(b))?Math.round((b-a)/60000):null;}
+// Checked sets with a timestamp, as {exId, group, at}, oldest first — the raw material for time-per-
+// muscle and rest-taken analytics (T3). Sets with no stamp (old data, or unchecked) are omitted.
+function setTimeline(s){const out=[];(s.exercises||[]).forEach(e=>{const g=EX[e.id]?EX[e.id].group:null;e.sets.forEach(st=>{if(isFinite(+st.at)&&+st.at>0)out.push({exId:e.id,group:g,at:+st.at});});});return out.sort((a,b)=>a.at-b.at);}
 // What actually gets SAVED when a workout is finished: only sets the user checked done. A prefilled
 // prescription (weight filled in, not ticked) must NOT be saved as performed — that was the bug that
 // polluted history/PRs/volume. `t` is the transient "edited but not ticked" flag; stripped here.
@@ -683,6 +690,7 @@ function sessionSets(s){let n=0;s.exercises.forEach(e=>e.sets.forEach(st=>{if(is
 function finalizeSets(exercises){
   return (exercises||[]).map(e=>{
     // only checked-off sets, and never a junk set with zero reps (it would prefill as 0×0 next time)
+    // Object.assign copies `at` (the check timestamp) through; only `t` (the transient touched flag) is stripped.
     const sets=e.sets.filter(st=>st.done===true&&(+st.r||0)>0).map(st=>{const o=Object.assign({},st);delete o.t;o.done=true;return o;});
     return Object.assign({},e,{sets});
   }).filter(e=>e.sets.length);
@@ -898,7 +906,7 @@ function calcStreak(sessions,now){
   return n;
 }
 
-IL.prog={DAY,startOfDay,e1rm,isWorking,setLoad,sessionVolume,sessionSets,finalizeSets,parseWeightInput,fmtVol,modeOf,real,lastPerf,lastModeFor,exerciseSeries,bestE1rmBefore,setPattern,fmtPerf,nextSets,deloadSets,suggestion,unitIncrement,convertWeight,convertSessions,calcStreak,weekIndex,weekStart};
+IL.prog={DAY,startOfDay,e1rm,isWorking,setLoad,sessionVolume,sessionSets,sessionDuration,setTimeline,finalizeSets,parseWeightInput,fmtVol,modeOf,real,lastPerf,lastModeFor,exerciseSeries,bestE1rmBefore,setPattern,fmtPerf,nextSets,deloadSets,suggestion,unitIncrement,convertWeight,convertSessions,calcStreak,weekIndex,weekStart};
 if(typeof module!=='undefined')module.exports=IL.prog;
 
 })();
@@ -1645,9 +1653,9 @@ function sNumBlank(v){if(v===''||v==null)return '';const n=+v;return Number.isFi
 function sArr(v,max){return Array.isArray(v)?v.slice(0,max||MAX_ARR):[];}
 const rid=p=>p+Math.random().toString(36).slice(2,9);
 
-function cleanSet(st){st=st&&typeof st==='object'?st:{};const o={w:sNumBlank(st.w),r:sNumBlank(st.r),done:st.done!==false};if(st.warm)o.warm=true;return o;}   // missing done => done, matching the engine
+function cleanSet(st){st=st&&typeof st==='object'?st:{};const o={w:sNumBlank(st.w),r:sNumBlank(st.r),done:st.done!==false};if(st.warm)o.warm=true;const at=+st.at;if(Number.isFinite(at)&&at>0)o.at=at;return o;}   // missing done => done; `at` (check timestamp) kept if a real number
 function cleanExercise(e){e=e&&typeof e==='object'?e:{};const o={id:sId(e.id),name:sStr(e.name),sets:sArr(e.sets,MAX_SETS).map(cleanSet)};if(e.mode&&MODES[e.mode])o.mode=sId(e.mode);if(typeof e.note==='string'&&e.note.trim())o.note=sStr(e.note,500);return o;}   // drop an unknown mode (a bad import would white-screen Progress via MODES[mode].label)
-function cleanSession(s){s=s&&typeof s==='object'?s:{};const o={id:sId(s.id)||rid('imp'),schema:sNum(s.schema)||1,date:sNum(s.date)||Date.now(),updatedAt:sNum(s.updatedAt)||sNum(s.date)||Date.now(),completed:s.completed!==false,exercises:sArr(s.exercises,MAX_EX).map(cleanExercise)};if(s.deload)o.deload=true;return o;}
+function cleanSession(s){s=s&&typeof s==='object'?s:{};const o={id:sId(s.id)||rid('imp'),schema:sNum(s.schema)||1,date:sNum(s.date)||Date.now(),updatedAt:sNum(s.updatedAt)||sNum(s.date)||Date.now(),completed:s.completed!==false,exercises:sArr(s.exercises,MAX_EX).map(cleanExercise)};if(s.deload)o.deload=true;const end=+s.endedAt;if(Number.isFinite(end)&&end>0)o.endedAt=end;return o;}
 function cleanRoutine(r){r=r&&typeof r==='object'?r:{};return {id:sId(r.id)||rid('r'),name:sStr(r.name),exIds:sArr(r.exIds,MAX_EX).map(sId).filter(Boolean),updatedAt:sNum(r.updatedAt)||Date.now()};}
 function cleanSettings(o){if(!o||typeof o!=='object')return null;
   const s={settingsUpdatedAt:sNum(o.settingsUpdatedAt)};
@@ -2034,6 +2042,10 @@ const U=()=>state.settings.unit;
 const inc=()=>P.unitIncrement(U());
 const bw=()=>+state.settings.bodyweight||0;
 const {DAY,startOfDay,fmtVol}=P;
+// Minutes → a short human duration: "5 min", "1 h 12 min", "2 h". Used for workout length.
+function fmtDur(min){min=Math.max(0,Math.round(min||0));if(min<60)return min+' min';const h=Math.floor(min/60),m=min%60;return m?h+' h '+m+' min':h+' h';}
+// Live elapsed since a workout started (ms timestamp): the editor header ticks this each minute.
+function fmtElapsed(startTs){const m=Math.floor((Date.now()-startTs)/60000);return m<1?'just started':fmtDur(m);}
 function fmtDate(ts){return new Date(ts).toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'});}
 function relDay(ts){const t=startOfDay(Date.now()),d=startOfDay(ts);const diff=Math.round((t-d)/DAY);
   if(diff===0)return'Today';if(diff===1)return'Yesterday';if(diff<7)return diff+' days ago';return fmtDate(ts);}
@@ -2297,7 +2309,7 @@ function editorView(s,mode){
   <div class="section">
     <div class="topbar"><button class="backbtn" id="btnBackHome" data-action="backHome">${ICON_BACK} ${edit?'Cancel':'Home'}</button>
       ${edit?'':'<button class="linkbtn dim" id="btnDiscard">Discard</button>'}</div>
-    <div style="padding:0 2px 2px"><div class="eyebrow">${edit?'Editing · '+fmtDate(s.date):'Workout in progress · saves automatically'}</div>
+    <div style="padding:0 2px 2px"><div class="eyebrow">${edit?'Editing · '+fmtDate(s.date):`Workout in progress · saves automatically · <span id="elapsedLbl">${fmtElapsed(s.date)}</span>`}</div>
       <h2 style="font-size:23px;margin-top:4px">${new Date(s.date).toLocaleDateString(undefined,{weekday:'long'})}'s session${s.deload?' <span class="deload-badge">Deload</span>':''}</h2></div>
     ${s.deload?`<div class="card" style="margin:0 0 14px;padding:12px 14px;background:var(--good-soft);border:1px solid color-mix(in srgb,var(--good) 30%,transparent)"><div style="font-weight:600;color:var(--good);font-size:13.5px">🌿 Recovery session</div><div class="dim" style="font-size:12.5px;margin-top:3px">Lighter loads on purpose — take each rep through a full range, feel the stretch, and stop 3–4 reps shy of failure. This won't affect your progression or PRs.</div></div>`:''}
     <div class="statgrid" style="margin:14px 0 18px">
@@ -2416,7 +2428,7 @@ function sessionList(done){
 function sessCard(s){
   return `<div class="card sess" data-sess="${s.id}">
     <div class="sess-top"><div class="sess-date">${relDay(s.date)}${s.deload?' <span class="deload-badge">Deload</span>':''}</div><span class="pill accent">${s.exercises.length} exercise${s.exercises.length!==1?'s':''}</span></div>
-    <div class="sess-meta"><span class="muted">Volume <b>${fmtVol(volOf(s))} ${U()}</b></span><span class="muted">Sets <b>${setsOf(s)}</b></span></div>
+    <div class="sess-meta"><span class="muted">Volume <b>${fmtVol(volOf(s))} ${U()}</b></span><span class="muted">Sets <b>${setsOf(s)}</b></span>${P.sessionDuration(s)!=null?`<span class="muted">${s.endEstimated?'≈':''}<b>${fmtDur(P.sessionDuration(s))}</b></span>`:''}</div>
     <div class="sess-ex">${s.exercises.slice(0,4).map(e=>{const best=e.sets.filter(P.isWorking);const top=best.length?Math.max(...best.map(x=>+x.w||0)):0;
       return `<div><span>${esc(EX[e.id]?EX[e.id].name:e.name)}</span><span class="s">${best.length}×${best.length?best[0].r:0} · ${top}${U()}</span></div>`;}).join('')}
       ${s.exercises.length>4?`<div class="dim" style="font-size:12px">+${s.exercises.length-4} more</div>`:''}</div>
@@ -2850,12 +2862,13 @@ function workoutSummary(s){
   s.exercises.forEach(e=>{const emode=modeOf(e);const histBest=P.bestE1rmBefore(state.sessions,e.id,{mode:emode,bw:bw(),excludeId:s.id});if(histBest<=0)return;
     let best=0,bs=null;e.sets.forEach(st=>{if(st.warm||!P.isWorking(st))return;const est=P.e1rm(P.setLoad(e.id,st.w,bw()),+st.r||0);if((+st.r)&&est>best){best=est;bs=st;}});
     if(bs&&best>histBest)prs.push({name:EX[e.id]?EX[e.id].name:e.name,w:bs.w,r:bs.r,perHand:MODES[emode]&&MODES[emode].perHand});});
-  return {sets:setsOf(s),vol:volOf(s),prs,deload:!!s.deload};
+  return {sets:setsOf(s),vol:volOf(s),prs,deload:!!s.deload,dur:P.sessionDuration(s)};
 }
 function showSummary(sm){
   let body=`<div class="statgrid" style="margin:2px 0 14px">
       <div class="card stat"><div class="k">Working sets</div><div class="v mono">${sm.sets}</div></div>
       <div class="card stat"><div class="k">Volume</div><div class="v mono">${fmtVol(sm.vol)}<small>${U()}</small></div></div></div>`;
+  if(sm.dur!=null)body+=`<div class="dim" style="text-align:center;font-size:12.5px;margin:-4px 0 14px">${sm.estimated?'≈ ':''}${fmtDur(sm.dur)}</div>`;
   if(sm.deload){
     body+=`<div class="card" style="padding:14px 15px;background:var(--good-soft);border:1px solid color-mix(in srgb,var(--good) 30%,transparent)"><div style="color:var(--good);font-weight:600;font-size:13.5px">🌿 Recovery in the bank</div><div class="dim" style="font-size:12.5px;margin-top:3px">Fatigue's clearing — ease back to full loads when you feel fresh. This won't affect your progression.</div></div>`;
   }else if(sm.prs.length){
@@ -2871,7 +2884,8 @@ function showSummary(sm){
 function finishWorkout(){
   const s=state.active;
   confirmUnchecked(s,()=>{
-    stopRest();
+    stopRest();stopElapsed();
+    s.endedAt=Date.now();   // T1: workout end time. T2 will offer to log the last-set time instead when Finish was forgotten.
     cleanSets(s);
     if(!s.exercises.length){toast('Log at least one set first');return;}
     const sm=workoutSummary(s);
@@ -2899,6 +2913,13 @@ function leaveEditor(){
 
 /* ---------------- bind ---------------- */
 function bindClick(sel,fn){const el=$(sel);if(el)el.addEventListener('click',fn);}
+// The editor header's elapsed time (T1). A self-rescheduling 1-minute timeout updates just the
+// #elapsedLbl span (no re-render, so it never steals input focus); it stops itself the moment the
+// span is gone or the active workout ends. Re-armed by bind() whenever the active editor renders.
+let elapsedT=null;
+function stopElapsed(){clearTimeout(elapsedT);elapsedT=null;}
+function scheduleElapsed(){stopElapsed();elapsedT=setTimeout(()=>{const el=$('#elapsedLbl');
+  if(el&&state.active&&todayScreen==='active'){el.textContent=fmtElapsed(state.active.date);scheduleElapsed();}},60000);}
 // Delegated view actions: a click on any element carrying data-action="name" (or inside one) runs
 // ACTIONS[name](el, ev). One listener on #view covers every view and survives re-renders, so a new
 // button is just markup + a table row — no per-view rebinding. (The editor, sheets and bindLog keep
@@ -2940,9 +2961,10 @@ function bind(){
   bindClick('#btnFinish',finishWorkout);
   bindClick('#btnSaveEdit',finishEdit);
   bindClick('#btnDiscard',()=>showConfirm('Discard workout?','Nothing from this session will be saved.','Discard',()=>{
-    stopRest();const copy=state.active;state.active=null;S.persistActive();todayScreen='home';render();
+    stopRest();stopElapsed();const copy=state.active;state.active=null;S.persistActive();todayScreen='home';render();
     toast('Workout discarded',{label:'Undo',fn:()=>{S.setActive(copy);todayScreen='active';render();}});}));
   const ll=$('#logList');if(ll)bindLog(ll);
+  if(todayScreen==='active'&&state.active&&$('#elapsedLbl'))scheduleElapsed();else stopElapsed();
   // history
   const cal=v.querySelector('.cal-grid');
   if(cal)cal.addEventListener('click',e=>{const c=e.target.closest('[data-day]');if(!c)return;const d=+c.dataset.day;selDay=selDay===d?null:d;render();});
@@ -2993,6 +3015,7 @@ function bindLog(root){
   root.addEventListener('click',e=>{
     const t=cur();if(!t)return;
     const chk=e.target.closest('[data-check]');if(chk){const ei=+chk.dataset.check,si=+chk.dataset.s;const st=t.exercises[ei].sets[si];st.done=!st.done;
+      if(st.done)st.at=Date.now();else delete st.at;   // T1: stamp when the set was completed (cleared if un-ticked)
       if(st.done&&todayScreen==='active'&&state.settings.rest.auto&&!st.warm)startRest(restSecondsFor(t.exercises[ei].id));persistCur();render();return;}
     const wm=e.target.closest('[data-warm]');if(wm){const ei=+wm.dataset.warm,si=+wm.dataset.s;const st=t.exercises[ei].sets[si];st.warm=!st.warm;persistCur();render();toast(st.warm?'Marked as warm-up':'Counted as a working set');return;}
     const step=e.target.closest('[data-step]');if(step){if(heldRepeat){heldRepeat=false;return;}   // the click after a hold is not one more step

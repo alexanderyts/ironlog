@@ -94,6 +94,25 @@ test('UI: with a plan, toggling deload builds the same exercises lighter (no "Se
   }finally{h.teardown();}
 });
 
+test('UI: T1 — checking a set stamps it, unchecking clears it, finishing records the end time',()=>{
+  const h=launch();
+  try{
+    buildWorkout(h,['Chest']);
+    const active=h.state.active,start=active.date;
+    assert.ok(h.has('#elapsedLbl'),'editor header shows the elapsed span');
+    assert.equal(h.text('#elapsedLbl'),'just started');
+    h.click(h.$$('[data-check]')[0]);
+    assert.ok(active.exercises[0].sets[0].at>=start,'checking stamps `at`');
+    h.click(h.$$('[data-check]')[0]);
+    assert.ok(!('at'in active.exercises[0].sets[0]),'unchecking clears `at`');
+    h.click(h.$$('[data-check]')[0]);               // re-check, then finish
+    h.click('#btnFinish');
+    const saved=h.state.sessions.filter(s=>s.id===active.id)[0];
+    assert.ok('endedAt'in saved && saved.endedAt>=start,'finish records endedAt');
+    assert.ok(saved.exercises[0].sets[0].at,'the saved set keeps its timestamp');
+  }finally{h.teardown();}
+});
+
 // ── Phase U1: controls & input usability ─────────────────────────────────────────────────────────
 const wait=ms=>new Promise(r=>setTimeout(r,ms));
 

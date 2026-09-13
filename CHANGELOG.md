@@ -2,6 +2,12 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.35.0 — 2026-09-13 · Workouts record how long they took (Roadmap v6, Phase T1)
+- **The editor header now shows a live workout timer** ("Workout in progress · … · 47 min"), and your **finished workouts show their length** on the summary and in History.
+- Under the hood, each set records *when* you checked it off, and the session records when you finished. Those timestamps are what the next updates use for time-per-muscle, how long you actually rest, and a "did you forget to press Finish?" nudge. (progression.js `sessionDuration`/`setTimeline`; new optional `set.at` and `session.endedAt` fields, kept through save/sync/import.)
+- Older workouts logged before this update simply won't show a length — nothing is guessed.
+- Not verified on-device: nothing behavioural is unverified here; the timer and duration were checked in the browser (shown: a 47-min session).
+
 ## v0.34.0 — 2026-09-13 · Easier to tap, easier to type (Roadmap v6, Phase U1)
 - **Tapping a weight or rep number now selects the whole number**, so you just type the new one — no more caret landing mid-number and digits going in the wrong place. Tapping an already-selected number selects it again. Enter/Done jumps to the next field (weight → reps → next set).
 - **+ and − are much easier to hit.** They look the same size (so "102.5" still fits on a small phone) but their touch area is ~40% larger and reaches the full row height. **Hold either one to keep counting.**

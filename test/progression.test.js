@@ -1,5 +1,32 @@
 const test=require('node:test'),assert=require('node:assert/strict');
 const {IL,session,set}=require('./load.js');
+
+test('sessionDuration: whole minutes from date→endedAt, null when untimed or nonsensical (T1)',()=>{
+  const start=1_000_000_000_000;
+  assert.equal(IL.prog.sessionDuration({date:start,endedAt:start+52*60000}),52);
+  assert.equal(IL.prog.sessionDuration({date:start,endedAt:start+90*1000}),2,'rounds to nearest minute (1.5→2)');
+  assert.equal(IL.prog.sessionDuration({date:start}),null,'no endedAt (pre-timing session) → null');
+  assert.equal(IL.prog.sessionDuration({date:start,endedAt:start-5}),null,'end before start → null');
+});
+
+test('setTimeline: stamped checked sets as {exId,group,at}, oldest first; unstamped skipped (T1)',()=>{
+  const s={date:0,exercises:[
+    {id:'barbell-bench-press',sets:[{w:135,r:8,done:true,at:300},{w:135,r:8,done:true,at:100}]},
+    {id:'overhead-press',sets:[{w:95,r:8,done:true,at:200},{w:95,r:8,done:false}]}  // last has no stamp
+  ]};
+  assert.deepEqual(IL.prog.setTimeline(s),[
+    {exId:'barbell-bench-press',group:'Chest',at:100},
+    {exId:'overhead-press',group:'Shoulders',at:200},
+    {exId:'barbell-bench-press',group:'Chest',at:300}
+  ]);
+});
+
+test('finalizeSets carries the check timestamp `at` through to the saved set (T1)',()=>{
+  const out=IL.prog.finalizeSets([{id:'back-squat',name:'Squat',sets:[{w:100,r:5,done:true,at:12345,t:1}]}]);
+  assert.equal(out[0].sets[0].at,12345,'at kept');
+  assert.ok(!('t'in out[0].sets[0]),'t still stripped');
+});
+
 const P=IL.prog;
 
 test('finalizeSets saves only checked-off sets — a prefilled prescription is never saved as done',()=>{

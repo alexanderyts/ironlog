@@ -22,6 +22,18 @@ test('import converts a backup recorded in another unit is handled by parseImpor
 });
 const s=(id,updatedAt,date)=>({id,updatedAt,date:date||updatedAt,exercises:[]});
 
+test('import sanitizer keeps set.at and session.endedAt when real, drops junk (T1)',()=>{
+  const p=parseImport({app:'ironlog',format:2,sessions:[
+    {id:'t1',date:1000,updatedAt:1000,endedAt:1000+40*60000,exercises:[
+      {id:'back-squat',name:'Squat',sets:[{w:100,r:5,done:true,at:1500},{w:100,r:5,done:true,at:'nope'}]}]},
+    {id:'t2',date:2000,updatedAt:2000,endedAt:'bad',exercises:[{id:'deadlift',name:'D',sets:[{w:1,r:1,done:true}]}]}
+  ]});
+  assert.equal(p.sessions[0].endedAt,1000+40*60000,'real endedAt kept');
+  assert.equal(p.sessions[0].exercises[0].sets[0].at,1500,'real at kept');
+  assert.ok(!('at'in p.sessions[0].exercises[0].sets[1]),'non-numeric at dropped');
+  assert.ok(!('endedAt'in p.sessions[1]),'non-numeric endedAt dropped');
+});
+
 test('import sanitizer: missing set.done counts as done; an unknown modality is dropped (Phase 6)',()=>{
   const backup={app:'ironlog',format:2,sessions:[{id:'x1',date:1,updatedAt:1,exercises:[
     {id:'barbell-bench-press',name:'Bench',mode:'nonsense',sets:[{w:135,r:8}]},   // no `done`, bogus mode

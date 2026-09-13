@@ -46,12 +46,13 @@ function workoutSummary(s){
   s.exercises.forEach(e=>{const emode=modeOf(e);const histBest=P.bestE1rmBefore(state.sessions,e.id,{mode:emode,bw:bw(),excludeId:s.id});if(histBest<=0)return;
     let best=0,bs=null;e.sets.forEach(st=>{if(st.warm||!P.isWorking(st))return;const est=P.e1rm(P.setLoad(e.id,st.w,bw()),+st.r||0);if((+st.r)&&est>best){best=est;bs=st;}});
     if(bs&&best>histBest)prs.push({name:EX[e.id]?EX[e.id].name:e.name,w:bs.w,r:bs.r,perHand:MODES[emode]&&MODES[emode].perHand});});
-  return {sets:setsOf(s),vol:volOf(s),prs,deload:!!s.deload};
+  return {sets:setsOf(s),vol:volOf(s),prs,deload:!!s.deload,dur:P.sessionDuration(s)};
 }
 function showSummary(sm){
   let body=`<div class="statgrid" style="margin:2px 0 14px">
       <div class="card stat"><div class="k">Working sets</div><div class="v mono">${sm.sets}</div></div>
       <div class="card stat"><div class="k">Volume</div><div class="v mono">${fmtVol(sm.vol)}<small>${U()}</small></div></div></div>`;
+  if(sm.dur!=null)body+=`<div class="dim" style="text-align:center;font-size:12.5px;margin:-4px 0 14px">${sm.estimated?'≈ ':''}${fmtDur(sm.dur)}</div>`;
   if(sm.deload){
     body+=`<div class="card" style="padding:14px 15px;background:var(--good-soft);border:1px solid color-mix(in srgb,var(--good) 30%,transparent)"><div style="color:var(--good);font-weight:600;font-size:13.5px">🌿 Recovery in the bank</div><div class="dim" style="font-size:12.5px;margin-top:3px">Fatigue's clearing — ease back to full loads when you feel fresh. This won't affect your progression.</div></div>`;
   }else if(sm.prs.length){
@@ -67,7 +68,8 @@ function showSummary(sm){
 function finishWorkout(){
   const s=state.active;
   confirmUnchecked(s,()=>{
-    stopRest();
+    stopRest();stopElapsed();
+    s.endedAt=Date.now();   // T1: workout end time. T2 will offer to log the last-set time instead when Finish was forgotten.
     cleanSets(s);
     if(!s.exercises.length){toast('Log at least one set first');return;}
     const sm=workoutSummary(s);
@@ -95,6 +97,13 @@ function leaveEditor(){
 
 /* ---------------- bind ---------------- */
 function bindClick(sel,fn){const el=$(sel);if(el)el.addEventListener('click',fn);}
+// The editor header's elapsed time (T1). A self-rescheduling 1-minute timeout updates just the
+// #elapsedLbl span (no re-render, so it never steals input focus); it stops itself the moment the
+// span is gone or the active workout ends. Re-armed by bind() whenever the active editor renders.
+let elapsedT=null;
+function stopElapsed(){clearTimeout(elapsedT);elapsedT=null;}
+function scheduleElapsed(){stopElapsed();elapsedT=setTimeout(()=>{const el=$('#elapsedLbl');
+  if(el&&state.active&&todayScreen==='active'){el.textContent=fmtElapsed(state.active.date);scheduleElapsed();}},60000);}
 // Delegated view actions: a click on any element carrying data-action="name" (or inside one) runs
 // ACTIONS[name](el, ev). One listener on #view covers every view and survives re-renders, so a new
 // button is just markup + a table row — no per-view rebinding. (The editor, sheets and bindLog keep
@@ -136,9 +145,10 @@ function bind(){
   bindClick('#btnFinish',finishWorkout);
   bindClick('#btnSaveEdit',finishEdit);
   bindClick('#btnDiscard',()=>showConfirm('Discard workout?','Nothing from this session will be saved.','Discard',()=>{
-    stopRest();const copy=state.active;state.active=null;S.persistActive();todayScreen='home';render();
+    stopRest();stopElapsed();const copy=state.active;state.active=null;S.persistActive();todayScreen='home';render();
     toast('Workout discarded',{label:'Undo',fn:()=>{S.setActive(copy);todayScreen='active';render();}});}));
   const ll=$('#logList');if(ll)bindLog(ll);
+  if(todayScreen==='active'&&state.active&&$('#elapsedLbl'))scheduleElapsed();else stopElapsed();
   // history
   const cal=v.querySelector('.cal-grid');
   if(cal)cal.addEventListener('click',e=>{const c=e.target.closest('[data-day]');if(!c)return;const d=+c.dataset.day;selDay=selDay===d?null:d;render();});
@@ -189,6 +199,7 @@ function bindLog(root){
   root.addEventListener('click',e=>{
     const t=cur();if(!t)return;
     const chk=e.target.closest('[data-check]');if(chk){const ei=+chk.dataset.check,si=+chk.dataset.s;const st=t.exercises[ei].sets[si];st.done=!st.done;
+      if(st.done)st.at=Date.now();else delete st.at;   // T1: stamp when the set was completed (cleared if un-ticked)
       if(st.done&&todayScreen==='active'&&state.settings.rest.auto&&!st.warm)startRest(restSecondsFor(t.exercises[ei].id));persistCur();render();return;}
     const wm=e.target.closest('[data-warm]');if(wm){const ei=+wm.dataset.warm,si=+wm.dataset.s;const st=t.exercises[ei].sets[si];st.warm=!st.warm;persistCur();render();toast(st.warm?'Marked as warm-up':'Counted as a working set');return;}
     const step=e.target.closest('[data-step]');if(step){if(heldRepeat){heldRepeat=false;return;}   // the click after a hold is not one more step

@@ -19,6 +19,13 @@ function isWorking(st){return st.done!==false&&!st.warm;}
 function setLoad(exId,w,bw){const f=BW_FACTOR[exId]||0;return (+w||0)+(bw&&f?Math.round(bw*f):0);}
 function sessionVolume(s,bw){let v=0;s.exercises.forEach(e=>e.sets.forEach(st=>{if(isWorking(st))v+=setLoad(e.id,st.w,bw)*(+st.r||0);}));return v;}
 function sessionSets(s){let n=0;s.exercises.forEach(e=>e.sets.forEach(st=>{if(isWorking(st))n++;}));return n;}
+// How long a finished workout took, in whole minutes. `date` is the start (set at newSession); a set
+// gets `at` when checked; `endedAt` is stamped at Finish. Returns null when the session predates
+// timing (no endedAt) or the stamps are nonsense — so time stats simply skip old sessions.
+function sessionDuration(s){const a=+s.date,b=+s.endedAt;return (b>a&&isFinite(a)&&isFinite(b))?Math.round((b-a)/60000):null;}
+// Checked sets with a timestamp, as {exId, group, at}, oldest first — the raw material for time-per-
+// muscle and rest-taken analytics (T3). Sets with no stamp (old data, or unchecked) are omitted.
+function setTimeline(s){const out=[];(s.exercises||[]).forEach(e=>{const g=EX[e.id]?EX[e.id].group:null;e.sets.forEach(st=>{if(isFinite(+st.at)&&+st.at>0)out.push({exId:e.id,group:g,at:+st.at});});});return out.sort((a,b)=>a.at-b.at);}
 // What actually gets SAVED when a workout is finished: only sets the user checked done. A prefilled
 // prescription (weight filled in, not ticked) must NOT be saved as performed — that was the bug that
 // polluted history/PRs/volume. `t` is the transient "edited but not ticked" flag; stripped here.
@@ -27,6 +34,7 @@ function sessionSets(s){let n=0;s.exercises.forEach(e=>e.sets.forEach(st=>{if(is
 function finalizeSets(exercises){
   return (exercises||[]).map(e=>{
     // only checked-off sets, and never a junk set with zero reps (it would prefill as 0×0 next time)
+    // Object.assign copies `at` (the check timestamp) through; only `t` (the transient touched flag) is stripped.
     const sets=e.sets.filter(st=>st.done===true&&(+st.r||0)>0).map(st=>{const o=Object.assign({},st);delete o.t;o.done=true;return o;});
     return Object.assign({},e,{sets});
   }).filter(e=>e.sets.length);
@@ -242,5 +250,5 @@ function calcStreak(sessions,now){
   return n;
 }
 
-IL.prog={DAY,startOfDay,e1rm,isWorking,setLoad,sessionVolume,sessionSets,finalizeSets,parseWeightInput,fmtVol,modeOf,real,lastPerf,lastModeFor,exerciseSeries,bestE1rmBefore,setPattern,fmtPerf,nextSets,deloadSets,suggestion,unitIncrement,convertWeight,convertSessions,calcStreak,weekIndex,weekStart};
+IL.prog={DAY,startOfDay,e1rm,isWorking,setLoad,sessionVolume,sessionSets,sessionDuration,setTimeline,finalizeSets,parseWeightInput,fmtVol,modeOf,real,lastPerf,lastModeFor,exerciseSeries,bestE1rmBefore,setPattern,fmtPerf,nextSets,deloadSets,suggestion,unitIncrement,convertWeight,convertSessions,calcStreak,weekIndex,weekStart};
 if(typeof module!=='undefined')module.exports=IL.prog;
