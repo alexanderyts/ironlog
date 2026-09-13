@@ -2,6 +2,14 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.32.0 — 2026-09-13 · Notes, Recovery view, commercial-gym machines
+- **Notes on exercises.** Tap "✎ Note" under any exercise while logging (or editing a past session) to leave a note — "left shoulder pinchy, stayed light", a form cue, anything. It's saved with that session and shown the next time you do the lift, right above the sets, so a lower-than-expected number has its reason next to it. The exercise info sheet lists your recent notes. Synced and backed up with the session. (500 characters max.)
+- **Deloads are yours — the app no longer assumes why.** Reverses v0.31.0's "deload as baseline": a deload never feeds your prescriptions, PRs, or the builder, whatever loads you chose (form work, injury, a light day). If you've only ever done a lift on a deload, the editor now says so ("your last deload here was 70×9 — set your baseline") and leaves the prefill blank.
+- **New Recovery card on Progress** — a read-only look at how you deload: how many of your recent sessions were deloads, how often, how your deload loads compare to your working loads on the same lifts, and which exercises have only ever appeared on a deload. It's a mirror, not a judgment, and it's kept strictly separate from the progression logic. (analysis.js `deloadStats`.)
+- **11 commercial-gym machines** (the Planet Fitness floor): assisted pull-up, machine lateral raise, machine bicep curl, machine triceps extension, hip adduction, glute kickback machine, machine hip thrust, ab crunch machine, torso rotation, machine back extension, cable wrist curl. Every muscle group now has a pin-loaded option. Search aliases added ("hip abductor", "adductor", "ab machine", …). Library: 114.
+- **Review tool:** `node tools/review.js backup.json --why` prints the score breakdown behind every exercise the builder picks, plus the Recovery stats and notes.
+- 3 new tests (112).
+
 ## v0.31.0 — 2026-09-13 · Fixes from reviewing real data
 The first pass with the owner's actual history (`tools/review.js`) turned up three things.
 - **A deload with nothing before it now counts as your starting point.** If the only time you've done an exercise was on a deload, the app used to ignore it and prefill blanks next time. Now it prefills those exact loads (not progressed, not cut again) and says so. (progression.js `baselinePerf`; builder.js `seedExercise`.)

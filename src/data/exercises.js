@@ -123,14 +123,27 @@ const RAW=[
  ["back-extension","45° Back Extension","Hamstrings",["Hamstrings","Glutes","Back"],"Bodyweight",I,[12,20],"On a 45° bench, hinge down and squeeze the posterior chain to rise to a straight line.","hyperextension"],
  ["single-leg-curl","Single-Leg Curl","Hamstrings",["Hamstrings"],"Machine",I,[10,15],"Curl one leg at a time to even out side-to-side and add range.",""],
  // Glutes
- ["hip-abduction","Hip Abduction","Glutes",["Glutes"],"Machine",I,[12,20],"Press the knees outward against the pads to target the glute medius.","abductor machine"],
+ ["hip-abduction","Hip Abduction","Glutes",["Glutes"],"Machine",I,[12,20],"Press the knees outward against the pads to target the glute medius.","abductor machine,hip abductor,outer thigh,thigh machine"],
  ["single-leg-hip-thrust","Single-Leg Hip Thrust","Glutes",["Glutes"],"Bodyweight",I,[10,15],"Shoulders on a bench, drive one hip up and squeeze; alternate sides.",""],
  // Calves
  ["leg-press-calf-raise","Leg Press Calf Raise","Calves",["Calves"],"Machine",I,[12,20],"On the leg press, push the platform with the toes to full plantarflexion, stretch at the bottom.",""],
  ["single-leg-calf-raise","Single-Leg Calf Raise","Calves",["Calves"],"Dumbbell",I,[12,20],"Balance on one foot holding a dumbbell, rise to a full contraction and stretch down.",""],
  // Core
  ["pallof-press","Pallof Press","Core",["Core"],"Cable",I,[10,15],"Press a cable straight out from the chest and resist the rotational pull; log per side.","anti-rotation press"],
- ["reverse-crunch","Reverse Crunch","Core",["Core"],"Bodyweight",I,[12,20],"Curl the knees and hips toward the chest, lifting the tailbone off the floor.",""]
+ ["reverse-crunch","Reverse Crunch","Core",["Core"],"Bodyweight",I,[12,20],"Curl the knees and hips toward the chest, lifting the tailbone off the floor.",""],
+ // ── Commercial-gym selectorized machines (the Planet Fitness floor): every major movement has a
+ //    pin-loaded option so a machine-only gym can still build a complete session ──────────────────
+ ["assisted-pull-up","Assisted Pull-Up","Back",["Back","Biceps"],"Machine",C,[8,12],"Kneel on the assist pad and pull the chin over the handles; less assist weight = harder.","assisted pullup,pull-up machine,pullup machine,assisted chin"],
+ ["machine-lateral-raise","Machine Lateral Raise","Shoulders",["Shoulders"],"Machine",I,[12,20],"Arms against the pads, raise out to the sides to shoulder height, control down.","lateral raise machine,side delt machine,shoulder machine"],
+ ["machine-bicep-curl","Machine Bicep Curl","Biceps",["Biceps"],"Machine",I,[10,15],"Upper arms on the pad, curl the handles up and squeeze, lower fully.","bicep curl machine,arm curl machine,curl machine"],
+ ["machine-tricep-extension","Machine Triceps Extension","Triceps",["Triceps"],"Machine",I,[10,15],"Upper arms on the pad, press the handles down to lockout, control back.","tricep extension machine,arm extension machine,triceps machine"],
+ ["hip-adduction","Hip Adduction","Glutes",["Glutes","Quads"],"Machine",I,[12,20],"Squeeze the knees together against the pads (inner thigh), control the return.","adductor machine,inner thigh,hip adductor,thigh machine"],
+ ["glute-kickback-machine","Glute Kickback Machine","Glutes",["Glutes"],"Machine",I,[12,15],"Drive one foot back and up against the platform, squeezing the glute at the top.","glute machine,kickback machine,glute press"],
+ ["machine-hip-thrust","Machine Hip Thrust","Glutes",["Glutes","Hamstrings"],"Machine",C,[8,12],"Back on the pad with the belt across the hips, drive up and squeeze the glutes.","hip thrust machine,glute drive,glute bridge machine"],
+ ["ab-crunch-machine","Ab Crunch Machine","Core",["Core"],"Machine",I,[12,20],"Curl the torso forward against the resistance, squeeze the abs, control up.","ab machine,crunch machine,abdominal machine"],
+ ["torso-rotation-machine","Torso Rotation Machine","Core",["Core"],"Machine",I,[12,15],"Rotate the torso against the pad through a controlled range; log per side.","rotary torso,twist machine,oblique machine"],
+ ["machine-back-extension","Machine Back Extension","Hamstrings",["Hamstrings","Glutes","Back"],"Machine",I,[12,20],"Push the pad back by extending the hips and lower back, control forward.","lower back machine,back extension machine,lumbar extension"],
+ ["cable-wrist-curl","Cable Wrist Curl","Forearms",["Forearms"],"Cable",I,[12,20],"Forearms braced, curl the low-pulley handle up with the wrists, lower fully for a stretch.","low pulley wrist curl,cable forearm curl"]
 ];
 
 // [region/head, movement pattern, tier]. tier 1 = foundational lift (can anchor a session and should be
@@ -158,7 +171,11 @@ const META={
  'back-extension':['overall','hinge',2],'single-leg-curl':['overall','iso',3],
  'hip-abduction':['medius','iso',2],'single-leg-hip-thrust':['overall','hinge',3],
  'leg-press-calf-raise':['gastro','iso',2],'single-leg-calf-raise':['gastro','iso',3],
- 'pallof-press':['rotation','iso',2],'reverse-crunch':['flexion','iso',2]
+ 'pallof-press':['rotation','iso',2],'reverse-crunch':['flexion','iso',2],
+ // commercial-gym machines
+ 'assisted-pull-up':['lats','vpull',2],'machine-lateral-raise':['side','iso',2],'machine-bicep-curl':['overall','iso',2],'machine-tricep-extension':['lateral','iso',2],
+ 'hip-adduction':['overall','iso',3],'glute-kickback-machine':['overall','iso',2],'machine-hip-thrust':['overall','hinge',2],
+ 'ab-crunch-machine':['flexion','iso',2],'torso-rotation-machine':['rotation','iso',3],'machine-back-extension':['overall','hinge',2],'cable-wrist-curl':['flexor','iso',2]
 };
 // Movements trained at a long muscle length (a strong hypertrophy driver) — the builder gives these a
 // small preference so a plan tends to include a stretch-biased option per muscle. Existing lifts that

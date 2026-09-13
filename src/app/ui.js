@@ -225,6 +225,19 @@ function openModePicker(ei){
     const m=b.dataset.pickmode;if(m===native)delete ex.mode;else ex.mode=m;
     persistCur();closeSheet();render();toast(MODES[m].label);}));
 }
+// A free-text note on an exercise in THIS session — timestamped by the session, saved with it, synced
+// with it. Surfaced next time you do the lift ("shoulder was hurting", a form cue) so a number that
+// looks low has its reason next to it.
+function openNote(ei){
+  const t=cur();if(!t||!t.exercises[ei])return;const ex=t.exercises[ei];
+  openSheet('Note · '+(EX[ex.id]?EX[ex.id].name:ex.name),`<div class="dim" style="font-size:13px;margin:-4px 2px 12px">Saved with this session and shown the next time you do this lift.</div>
+    <textarea id="noteText" class="field" style="height:110px;padding:12px 14px;resize:none;line-height:1.45" maxlength="500" placeholder="e.g. left shoulder pinchy at the bottom — stayed light">${esc(ex.note||'')}</textarea>
+    <button class="btn primary block" id="noteSave" style="margin-top:12px">Save note</button>
+    ${ex.note?'<button class="btn ghost block" id="noteClear" style="margin-top:8px">Remove note</button>':''}`);
+  const ta=$('#noteText');if(ta){ta.focus();ta.setSelectionRange(ta.value.length,ta.value.length);}
+  $('#noteSave').addEventListener('click',()=>{const v=(ta.value||'').trim();if(v)ex.note=v.slice(0,500);else delete ex.note;persistCur();closeSheet();render();toast(v?'Note saved':'Note removed');});
+  const nc=$('#noteClear');if(nc)nc.addEventListener('click',()=>{delete ex.note;persistCur();closeSheet();render();toast('Note removed');});
+}
 function buildAndStart(fresh){
   const dl=draft.deload;
   // Coach's findings feed the builder (Phase C). The engine ignores them on a deload (recovery isn't
@@ -303,7 +316,11 @@ function logExercise(s,e,ei,mode){
       // The prescription is already in the set rows; offer a one-tap revert until a set is done
       const canRevert=w&&!e.sets.some(st=>st.done);
       sugg=`<div class="sugg ${w?'':'match'}"><span>${w?'💪 ':''}${esc(sg.text)} · <span class="lastp">last: ${esc(sg.setsStr)}</span></span>${canRevert?`<button class="apply" data-keepw="${ei}">Keep last</button>`:''}</div>`;}
+    else if(sg.kind==='new')sugg=`<div class="sugg match"><span>${esc(sg.text)}</span></div>`;
+    // A note you left last time on this lift — shown so a lower-than-expected weight has its reason next to it
+    if(sg.lp&&sg.lp.note)sugg+=`<div class="sugg match" style="color:var(--ink-2)"><span>📝 <span class="dim">${relDay(sg.lp.date)}:</span> ${esc(sg.lp.note)}</span></div>`;
   }
+  const noteLine=e.note?`<button class="sugg match" data-note="${ei}" style="width:calc(100% - 24px);text-align:left;color:var(--ink-2)"><span>📝 ${esc(e.note)}</span></button>`:'';
   const whdr=(U()==='kg'?'Kg':'Lb')+(MODES[emode]&&MODES[emode].perHand?' ea':'');
   return `<div class="card log-ex" data-ei="${ei}">
     <div class="log-ex-head">
@@ -313,7 +330,7 @@ function logExercise(s,e,ei,mode){
       <button class="sheet-x" data-delex="${ei}" aria-label="Remove exercise">✕</button>
     </div>
     <button class="modechip" data-mode="${ei}" aria-label="Change equipment">${esc(MODES[emode]?MODES[emode].label:emode)} ▾</button>
-    ${prLine}${sugg}
+    ${prLine}${sugg}${noteLine}
     <div class="setgrid">
       <div class="set-hdr"><div>Set</div><div>${whdr}</div><div>Reps</div><div></div></div>
       ${e.sets.map((st,si)=>setRow(st,ei,si)).join('')}
@@ -321,6 +338,7 @@ function logExercise(s,e,ei,mode){
     <div class="set-actions">
       <button class="linkbtn" data-addset="${ei}">＋ Add set</button>
       ${e.sets.length>1?`<button class="linkbtn" data-delset="${ei}">－ Remove set</button>`:''}
+      <button class="linkbtn dim" data-note="${ei}">✎ ${e.note?'Edit note':'Note'}</button>
       <a class="linkbtn dim" href="${demoURL(e.id)}" target="_blank" rel="noopener noreferrer" style="margin-left:auto;text-decoration:none">▶ Watch demo</a>
     </div>
     ${ei===0?'<div class="hint">Tip: tap a set number to mark it a warm-up (kept out of PRs and volume).</div>':''}
@@ -411,6 +429,7 @@ function viewProgress(){
       <div class="card stat"><div class="k">Current streak</div><div class="v mono">${P.calcStreak(done,now)}<small>wk</small></div></div>
     </div>
     ${coachCard(done)}
+    ${recoveryCard()}
     <div class="eyebrow" style="margin:24px 2px 10px">Weekly volume · last 8 weeks</div>
     <div class="card" style="padding:14px 12px 10px">${volumeChart()}</div>
     <div class="eyebrow" style="margin:24px 2px 10px">Personal records</div>
@@ -468,6 +487,20 @@ function coachCard(done){
     <div class="eyebrow" style="margin:18px 2px 10px">Coach's notes</div>
     ${tips.length?tipsCard(tips):`<div class="card" style="padding:20px;text-align:center"><div class="dim">Nothing to flag — your training looks well-rounded right now.</div></div>`}`;
 }
+// Read-only view of HOW the user deloads. Deliberately makes no judgment and never touches
+// progression — a deload is theirs, at any load, for any reason. See analysis.deloadStats.
+function recoveryCard(){
+  const d=A.deloadStats(state.sessions,Date.now());
+  if(!d.deloads&&d.lastDaysAgo==null)return '';
+  const rows=[];
+  if(d.total)rows.push(`<b>${d.deloads} of your last ${d.total}</b> session${d.total!==1?'s':''} ${d.deloads===1?'was':'were'} a deload${d.lastDaysAgo!=null?` (most recent ${d.lastDaysAgo===0?'today':d.lastDaysAgo+' day'+(d.lastDaysAgo===1?'':'s')+' ago'})`:''}.`);
+  if(d.avgGapDays!=null)rows.push(`You've been taking one about every <b>${d.avgGapDays} day${d.avgGapDays===1?'':'s'}</b>.`);
+  if(d.loadPct!=null)rows.push(`On the ${d.sharedLifts} lift${d.sharedLifts!==1?'s':''} you also train hard, your deload loads run about <b>${d.loadPct}%</b> of your working loads.`);
+  if(d.onlyOnDeload.length)rows.push(`${d.onlyOnDeload.length} exercise${d.onlyOnDeload.length!==1?'s have':' has'} only ever appeared on a deload (${esc(d.onlyOnDeload.slice(0,3).join(', '))}${d.onlyOnDeload.length>3?', …':''}) — the builder has no full-effort numbers for ${d.onlyOnDeload.length!==1?'them':'it'} yet.`);
+  return `<div class="eyebrow" style="margin:24px 2px 10px">Recovery · how you deload</div>
+    <div class="card" style="padding:14px 16px"><div style="font-size:13.5px;line-height:1.55">${rows.map(r=>`<div style="padding:4px 0">${r}</div>`).join('')}</div>
+    <div class="dim" style="font-size:12px;margin-top:8px">Deloads never affect your progression, PRs or the builder — this is just so you can see your own pattern.</div></div>`;
+}
 function muscleBreakdown(mo){
   const arr=A.muscleSetCounts(mo);if(!arr.length)return'';
   const max=Math.max(...arr.map(a=>a[1]));
@@ -496,6 +529,16 @@ function trendCard(id){
       <circle cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="3.5" fill="var(--accent)"/></svg>
     <div class="dim" style="font-size:11.5px;margin-top:7px">Best set each session · last ${series.length}</div></div>`;
 }
+// The last few notes ever left on this lift (deloads included — a note is a note), newest first.
+function notesCard(id){
+  const notes=[];
+  state.sessions.forEach(s=>{if(s.completed===false)return;s.exercises.forEach(e=>{if(e.id===id&&e.note)notes.push({date:s.date,note:e.note,deload:!!s.deload});});});
+  if(!notes.length)return '';
+  notes.sort((a,b)=>b.date-a.date);
+  return `<div class="card" style="padding:12px 15px;margin:0 0 12px"><div class="eyebrow" style="margin-bottom:8px">Your notes</div>
+    ${notes.slice(0,4).map(n=>`<div style="font-size:13.5px;line-height:1.45;padding:5px 0;border-top:1px solid var(--line)"><span class="dim mono" style="font-size:11.5px">${fmtDate(n.date)}${n.deload?' · deload':''}</span><br>${esc(n.note)}</div>`).join('')}
+    ${notes.length>4?`<div class="dim" style="font-size:12px;margin-top:6px">+${notes.length-4} older</div>`:''}</div>`;
+}
 function exerciseDetail(id){
   const e=EX[id];const lp=P.lastPerf(state.sessions,id,{excludeId:state.active&&state.active.id});
   const target=cur();const inWorkout=target&&target.exercises.some(x=>x.id===id);
@@ -505,6 +548,7 @@ function exerciseDetail(id){
       <div class="chips" style="margin-top:6px">${e.muscles.map(m=>`<span class="pill">${m}</span>`).join('')}</div></div></div>
     <p class="instr">${esc(e.instr)}</p>
     ${trendCard(id)}
+    ${notesCard(id)}
     <div class="card" style="padding:12px 15px;margin:16px 0">
       <div class="row-between"><span class="eyebrow">Target rep range</span><span class="mono" style="font-weight:600">${e.rr[0]}–${e.rr[1]}</span></div>
       ${lp?`<div class="row-between" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line)"><span class="eyebrow">Last time</span><span class="mono" style="font-weight:600">${esc(P.fmtPerf(lp.sets,U()))}</span></div>`:''}
@@ -899,6 +943,7 @@ function bindLog(root){
     const kw=e.target.closest('[data-keepw]');if(kw){const ei=+kw.dataset.keepw;const ex=t.exercises[ei];const lp=P.lastPerf(state.sessions,ex.id,{beforeTs:t.date,excludeId:t.id,mode:modeOf(ex)});
       if(lp)ex.sets=lp.sets.map(s=>({w:s.w,r:s.r,done:false}));persistCur();render();toast('Using last time’s weights');return;}
     const mc=e.target.closest('[data-mode]');if(mc){openModePicker(+mc.dataset.mode);return;}
+    const nt=e.target.closest('[data-note]');if(nt){openNote(+nt.dataset.note);return;}
     const oe=e.target.closest('[data-openex]');if(oe){if(EX[oe.dataset.openex])openSheet(EX[oe.dataset.openex].name,exerciseDetail(oe.dataset.openex));return;}
   });
   root.addEventListener('input',e=>{const inp=e.target.closest('input[data-f]');if(!inp)return;const t=cur();if(!t)return;

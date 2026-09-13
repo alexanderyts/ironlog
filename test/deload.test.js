@@ -31,16 +31,41 @@ test('hints (undertrained/gaps) are ignored on a deload (Phase 3)',()=>{
   assert.deepEqual(d.reactions,[],'deload runs no reactions');
 });
 
-test('a deload with NO real history behind it becomes the baseline instead of being ignored',()=>{
+test('a deload is never a baseline — with no real session the prefill stays blank, but the deload is mentioned',()=>{
   const now=Date.now();
   const hist=[session(2,[['barbell-bench-press',[set(70,9),set(60,10)]]],{now,deload:true})];   // only ever benched on a deload
   const seeded=B.seedExercise('barbell-bench-press',hist,{unit:'lb'});
-  assert.deepEqual(seeded.sets.map(s=>[s.w,s.r]),[[70,9],[60,10]],'reused at its actual loads, not blank, not progressed');
+  assert.ok(seeded.sets.every(s=>s.w===''),'no assumed loads');
   const sg=P.suggestion(hist,'barbell-bench-press',{unit:'lb'});
-  assert.equal(sg.kind,'match');assert.match(sg.text,/deload/i);
-  // once a real session exists it takes precedence and progression resumes as normal
+  assert.equal(sg.kind,'new');assert.match(sg.text,/deload/i);assert.match(sg.text,/70/);
+  assert.equal(sg.next,null);
   const withReal=[session(1,[['barbell-bench-press',[set(80,8),set(80,8)]]],{now})].concat(hist);
   assert.equal(P.suggestion(withReal,'barbell-bench-press',{unit:'lb'}).lp.sets[0].w,80);
+});
+
+test('deloadStats: a read-only picture of how someone deloads, with no effect on progression',()=>{
+  const now=Date.now();
+  const hist=history(
+    session(1,[['barbell-bench-press',[set(60,10)]],['ab-crunch-machine',[set(40,15)]]],{now,deload:true}),   // 60% of 100; crunch only on a deload
+    session(4,[['barbell-bench-press',[set(100,8)]]],{now}),
+    session(8,[['barbell-bench-press',[set(55,10)]]],{now,deload:true}),
+    session(11,[['barbell-bench-press',[set(95,8)]]],{now})
+  );
+  const d=A.deloadStats(hist,now);
+  assert.equal(d.deloads,2);assert.equal(d.total,4);assert.equal(d.lastDaysAgo,1);assert.equal(d.avgGapDays,7);
+  assert.equal(d.loadPct,58,'(60/100 + 55/100)/2 → 58%');
+  assert.deepEqual(d.onlyOnDeload,['Ab Crunch Machine']);
+  // and the builder still ignores the deloads: bench prefills from the 100×8 real session
+  assert.equal(B.seedExercise('barbell-bench-press',hist,{unit:'lb'}).sets[0].w,105);
+});
+
+test('exercise notes survive finish, import, and are returned with the last performance',()=>{
+  const fin=P.finalizeSets([{id:'back-squat',name:'Squat',note:'knee felt off — stayed light',sets:[{w:100,r:5,done:true}]}]);
+  assert.equal(fin[0].note,'knee felt off — stayed light');
+  const imp=IL.sync.parseImport({app:'ironlog',format:2,sessions:[{id:'n1',date:1,updatedAt:1,exercises:[{id:'back-squat',name:'S',note:'x'.repeat(900),sets:[{w:1,r:1,done:true}]},{id:'deadlift',name:'D',note:'   ',sets:[{w:1,r:1,done:true}]}]}]}).sessions[0].exercises;
+  assert.equal(imp[0].note.length,500,'capped');assert.ok(!('note'in imp[1]),'blank note dropped');
+  const hist=[session(2,[['back-squat',[set(100,5)]]],{})];hist[0].exercises[0].note='hi';
+  assert.equal(P.lastPerf(hist,'back-squat').note,'hi');
 });
 
 test('finishing drops a checked set that has zero reps (would otherwise prefill 0×0)',()=>{

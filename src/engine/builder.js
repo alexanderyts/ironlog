@@ -4,7 +4,7 @@ var IL=globalThis.IL||(globalThis.IL={});
 if(typeof require==='function'&&!IL.data)require('../data/exercises.js');
 if(typeof require==='function'&&!IL.prog)require('./progression.js');
 const {C,I,EXERCISES,EX,REGIONS,IDEAL_PATS,PAT_RANK,EQUIP_LOAD,LONG_LENGTH,regLabel,patLabel,hashId}=IL.data;
-const {lastPerf,baselinePerf,lastModeFor,nextSets,deloadSets,modeOf,real,DAY}=IL.prog;
+const {lastPerf,lastModeFor,nextSets,deloadSets,modeOf,real,DAY}=IL.prog;
 
 // Working sets a movement deserves when you've never logged it: main lifts 4, other compounds 3,
 // isolation 3, finishers 2. Reps prefilled at the bottom of the target range.
@@ -19,12 +19,9 @@ function seedExercise(id,sessions,opts){
   opts=opts||{};const {excludeId,unit,deload,extraSet}=opts;
   const ex=EX[id];const mode=lastModeFor(sessions,id);
   const inst={id,name:ex?ex.name:id};if(mode)inst.mode=mode;
-  const lp=baselinePerf(sessions||[],id,{excludeId,mode:mode||undefined});
+  const lp=lastPerf(sessions||[],id,{excludeId,mode:mode||undefined});   // real sessions only — a deload is never a baseline
   let sets;
-  // A deload standing in as the only baseline is reused at its actual loads: not progressed (it was
-  // never a full effort) and not cut again (it's already light).
-  if(lp&&lp.sets.length&&lp.fromDeload)sets=lp.sets.map(s=>({w:s.w,r:s.r,done:false}));
-  else if(lp&&lp.sets.length)sets=(deload?deloadSets(lp.sets,ex,unit):nextSets(lp.sets,ex,unit).sets).map(s=>({w:s.w,r:s.r,done:false}));
+  if(lp&&lp.sets.length)sets=(deload?deloadSets(lp.sets,ex,unit):nextSets(lp.sets,ex,unit).sets).map(s=>({w:s.w,r:s.r,done:false}));
   else{const n=prescribedSets(ex),r=ex?(deload?ex.rr[1]:ex.rr[0]):'';sets=Array.from({length:n},()=>({w:'',r:r,done:false}));}
   if(deload&&sets.length>DELOAD_MAX_SETS)sets=sets.slice(0,DELOAD_MAX_SETS);   // a deload cuts volume as well as load
   if(extraSet&&!deload&&sets.length&&sets.length<MAX_SETS_PER_EX){const last=sets[sets.length-1];sets.push({w:last.w,r:last.r,done:false});}
@@ -76,7 +73,9 @@ function fillsGap(e,hints){
   if(!hints||!hints.gaps)return false;
   return hints.gaps.some(gp=>gp.group===e.group&&(gp.reg===e.reg||gp.pat===e.pat));
 }
-function pickForGroup(g,per,seed,sessions,hints){
+// `trace` (optional array) collects {id, sc, why:[...]} for every pick — a window into WHY the builder
+// chose each exercise, used by tools/review.js. No effect on the result.
+function pickForGroup(g,per,seed,sessions,hints,trace){
   sessions=sessions||[];
   const pool=EXERCISES.filter(e=>e.group===g);
   if(!pool.length)return [];
@@ -95,37 +94,39 @@ function pickForGroup(g,per,seed,sessions,hints){
     const top=ranked.filter(e=>perfPriority(e)===perfPriority(ranked[0]));
     anchor=top[seed%top.length];}
   sel.push(anchor);covReg.add(anchor.reg);covPat.add(anchor.pat);
+  if(trace)trace.push({id:anchor.id,sc:null,why:[withHist.length?'anchor: your most recently trained foundational '+g.toLowerCase()+' lift':'anchor: highest-priority foundational '+g.toLowerCase()+' lift (no history)']});
   while(sel.length<per&&sel.length<pool.length){
-    let best=null,bestScore=0;
+    let best=null,bestScore=0,bestWhy=null;
     const isoCount=sel.filter(x=>x.type===I).length,compCount=sel.filter(x=>x.type===C).length;
     pool.forEach(e=>{
       if(sel.indexOf(e)>=0)return;
-      let sc=0;
+      let sc=0;const why=[];
       const newReg=!covReg.has(e.reg),newPat=!covPat.has(e.pat);
-      if(newReg)sc+=ideal.indexOf(e.reg)>=0?4:1;
-      if(newPat)sc+=idealPats.indexOf(e.pat)>=0?3:1;
-      if(e.type===I&&isoCount===0&&sel.length>=1)sc+=1.5;
-      if(e.type===C&&compCount>=2)sc-=compCount>=3?1.5:0.5;
-      if(isHeavyAxial(e)&&idealPats.indexOf(e.pat)<0)sc-=2.5;
+      if(newReg){const v=ideal.indexOf(e.reg)>=0?4:1;sc+=v;why.push(`+${v} new region (${e.reg})`);}
+      if(newPat){const v=idealPats.indexOf(e.pat)>=0?3:1;sc+=v;why.push(`+${v} new pattern (${e.pat})`);}
+      if(e.type===I&&isoCount===0&&sel.length>=1){sc+=1.5;why.push('+1.5 first isolation');}
+      if(e.type===C&&compCount>=2){const v=compCount>=3?1.5:0.5;sc-=v;why.push(`-${v} already ${compCount} compounds`);}
+      if(isHeavyAxial(e)&&idealPats.indexOf(e.pat)<0){sc-=2.5;why.push('-2.5 heavy axial off-pattern');}
       if(!newReg&&!newPat){
-        if(e.type===C&&!sel.some(x=>x.pat===e.pat&&x.equip===e.equip))sc+=0.8; else sc-=1;
+        if(e.type===C&&!sel.some(x=>x.pat===e.pat&&x.equip===e.equip)){sc+=0.8;why.push('+0.8 same pattern, different equipment');} else{sc-=1;why.push('-1 nothing new');}
       }
-      sc+=e.tier===1?0.6:e.tier===2?0.3:0;
-      sc+=(EQUIP_LOAD[e.equip]||0)/20;
-      if(recent.indexOf(e.id)>=0)sc-=0.4;
+      const tb=e.tier===1?0.6:e.tier===2?0.3:0;if(tb){sc+=tb;why.push(`+${tb} tier ${e.tier}`);}
+      const eq=(EQUIP_LOAD[e.equip]||0)/20;sc+=eq;if(eq)why.push(`+${eq.toFixed(2)} ${e.equip.toLowerCase()} loadability`);
+      if(recent.indexOf(e.id)>=0){sc-=0.4;why.push('-0.4 did it last session');}
       // Phase D: a small nudge toward including one lengthened-position (stretch) movement per muscle
-      if(LONG_LENGTH&&LONG_LENGTH.has(e.id)&&!sel.some(x=>LONG_LENGTH.has(x.id)))sc+=0.7;
-      if(fillsGap(e,hints))sc+=2;   // Phase C: prefer covering a gap Coach's Notes flagged
+      if(LONG_LENGTH&&LONG_LENGTH.has(e.id)&&!sel.some(x=>LONG_LENGTH.has(x.id))){sc+=0.7;why.push('+0.7 stretch-position option');}
+      if(fillsGap(e,hints)){sc+=2;why.push('+2 covers a Coach-flagged gap');}   // Phase C
       sc+=((hashId(e.id)+seed)%5)/100;
-      if(sc>bestScore){bestScore=sc;best=e;}
+      if(sc>bestScore){bestScore=sc;best=e;bestWhy=why;}
     });
     if(!best)break;
     sel.push(best);covReg.add(best.reg);covPat.add(best.pat);
+    if(trace)trace.push({id:best.id,sc:+bestScore.toFixed(2),why:bestWhy});
   }
   return sel;
 }
 // groups: muscle groups in the order the user picked them (first = session focus)
-function buildRecommendation(groups,sessions,seed,hints){
+function buildRecommendation(groups,sessions,seed,hints,trace){
   groups=groups&&groups.length?groups.slice():['Chest','Back'];
   seed=seed==null?Math.floor(Math.random()*997):seed;
   const total=groups.length>=4?7:groups.length===3?7:groups.length===2?6:4;
@@ -136,7 +137,7 @@ function buildRecommendation(groups,sessions,seed,hints){
   for(let i=0;i<rem;i++)per[bySize[i%bySize.length]]++;
   let out=[];
   groups.forEach(g=>{const cap=Math.min(per[g],Math.max((REGIONS[g]||['overall']).length,(IDEAL_PATS[g]||[]).length)+1,EXERCISES.filter(e=>e.group===g).length);
-    out.push(...pickForGroup(g,cap,seed,sessions,hints).map(e=>e.id));});
+    out.push(...pickForGroup(g,cap,seed,sessions,hints,trace).map(e=>e.id));});
   // Hard session ceiling: picking many groups (e.g. all 11) must not produce a 11-exercise workout.
   // orderByFatigue puts the highest-priority work first, so the slice drops the lowest-priority
   // isolation last — a full-body pick lands on ~7 compound-led exercises.

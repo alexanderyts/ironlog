@@ -3,7 +3,7 @@ var IL=globalThis.IL||(globalThis.IL={});
 if(typeof require==='function'&&!IL.data)require('../data/exercises.js');
 if(typeof require==='function'&&!IL.prog)require('./progression.js');
 const {EX,EXERCISES,REGIONS,IDEAL_PATS,LOWER_GROUPS,MODES,regLabel,patLabel,exampleFor,hashId}=IL.data;
-const {DAY,startOfDay,e1rm,isWorking,setLoad,sessionVolume,modeOf,calcStreak,real,weekIndex,weekStart}=IL.prog;
+const {DAY,startOfDay,e1rm,isWorking,setLoad,sessionVolume,modeOf,calcStreak,real,weekIndex,weekStart,lastPerf}=IL.prog;
 
 // completed() INCLUDES deloads on purpose — volume/frequency/PR-window analysis wants everything the
 // user actually did. Progression-only scans use real() (completed AND not a deload) instead.
@@ -250,10 +250,36 @@ function weeklyVolumes(sessions,now,bw,n){
     cols.push({start:ws,v:done.filter(s=>s.date>=ws&&s.date<we).reduce((a,s)=>a+sessionVolume(s,bw),0)});}
   return cols;
 }
+/* ── Recovery view: how the user deloads, kept STRICTLY separate from progression ──────────────
+   A deload is the user's day at any load for any reason; nothing here feeds prescriptions, PRs or
+   stall detection (those read real() sessions only). This is a read-only comparison so someone can
+   SEE how often they recover and how their deload loads relate to their working loads. */
+function deloadStats(sessions,now){
+  now=now||Date.now();
+  const done=completed(sessions).filter(s=>s.date<now).sort((a,b)=>b.date-a.date);
+  const win=done.filter(s=>s.date>=now-28*DAY),dls=win.filter(s=>s.deload),reals=win.filter(s=>!s.deload);
+  const allDl=done.filter(s=>s.deload);
+  const gaps=[];for(let i=0;i+1<allDl.length;i++)gaps.push((allDl[i].date-allDl[i+1].date)/DAY);
+  const ratios=[],onlyOnDeload=new Set();
+  allDl.forEach(s=>s.exercises.forEach(e=>{
+    const ex=EX[e.id];if(!ex)return;
+    const dTop=Math.max(0,...e.sets.filter(isWorking).map(st=>+st.w||0));
+    const rp=lastPerf(done,e.id,{mode:modeOf(e)});   // real only
+    if(!rp){onlyOnDeload.add(e.id);return;}
+    const rTop=Math.max(0,...rp.sets.map(st=>st.w));
+    if(dTop>0&&rTop>0)ratios.push(dTop/rTop*100);   // in percent, so averaging doesn't lose a half-point to float error
+  }));
+  return {deloads:dls.length,reals:reals.length,total:win.length,
+    lastDaysAgo:allDl.length?Math.round((now-allDl[0].date)/DAY):null,
+    avgGapDays:gaps.length?Math.round(gaps.reduce((a,b)=>a+b,0)/gaps.length):null,
+    loadPct:ratios.length?Math.round(ratios.reduce((a,b)=>a+b,0)/ratios.length):null,
+    sharedLifts:ratios.length,
+    onlyOnDeload:[...onlyOnDeload].map(id=>EX[id].name)};
+}
 function muscleSetCounts(sessions){
   const cnt={};completed(sessions).forEach(s=>s.exercises.forEach(e=>{const g=EX[e.id]?EX[e.id].group:'Other';cnt[g]=(cnt[g]||0)+e.sets.filter(isWorking).length;}));
   return Object.entries(cnt).sort((a,b)=>b[1]-a[1]);
 }
 
-IL.analysis={analyze,progressionStat,gapPrio,patPrio,findings,findingKey,withStatus,renderFinding,buildTips,buildHints,personalRecords,weeklyVolumes,muscleSetCounts,MIN_COMPARATIVE_SESSIONS,MIN_COMPARATIVE_DAYS};
+IL.analysis={analyze,progressionStat,gapPrio,patPrio,findings,findingKey,withStatus,renderFinding,buildTips,buildHints,personalRecords,weeklyVolumes,muscleSetCounts,deloadStats,MIN_COMPARATIVE_SESSIONS,MIN_COMPARATIVE_DAYS};
 if(typeof module!=='undefined')module.exports=IL.analysis;

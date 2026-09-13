@@ -20,6 +20,19 @@ test('library expanded; LONG_LENGTH / UNILATERAL tags reference real exercises',
   [...UNILATERAL].forEach(id=>assert.ok(EX[id],'UNILATERAL id exists: '+id));
 });
 
+test('a machine-only gym can still build every preset (commercial-gym pass)',()=>{
+  const {PRESETS}=IL.data;
+  const machineOnly=EXERCISES.filter(e=>e.equip==='Machine'||e.equip==='Cable').map(e=>e.id);
+  // every muscle group has at least one machine/cable option, and the search finds the wife's ask
+  IL.data.GROUPS.forEach(g=>assert.ok(EXERCISES.some(e=>e.group===g&&(e.equip==='Machine'||e.equip==='Cable')),g+' has a machine option'));
+  const S=IL.search;
+  assert.equal(S.searchEx('hip abductor')[0].id,'hip-abduction');
+  assert.equal(S.searchEx('adductor')[0].id,'hip-adduction');
+  assert.ok(S.searchEx('ab machine').some(e=>e.id==='ab-crunch-machine'));
+  assert.ok(machineOnly.length>=35,'plenty of machine work ('+machineOnly.length+')');
+  void PRESETS;
+});
+
 test('rotation families: exercises have same-group alternatives to swap within',()=>{
   const alt=B.replacementFor('machine-chest-press',['barbell-bench-press'],1);   // returns an exercise object
   assert.ok(alt&&alt.group==='Chest','a chest accessory has a chest replacement');

@@ -8,8 +8,8 @@ globalThis.IL={config:{BUILD:'review',VERSION:'review'}};
 ['data/exercises','engine/progression','engine/search','engine/builder','engine/analysis','engine/sync'].forEach(m=>require(path.join(__dirname,'..','src',m+'.js')));
 const IL=globalThis.IL,{EX,GROUPS,PRESETS}=IL.data,P=IL.prog,B=IL.builder,A=IL.analysis;
 
-const file=process.argv[2];
-if(!file){console.error('usage: node tools/review.js <backup.json>');process.exit(1);}
+const file=process.argv[2],WHY=process.argv.includes('--why');
+if(!file){console.error('usage: node tools/review.js <backup.json> [--why]   (--why prints the score breakdown behind each fresh-build pick)');process.exit(1);}
 const d=IL.sync.parseImport(fs.readFileSync(file,'utf8'));
 const unit=(d.settings&&d.settings.unit)||'lb',bw=(d.settings&&d.settings.bodyweight)||0;
 const sessions=d.sessions.slice().sort((a,b)=>b.date-a.date);
@@ -25,9 +25,15 @@ sessions.forEach(s=>{
   s.exercises.forEach(e=>{
     const ex=EX[e.id];const ws=e.sets.filter(P.isWorking);
     const perf=ws.map(st=>`${st.w===''||st.w==null?'bw':st.w}×${st.r}`).join(' ');
-    line(`    ${(ex?ex.name:e.id+' (unknown)').padEnd(30)} ${e.mode?'['+e.mode+'] ':''}${perf}`);
+    line(`    ${(ex?ex.name:e.id+' (unknown)').padEnd(30)} ${e.mode?'['+e.mode+'] ':''}${perf}${e.note?'   📝 '+e.note:''}`);
   });
 });
+
+H('RECOVERY (deloads vs real sessions — read-only, never feeds progression)');
+const R=A.deloadStats(sessions,now);
+line(`${R.deloads} of the last ${R.total} sessions were deloads · last deload ${R.lastDaysAgo==null?'never':R.lastDaysAgo+'d ago'} · avg gap between deloads ${R.avgGapDays==null?'-':R.avgGapDays+'d'}`);
+line(`deload loads vs working loads on ${R.sharedLifts} shared lift(s): ${R.loadPct==null?'n/a':R.loadPct+'%'}`);
+line(`exercises seen ONLY on deloads (${R.onlyOnDeload.length}): ${R.onlyOnDeload.join(', ')||'none'}`);
 
 H('STREAK / WEEKS');
 line(`Streak: ${P.calcStreak(sessions,now)} wk  ·  sessions in the last 7 days: ${sessions.filter(s=>s.completed!==false&&now-s.date<7*DAY).length}`);
@@ -67,7 +73,10 @@ targets.forEach((g,i)=>{
   const label=i===0?'repeat of last session groups ('+g.join('+')+')':PRESETS[i-1].label;
   line(`${label.padEnd(44)} ${p.mode.toUpperCase()}${p.mode==='continue'?' session '+(p.streak+1):''}${p.rotation?'  SWAP '+p.rotation.from+'→'+p.rotation.to+(p.rotation.anchor?' (anchor)':''):''}${p.reactions.length?'  '+p.reactions.map(r=>r.type+':'+r.why).join('; '):''}`);
   line('    '+p.ids.map(id=>EX[id].name).join(' · '));
+  if(WHY&&p.mode==='fresh'){const tr=[];B.buildRecommendation(g,sessions,1,hints,tr);
+    tr.forEach(t=>line(`      ${EX[t.id].name.padEnd(30)} ${t.sc==null?'':'score '+t.sc+'  '}${t.why.join(', ')}`));}
 });
+if(!WHY)line('(add --why to see the score breakdown behind each fresh-build pick)');
 
 H('SANITY FLAGS');
 let flags=0;
