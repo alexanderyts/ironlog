@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-4Nnv/IpqzlbD3TiKr1ZlHCueMOUhgK8cVp8bbQ3pvLU=' 'sha256-WPBob/luB2k1aalTWXpi6zk3SrIbj8GlZV7AlFdG7oA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-Kc4YF7b0/OelxO+3oETfDyr48C+WSvJsmlO4IYhs74w=' 'sha256-WPBob/luB2k1aalTWXpi6zk3SrIbj8GlZV7AlFdG7oA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Ironlog</title>
@@ -383,8 +383,8 @@ html.standalone .tabbar{bottom:auto;top:calc(var(--screen-h,100vh) - var(--tab-h
 </div>
 
 <script>
-/* Ironlog v0.35.0 · site build */
-var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.35.0",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
+/* Ironlog v0.36.0 · site build */
+var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.36.0",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
 
 /* ===== src/data/exercises.js ===== */
 (function(){'use strict';
@@ -682,6 +682,16 @@ function sessionDuration(s){const a=+s.date,b=+s.endedAt;return (b>a&&isFinite(a
 // Checked sets with a timestamp, as {exId, group, at}, oldest first — the raw material for time-per-
 // muscle and rest-taken analytics (T3). Sets with no stamp (old data, or unchecked) are omitted.
 function setTimeline(s){const out=[];(s.exercises||[]).forEach(e=>{const g=EX[e.id]?EX[e.id].group:null;e.sets.forEach(st=>{if(isFinite(+st.at)&&+st.at>0)out.push({exId:e.id,group:g,at:+st.at});});});return out.sort((a,b)=>a.at-b.at);}
+// Forgotten-Finish safeguards (T2). The app never ends a workout itself — it notices and asks.
+const STALE_AFTER_MIN=75,      // no checked set for this long while a workout is open → "still training?"
+      LONG_SESSION_MIN=150,     // an unusually long open session (belt-and-suspenders for the banner copy)
+      STALE_CONFIRM_MIN=30,     // at Finish, if the last set was this long ago, offer to log THAT time
+      END_PAD_MIN=3;            // …plus a few minutes for the set itself
+function lastSetAt(s){let m=0;(s.exercises||[]).forEach(e=>e.sets.forEach(st=>{const a=+st.at;if(a>m)m=a;}));return m||null;}
+// {lastSetAt, sinceLastSet, sinceStart} in whole minutes. Idle time is measured from the last checked
+// set, or from the start if nothing has been checked yet.
+function staleness(s,now){now=now||Date.now();const ls=lastSetAt(s),ref=ls||+s.date;
+  return {lastSetAt:ls,sinceLastSet:Math.floor((now-ref)/60000),sinceStart:Math.floor((now-(+s.date))/60000)};}
 // What actually gets SAVED when a workout is finished: only sets the user checked done. A prefilled
 // prescription (weight filled in, not ticked) must NOT be saved as performed — that was the bug that
 // polluted history/PRs/volume. `t` is the transient "edited but not ticked" flag; stripped here.
@@ -906,7 +916,7 @@ function calcStreak(sessions,now){
   return n;
 }
 
-IL.prog={DAY,startOfDay,e1rm,isWorking,setLoad,sessionVolume,sessionSets,sessionDuration,setTimeline,finalizeSets,parseWeightInput,fmtVol,modeOf,real,lastPerf,lastModeFor,exerciseSeries,bestE1rmBefore,setPattern,fmtPerf,nextSets,deloadSets,suggestion,unitIncrement,convertWeight,convertSessions,calcStreak,weekIndex,weekStart};
+IL.prog={DAY,startOfDay,e1rm,isWorking,setLoad,sessionVolume,sessionSets,sessionDuration,setTimeline,lastSetAt,staleness,STALE_AFTER_MIN,LONG_SESSION_MIN,STALE_CONFIRM_MIN,END_PAD_MIN,finalizeSets,parseWeightInput,fmtVol,modeOf,real,lastPerf,lastModeFor,exerciseSeries,bestE1rmBefore,setPattern,fmtPerf,nextSets,deloadSets,suggestion,unitIncrement,convertWeight,convertSessions,calcStreak,weekIndex,weekStart};
 if(typeof module!=='undefined')module.exports=IL.prog;
 
 })();
@@ -2046,6 +2056,8 @@ const {DAY,startOfDay,fmtVol}=P;
 function fmtDur(min){min=Math.max(0,Math.round(min||0));if(min<60)return min+' min';const h=Math.floor(min/60),m=min%60;return m?h+' h '+m+' min':h+' h';}
 // Live elapsed since a workout started (ms timestamp): the editor header ticks this each minute.
 function fmtElapsed(startTs){const m=Math.floor((Date.now()-startTs)/60000);return m<1?'just started':fmtDur(m);}
+// A wall-clock time like "7:42 PM" (for the forgotten-Finish end-time choice).
+function fmtClock(ts){return new Date(ts).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});}
 function fmtDate(ts){return new Date(ts).toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'});}
 function relDay(ts){const t=startOfDay(Date.now()),d=startOfDay(ts);const diff=Math.round((t-d)/DAY);
   if(diff===0)return'Today';if(diff===1)return'Yesterday';if(diff<7)return diff+' days ago';return fmtDate(ts);}
@@ -2163,7 +2175,7 @@ function resumeCard(){
   const s=state.active;const sets=setsOf(s);
   return `<button class="resume" id="btnResume" data-action="resume">
     <span class="tri"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></span>
-    <span style="flex:1;min-width:0"><span style="font-weight:700;display:block">Resume your workout</span><span class="dim" style="font-size:13px">${s.exercises.length} exercise${s.exercises.length!==1?'s':''} · ${sets} set${sets!==1?'s':''} logged</span></span>
+    <span style="flex:1;min-width:0"><span style="font-weight:700;display:block">Resume your workout</span><span class="dim" style="font-size:13px">${s.exercises.length} exercise${s.exercises.length!==1?'s':''} · ${sets} set${sets!==1?'s':''} logged${P.staleness(s).sinceLastSet>=P.STALE_AFTER_MIN?` · <span style="color:var(--warn)">idle ${fmtDur(P.staleness(s).sinceLastSet)}</span>`:''}</span></span>
     <span style="color:var(--accent);font-size:20px;flex-shrink:0">→</span></button>`;
 }
 function startWorkoutView(){
@@ -2303,6 +2315,16 @@ function coachNudge(){
 }
 
 /* ---------------- session editor (live workout or editing a past one) ---------------- */
+// Forgotten-Finish banner (T2): only on the LIVE workout, only once it's been idle a long time. The
+// app never ends the session itself — this just notices and points at Finish / Discard.
+function staleBanner(s){
+  const st=P.staleness(s);if(st.sinceLastSet<P.STALE_AFTER_MIN)return '';
+  const ago=st.lastSetAt?`Your last set was ${fmtDur(st.sinceLastSet)} ago (${fmtClock(st.lastSetAt)})`:`Started ${fmtDur(st.sinceStart)} ago with nothing logged yet`;
+  return `<div class="card" id="staleBanner" style="margin:0 0 14px;padding:13px 15px;background:color-mix(in srgb,var(--warn) 14%,transparent);border:1px solid color-mix(in srgb,var(--warn) 40%,transparent)">
+    <div style="font-weight:600;color:var(--warn);font-size:13.5px">Still training?</div>
+    <div class="dim" style="font-size:12.5px;margin-top:3px">${ago}. Finish to log it (you'll pick the end time), or discard.</div>
+    <div style="display:flex;gap:8px;margin-top:11px"><button class="btn good sm" data-action="staleFinish">Finish workout</button><button class="btn ghost sm" data-action="staleDiscard">Discard</button></div></div>`;
+}
 function editorView(s,mode){
   const vol=volOf(s),sets=setsOf(s),edit=mode==='edit';
   return `
@@ -2311,6 +2333,7 @@ function editorView(s,mode){
       ${edit?'':'<button class="linkbtn dim" id="btnDiscard">Discard</button>'}</div>
     <div style="padding:0 2px 2px"><div class="eyebrow">${edit?'Editing · '+fmtDate(s.date):`Workout in progress · saves automatically · <span id="elapsedLbl">${fmtElapsed(s.date)}</span>`}</div>
       <h2 style="font-size:23px;margin-top:4px">${new Date(s.date).toLocaleDateString(undefined,{weekday:'long'})}'s session${s.deload?' <span class="deload-badge">Deload</span>':''}</h2></div>
+    ${edit?'':staleBanner(s)}
     ${s.deload?`<div class="card" style="margin:0 0 14px;padding:12px 14px;background:var(--good-soft);border:1px solid color-mix(in srgb,var(--good) 30%,transparent)"><div style="font-weight:600;color:var(--good);font-size:13.5px">🌿 Recovery session</div><div class="dim" style="font-size:12.5px;margin-top:3px">Lighter loads on purpose — take each rep through a full range, feel the stretch, and stop 3–4 reps shy of failure. This won't affect your progression or PRs.</div></div>`:''}
     <div class="statgrid" style="margin:14px 0 18px">
       <div class="card stat"><div class="k">Working sets</div><div class="v mono" id="stSets">${sets}</div></div>
@@ -2862,7 +2885,7 @@ function workoutSummary(s){
   s.exercises.forEach(e=>{const emode=modeOf(e);const histBest=P.bestE1rmBefore(state.sessions,e.id,{mode:emode,bw:bw(),excludeId:s.id});if(histBest<=0)return;
     let best=0,bs=null;e.sets.forEach(st=>{if(st.warm||!P.isWorking(st))return;const est=P.e1rm(P.setLoad(e.id,st.w,bw()),+st.r||0);if((+st.r)&&est>best){best=est;bs=st;}});
     if(bs&&best>histBest)prs.push({name:EX[e.id]?EX[e.id].name:e.name,w:bs.w,r:bs.r,perHand:MODES[emode]&&MODES[emode].perHand});});
-  return {sets:setsOf(s),vol:volOf(s),prs,deload:!!s.deload,dur:P.sessionDuration(s)};
+  return {sets:setsOf(s),vol:volOf(s),prs,deload:!!s.deload,dur:P.sessionDuration(s),estimated:!!s.endEstimated};
 }
 function showSummary(sm){
   let body=`<div class="statgrid" style="margin:2px 0 14px">
@@ -2883,17 +2906,35 @@ function showSummary(sm){
 }
 function finishWorkout(){
   const s=state.active;
-  confirmUnchecked(s,()=>{
-    stopRest();stopElapsed();
-    s.endedAt=Date.now();   // T1: workout end time. T2 will offer to log the last-set time instead when Finish was forgotten.
-    cleanSets(s);
-    if(!s.exercises.length){toast('Log at least one set first');return;}
-    const sm=workoutSummary(s);
-    s.completed=true;s.updatedAt=Date.now();
-    S.upsertSession(s,false);state.active=null;S.persistActive();todayScreen='home';
-    render();showSummary(sm);
-  });
+  confirmUnchecked(s,()=>chooseEndThenCommit(s));
 }
+// T2: when Finish was likely forgotten (last set a while ago), let the user log the real end time
+// rather than "now", instead of silently inflating the duration. Otherwise finish straight away.
+function chooseEndThenCommit(s){
+  const st=P.staleness(s),now=Date.now();
+  if(st.lastSetAt&&st.sinceLastSet>=P.STALE_CONFIRM_MIN){
+    const lastEnd=st.lastSetAt+P.END_PAD_MIN*60000;
+    openSheet('When did you finish?',`<div class="dim" style="font-size:13.5px;margin:-2px 2px 14px;line-height:1.5">Your last set was ${fmtDur(st.sinceLastSet)} ago, at ${fmtClock(st.lastSetAt)}. Log this workout as ending then, or now?</div>
+      <button class="btn primary block" id="endAtLast" style="margin-bottom:9px">End at my last set · ${fmtClock(lastEnd)}</button>
+      <button class="btn ghost block" id="endNow">End now · ${fmtClock(now)}</button>`);
+    const a=$('#endAtLast'),b=$('#endNow');
+    if(a)a.addEventListener('click',()=>commitFinish(s,lastEnd,true));
+    if(b)b.addEventListener('click',()=>commitFinish(s,now,false));
+  }else commitFinish(s,now,false);
+}
+function commitFinish(s,endedAt,estimated){
+  closeSheet();stopRest();stopElapsed();
+  s.endedAt=endedAt;if(estimated)s.endEstimated=true;else delete s.endEstimated;
+  cleanSets(s);
+  if(!s.exercises.length){toast('Log at least one set first');return;}
+  const sm=workoutSummary(s);
+  s.completed=true;s.updatedAt=Date.now();
+  S.upsertSession(s,false);state.active=null;S.persistActive();todayScreen='home';
+  render();showSummary(sm);
+}
+function discardActive(){showConfirm('Discard workout?','Nothing from this session will be saved.','Discard',()=>{
+  stopRest();stopElapsed();const copy=state.active;state.active=null;S.persistActive();todayScreen='home';render();
+  toast('Workout discarded',{label:'Undo',fn:()=>{S.setActive(copy);todayScreen='active';render();}});});}
 function startEdit(s){editSession=JSON.parse(JSON.stringify(s));editDirty=false;todayScreen='edit';setTab('today');}
 function finishEdit(){
   const s=editSession;
@@ -2916,10 +2957,25 @@ function bindClick(sel,fn){const el=$(sel);if(el)el.addEventListener('click',fn)
 // The editor header's elapsed time (T1). A self-rescheduling 1-minute timeout updates just the
 // #elapsedLbl span (no re-render, so it never steals input focus); it stops itself the moment the
 // span is gone or the active workout ends. Re-armed by bind() whenever the active editor renders.
-let elapsedT=null;
+let elapsedT=null,notifiedStaleId=null;
 function stopElapsed(){clearTimeout(elapsedT);elapsedT=null;}
-function scheduleElapsed(){stopElapsed();elapsedT=setTimeout(()=>{const el=$('#elapsedLbl');
-  if(el&&state.active&&todayScreen==='active'){el.textContent=fmtElapsed(state.active.date);scheduleElapsed();}},60000);}
+function scheduleElapsed(){stopElapsed();elapsedT=setTimeout(()=>{
+  if(!(state.active&&todayScreen==='active'))return;
+  const stale=P.staleness(state.active).sinceLastSet>=P.STALE_AFTER_MIN;
+  if(stale)maybeStaleNotify(state.active);
+  // Crossing the threshold brings in the banner via a re-render (bind() re-arms this timer). Never
+  // re-render while someone is typing a weight.
+  if(stale&&!$('#staleBanner')){const a=document.activeElement;if(!(a&&a.tagName==='INPUT')){render();return;}}
+  const el=$('#elapsedLbl');if(el)el.textContent=fmtElapsed(state.active.date);
+  scheduleElapsed();},60000);}
+// A single "still training?" notification, only while the app is BACKGROUNDED and only if the user
+// already allowed rest notifications — no new permission prompt. A PWA can't wake itself, so this is
+// best-effort (won't fire on a suspended iOS PWA); the in-app banner is the real safety net.
+function maybeStaleNotify(s){
+  if(notifiedStaleId===s.id||!document.hidden)return;
+  try{if(state.settings.rest.notify&&'Notification'in window&&Notification.permission==='granted'){
+    notifiedStaleId=s.id;new Notification('Still training?',{body:'Your workout is still open — finish it to log it.'});}}catch(e){}
+}
 // Delegated view actions: a click on any element carrying data-action="name" (or inside one) runs
 // ACTIONS[name](el, ev). One listener on #view covers every view and survives re-renders, so a new
 // button is just markup + a table row — no per-view rebinding. (The editor, sheets and bindLog keep
@@ -2936,7 +2992,9 @@ const ACTIONS={
     draft.groups=presetOn(p)?new Set():new Set(p.groups);   // tap to select those groups; tap again to clear
     render();},
   blank:()=>startSession({ids:[],msg:draft.deload?'Deload — lighter loads, focus on the stretch':null,deload:draft.deload,source:'blank'}),
-  deloadToggle:el=>{draft.deload=!draft.deload;el.classList.toggle('on',draft.deload);refreshBuildBtns();}
+  deloadToggle:el=>{draft.deload=!draft.deload;el.classList.toggle('on',draft.deload);refreshBuildBtns();},
+  staleFinish:()=>finishWorkout(),
+  staleDiscard:()=>discardActive()
 };
 function bind(){
   const v=$('#view');
@@ -2960,9 +3018,7 @@ function bind(){
   bindClick('#btnSaveRoutine',()=>saveAsRoutine(cur()));
   bindClick('#btnFinish',finishWorkout);
   bindClick('#btnSaveEdit',finishEdit);
-  bindClick('#btnDiscard',()=>showConfirm('Discard workout?','Nothing from this session will be saved.','Discard',()=>{
-    stopRest();stopElapsed();const copy=state.active;state.active=null;S.persistActive();todayScreen='home';render();
-    toast('Workout discarded',{label:'Undo',fn:()=>{S.setActive(copy);todayScreen='active';render();}});}));
+  bindClick('#btnDiscard',discardActive);
   const ll=$('#logList');if(ll)bindLog(ll);
   if(todayScreen==='active'&&state.active&&$('#elapsedLbl'))scheduleElapsed();else stopElapsed();
   // history
@@ -3092,6 +3148,9 @@ function boot(){
     }else{restState.end+=15000;restState.total+=15;$('#restbar').classList.remove('done');}
     if(!restInt)restInt=setInterval(tickRest,300);tickRest();});
   document.addEventListener('pointerdown',unlockAudio);
+  // On resume, re-render the live editor so the stale banner / idle time reflect the real elapsed
+  // time (a suspended tab's minute timer won't have fired). Never while typing.
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&todayScreen==='active'&&state.active){const a=document.activeElement;if(!(a&&a.tagName==='INPUT'))render();}});
   $('#view').addEventListener('click',e=>{if(e.target.closest('[data-vol-info]'))toast('Volume = weight × reps, added up across your working sets');});
   // re-render on cloud changes, but never yank focus from someone typing a weight
   S.onChange(()=>{updateCloud();const a=document.activeElement;if(a&&a.tagName==='INPUT')return;render();});

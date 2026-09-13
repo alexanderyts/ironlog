@@ -39,7 +39,7 @@ function resumeCard(){
   const s=state.active;const sets=setsOf(s);
   return `<button class="resume" id="btnResume" data-action="resume">
     <span class="tri"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></span>
-    <span style="flex:1;min-width:0"><span style="font-weight:700;display:block">Resume your workout</span><span class="dim" style="font-size:13px">${s.exercises.length} exercise${s.exercises.length!==1?'s':''} · ${sets} set${sets!==1?'s':''} logged</span></span>
+    <span style="flex:1;min-width:0"><span style="font-weight:700;display:block">Resume your workout</span><span class="dim" style="font-size:13px">${s.exercises.length} exercise${s.exercises.length!==1?'s':''} · ${sets} set${sets!==1?'s':''} logged${P.staleness(s).sinceLastSet>=P.STALE_AFTER_MIN?` · <span style="color:var(--warn)">idle ${fmtDur(P.staleness(s).sinceLastSet)}</span>`:''}</span></span>
     <span style="color:var(--accent);font-size:20px;flex-shrink:0">→</span></button>`;
 }
 function startWorkoutView(){
@@ -179,6 +179,16 @@ function coachNudge(){
 }
 
 /* ---------------- session editor (live workout or editing a past one) ---------------- */
+// Forgotten-Finish banner (T2): only on the LIVE workout, only once it's been idle a long time. The
+// app never ends the session itself — this just notices and points at Finish / Discard.
+function staleBanner(s){
+  const st=P.staleness(s);if(st.sinceLastSet<P.STALE_AFTER_MIN)return '';
+  const ago=st.lastSetAt?`Your last set was ${fmtDur(st.sinceLastSet)} ago (${fmtClock(st.lastSetAt)})`:`Started ${fmtDur(st.sinceStart)} ago with nothing logged yet`;
+  return `<div class="card" id="staleBanner" style="margin:0 0 14px;padding:13px 15px;background:color-mix(in srgb,var(--warn) 14%,transparent);border:1px solid color-mix(in srgb,var(--warn) 40%,transparent)">
+    <div style="font-weight:600;color:var(--warn);font-size:13.5px">Still training?</div>
+    <div class="dim" style="font-size:12.5px;margin-top:3px">${ago}. Finish to log it (you'll pick the end time), or discard.</div>
+    <div style="display:flex;gap:8px;margin-top:11px"><button class="btn good sm" data-action="staleFinish">Finish workout</button><button class="btn ghost sm" data-action="staleDiscard">Discard</button></div></div>`;
+}
 function editorView(s,mode){
   const vol=volOf(s),sets=setsOf(s),edit=mode==='edit';
   return `
@@ -187,6 +197,7 @@ function editorView(s,mode){
       ${edit?'':'<button class="linkbtn dim" id="btnDiscard">Discard</button>'}</div>
     <div style="padding:0 2px 2px"><div class="eyebrow">${edit?'Editing · '+fmtDate(s.date):`Workout in progress · saves automatically · <span id="elapsedLbl">${fmtElapsed(s.date)}</span>`}</div>
       <h2 style="font-size:23px;margin-top:4px">${new Date(s.date).toLocaleDateString(undefined,{weekday:'long'})}'s session${s.deload?' <span class="deload-badge">Deload</span>':''}</h2></div>
+    ${edit?'':staleBanner(s)}
     ${s.deload?`<div class="card" style="margin:0 0 14px;padding:12px 14px;background:var(--good-soft);border:1px solid color-mix(in srgb,var(--good) 30%,transparent)"><div style="font-weight:600;color:var(--good);font-size:13.5px">🌿 Recovery session</div><div class="dim" style="font-size:12.5px;margin-top:3px">Lighter loads on purpose — take each rep through a full range, feel the stretch, and stop 3–4 reps shy of failure. This won't affect your progression or PRs.</div></div>`:''}
     <div class="statgrid" style="margin:14px 0 18px">
       <div class="card stat"><div class="k">Working sets</div><div class="v mono" id="stSets">${sets}</div></div>

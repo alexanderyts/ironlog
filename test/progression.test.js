@@ -21,6 +21,19 @@ test('setTimeline: stamped checked sets as {exId,group,at}, oldest first; unstam
   ]);
 });
 
+test('staleness: idle time from the last checked set (or the start), thresholds exposed (T2)',()=>{
+  const now=1_000_000_000_000;
+  const s={date:now-100*60000,exercises:[{sets:[{done:true,at:now-95*60000},{done:true,at:now-80*60000}]}]};
+  const st=IL.prog.staleness(s,now);
+  assert.equal(st.lastSetAt,now-80*60000,'most recent stamp wins');
+  assert.equal(st.sinceLastSet,80);
+  assert.equal(st.sinceStart,100);
+  // nothing checked yet → measured from the start
+  const st2=IL.prog.staleness({date:now-40*60000,exercises:[{sets:[{done:false}]}]},now);
+  assert.equal(st2.lastSetAt,null);assert.equal(st2.sinceLastSet,40);assert.equal(st2.sinceStart,40);
+  assert.equal(IL.prog.STALE_AFTER_MIN,75);assert.equal(IL.prog.STALE_CONFIRM_MIN,30);assert.equal(IL.prog.END_PAD_MIN,3);
+});
+
 test('finalizeSets carries the check timestamp `at` through to the saved set (T1)',()=>{
   const out=IL.prog.finalizeSets([{id:'back-squat',name:'Squat',sets:[{w:100,r:5,done:true,at:12345,t:1}]}]);
   assert.equal(out[0].sets[0].at,12345,'at kept');

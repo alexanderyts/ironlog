@@ -26,6 +26,16 @@ function sessionDuration(s){const a=+s.date,b=+s.endedAt;return (b>a&&isFinite(a
 // Checked sets with a timestamp, as {exId, group, at}, oldest first — the raw material for time-per-
 // muscle and rest-taken analytics (T3). Sets with no stamp (old data, or unchecked) are omitted.
 function setTimeline(s){const out=[];(s.exercises||[]).forEach(e=>{const g=EX[e.id]?EX[e.id].group:null;e.sets.forEach(st=>{if(isFinite(+st.at)&&+st.at>0)out.push({exId:e.id,group:g,at:+st.at});});});return out.sort((a,b)=>a.at-b.at);}
+// Forgotten-Finish safeguards (T2). The app never ends a workout itself — it notices and asks.
+const STALE_AFTER_MIN=75,      // no checked set for this long while a workout is open → "still training?"
+      LONG_SESSION_MIN=150,     // an unusually long open session (belt-and-suspenders for the banner copy)
+      STALE_CONFIRM_MIN=30,     // at Finish, if the last set was this long ago, offer to log THAT time
+      END_PAD_MIN=3;            // …plus a few minutes for the set itself
+function lastSetAt(s){let m=0;(s.exercises||[]).forEach(e=>e.sets.forEach(st=>{const a=+st.at;if(a>m)m=a;}));return m||null;}
+// {lastSetAt, sinceLastSet, sinceStart} in whole minutes. Idle time is measured from the last checked
+// set, or from the start if nothing has been checked yet.
+function staleness(s,now){now=now||Date.now();const ls=lastSetAt(s),ref=ls||+s.date;
+  return {lastSetAt:ls,sinceLastSet:Math.floor((now-ref)/60000),sinceStart:Math.floor((now-(+s.date))/60000)};}
 // What actually gets SAVED when a workout is finished: only sets the user checked done. A prefilled
 // prescription (weight filled in, not ticked) must NOT be saved as performed — that was the bug that
 // polluted history/PRs/volume. `t` is the transient "edited but not ticked" flag; stripped here.
@@ -250,5 +260,5 @@ function calcStreak(sessions,now){
   return n;
 }
 
-IL.prog={DAY,startOfDay,e1rm,isWorking,setLoad,sessionVolume,sessionSets,sessionDuration,setTimeline,finalizeSets,parseWeightInput,fmtVol,modeOf,real,lastPerf,lastModeFor,exerciseSeries,bestE1rmBefore,setPattern,fmtPerf,nextSets,deloadSets,suggestion,unitIncrement,convertWeight,convertSessions,calcStreak,weekIndex,weekStart};
+IL.prog={DAY,startOfDay,e1rm,isWorking,setLoad,sessionVolume,sessionSets,sessionDuration,setTimeline,lastSetAt,staleness,STALE_AFTER_MIN,LONG_SESSION_MIN,STALE_CONFIRM_MIN,END_PAD_MIN,finalizeSets,parseWeightInput,fmtVol,modeOf,real,lastPerf,lastModeFor,exerciseSeries,bestE1rmBefore,setPattern,fmtPerf,nextSets,deloadSets,suggestion,unitIncrement,convertWeight,convertSessions,calcStreak,weekIndex,weekStart};
 if(typeof module!=='undefined')module.exports=IL.prog;

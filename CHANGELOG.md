@@ -2,6 +2,13 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.36.0 — 2026-09-13 · If you forget to press Finish (Roadmap v6, Phase T2)
+The app never ends a workout on its own — it just notices and asks.
+- **A "Still training?" banner** appears on a workout that's been idle a long time (no set checked for over an hour), with Finish and Discard right there. The Home "Resume" card and the header show the idle time too.
+- **When you finish a long-idle workout, it asks when you actually finished** — "End at my last set (9:59 AM)" or "End now (11:31 AM)" — so a workout you left open for hours doesn't get logged as a 3-hour session. The last-set option marks the length as an estimate (shown with a "≈"). A normal finish doesn't ask.
+- **Optional background nudge:** if you've allowed rest notifications, a single "Still training?" notification can fire while the app is in the background.
+- Not verified on-device: reliable background notification delivery — a web app can't wake itself, so on a suspended iPhone PWA this may not fire; the in-app banner is the dependable safety net.
+
 ## v0.35.0 — 2026-09-13 · Workouts record how long they took (Roadmap v6, Phase T1)
 - **The editor header now shows a live workout timer** ("Workout in progress · … · 47 min"), and your **finished workouts show their length** on the summary and in History.
 - Under the hood, each set records *when* you checked it off, and the session records when you finished. Those timestamps are what the next updates use for time-per-muscle, how long you actually rest, and a "did you forget to press Finish?" nudge. (progression.js `sessionDuration`/`setTimeline`; new optional `set.at` and `session.endedAt` fields, kept through save/sync/import.)

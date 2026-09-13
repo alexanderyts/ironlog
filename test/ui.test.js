@@ -113,6 +113,40 @@ test('UI: T1 — checking a set stamps it, unchecking clears it, finishing recor
   }finally{h.teardown();}
 });
 
+test('UI: T2 — a long-idle workout shows the banner and Finish offers the last-set end time',()=>{
+  const h=launch();
+  try{
+    buildWorkout(h,['Chest']);
+    const active=h.state.active,now=Date.now();
+    h.click(h.$$('[data-check]')[0]);
+    // pretend the last set was 80 min ago and the workout started 140 min ago (Finish forgotten)
+    active.exercises[0].sets[0].at=now-80*60000;active.date=now-140*60000;
+    h.IL.ui.render();
+    assert.ok(h.has('#staleBanner'),'stale banner shown after 80 min idle');
+    assert.ok(h.bodyText().includes('Still training'),'banner copy present');
+    h.click('#btnFinish');
+    assert.ok(h.has('#endAtLast')&&h.has('#endNow'),'end-time choice offered');
+    h.click('#endAtLast');
+    const saved=h.state.sessions.filter(s=>s.id===active.id)[0];
+    assert.equal(saved.endEstimated,true,'flagged as estimated');
+    assert.ok(saved.endedAt<=now-70*60000,'ended near the last set (~77 min ago), not now: '+Math.round((now-saved.endedAt)/60000)+' min ago');
+    // date = now−140, endedAt = (now−80)+3 = now−77  →  duration = 140 − 77 = 63 min
+    assert.equal(h.IL.prog.sessionDuration(saved),63);
+  }finally{h.teardown();}
+});
+
+test('UI: T2 — finishing a normal (not-idle) workout does NOT prompt for the end time (control)',()=>{
+  const h=launch();
+  try{
+    buildWorkout(h,['Chest']);
+    h.click(h.$$('[data-check]')[0]);   // just checked → sinceLastSet ~0
+    h.click('#btnFinish');
+    assert.ok(!h.has('#endAtLast'),'no end-time sheet for a fresh finish');
+    assert.equal(h.state.sessions.length,1,'saved directly');
+    assert.ok(!h.state.sessions[0].endEstimated,'not flagged estimated');
+  }finally{h.teardown();}
+});
+
 // ── Phase U1: controls & input usability ─────────────────────────────────────────────────────────
 const wait=ms=>new Promise(r=>setTimeout(r,ms));
 
