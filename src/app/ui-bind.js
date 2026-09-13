@@ -155,7 +155,10 @@ const ACTIONS={
   blank:()=>startSession({ids:[],msg:draft.deload?'Deload — lighter loads, focus on the stretch':null,deload:draft.deload,source:'blank'}),
   deloadToggle:el=>{draft.deload=!draft.deload;el.classList.toggle('on',draft.deload);refreshBuildBtns();},
   staleFinish:()=>finishWorkout(),
-  staleDiscard:()=>discardActive()
+  staleDiscard:()=>discardActive(),
+  profileGo:()=>{markSeen('profileIntro');openProfile();},
+  profileSkip:()=>{markSeen('profileIntro');render();},
+  profileOpen:()=>openProfile()
 };
 function bind(){
   const v=$('#view');

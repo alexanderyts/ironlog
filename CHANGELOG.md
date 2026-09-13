@@ -2,6 +2,13 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.38.0 — 2026-09-13 · An optional training profile (Roadmap v6, Phase P1)
+**Nothing changes unless you want it to.** Everyone stays on the balanced default, which is exactly today's app.
+- A one-time card on Home introduces it: **Take me there** opens the settings, **I'm good** dismisses it for good (and it won't reappear on your other devices).
+- The **Training profile** (in Settings, and a "Profile: … · change" line on the New-workout screen) lets you set your main goal, the kind of gym you use, days per week, session length, set style, coaching style, muscles to keep light, and specific exercises to avoid. Every field defaults to **Balanced**; changes save instantly.
+- This update only *stores* your answers — the workout builder starts using them in the next update, so you can set it up now and nothing about your workouts changes yet.
+- Not verified on-device: nothing behavioural — the card, sheet, and that a saved profile leaves builds unchanged were all checked automatically and in the browser.
+
 ## v0.37.0 — 2026-09-13 · See how you spend your time (Roadmap v6, Phase T3)
 A new **Time card on the Progress tab**, all from the timestamps added in the last two updates:
 - **Average workout length** and **density** (working sets per 10 minutes).

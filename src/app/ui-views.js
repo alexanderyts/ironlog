@@ -335,6 +335,57 @@ function watchViewport(){
   addEventListener('touchstart',()=>vlog('touch'),{passive:true,once:true});
   addEventListener('load',()=>vlog('load'));
 }
+/* ---------------- training profile (P1: optional, engine starts using it in P2) ---------------- */
+function seenFlag(k){return !!(state.settings.seen&&state.settings.seen[k]);}
+function markSeen(k){state.settings.seen=Object.assign({},state.settings.seen,{[k]:true});S.saveSettingsCloud();}
+// A short label for the "Profile: …" lines; "Balanced" when nothing is set.
+function profileSummary(){const p=state.settings.profile||{};const parts=[];
+  const g={size:'Size',strength:'Strength',general:'General'},gy={full:'Full gym',machine:'Machine gym',home:'Home'};
+  if(p.goal)parts.push(g[p.goal]);if(p.gym)parts.push(gy[p.gym]);if(p.days)parts.push(p.days+'d/wk');
+  return parts.length?parts.join(' · '):'Balanced';}
+function setProfile(field,val){const p=Object.assign({},state.settings.profile);
+  if(!val||val==='auto')delete p[field];else p[field]=field==='days'?+val:val;
+  state.settings.profile=Object.keys(p).length?p:undefined;S.saveSettingsCloud();}
+function toggleProtect(gp){const p=Object.assign({},state.settings.profile),set=new Set(p.protect||[]);
+  set.has(gp)?set.delete(gp):set.add(gp);if(set.size)p.protect=[...set];else delete p.protect;
+  state.settings.profile=Object.keys(p).length?p:undefined;S.saveSettingsCloud();}
+function addAvoid(id){const p=Object.assign({},state.settings.profile),set=new Set(p.avoid||[]);set.add(id);p.avoid=[...set];
+  state.settings.profile=p;S.saveSettingsCloud();}
+function removeAvoid(id){const p=Object.assign({},state.settings.profile),a=(p.avoid||[]).filter(x=>x!==id);
+  if(a.length)p.avoid=a;else delete p.avoid;state.settings.profile=Object.keys(p).length?p:undefined;S.saveSettingsCloud();}
+function pchips(field,opts){const c=(state.settings.profile&&state.settings.profile[field])||'auto';
+  return `<div class="chips">${opts.map(([v,l])=>`<button class="chip ${(''+c)===v?'on':''}" data-pset="${field}" data-pv="${v}">${l}</button>`).join('')}</div>`;}
+function prow(label,inner){return `<div style="margin-bottom:18px"><div class="eyebrow" style="margin-bottom:8px">${label}</div>${inner}</div>`;}
+function profileBody(){const p=state.settings.profile||{},avoid=p.avoid||[],protect=new Set(p.protect||[]);
+  return `<div class="dim" style="font-size:13px;margin:-4px 2px 16px;line-height:1.5">All optional — anything left on <b>Balanced</b> works exactly like today. Changes save automatically; the workout builder starts using these in the next update.</div>
+    ${prow('Main goal',pchips('goal',[['auto','Balanced'],['size','Size'],['strength','Strength'],['general','General']]))}
+    ${prow('Your gym',pchips('gym',[['auto','Balanced'],['full','Full gym'],['machine','Machine-focused'],['home','Home / minimal']]))}
+    ${prow('Days per week',pchips('days',[['auto','Any'],['2','2'],['3','3'],['4','4'],['5','5'],['6','6']]))}
+    ${prow('Session length',pchips('length',[['auto','Balanced'],['short','Short'],['standard','Standard'],['long','Long']]))}
+    ${prow('Set style',pchips('sets',[['auto','Balanced'],['straight','Straight'],['ramp','Ramping']]))}
+    ${prow('Coaching',pchips('push',[['auto','Balanced'],['guide','Guide me'],['quiet','Just record']]))}
+    ${prow('Protect — keep these light',`<div class="chips">${GROUPS.map(g=>`<button class="chip ${protect.has(g)?'on':''}" data-pprotect="${g}">${g}</button>`).join('')}</div>`)}
+    ${prow('Exercises to avoid',`${avoid.length?`<div class="chips" style="margin-bottom:9px">${avoid.map(id=>`<button class="chip on" data-pdelavoid="${id}">${esc(EX[id]?EX[id].name:id)} ✕</button>`).join('')}</div>`:''}<button class="btn ghost sm" id="pAvoid">＋ Add exercise to avoid</button>`)}
+    <button class="btn ghost block" id="pReset" style="margin-top:6px">Reset to Balanced</button>`;}
+function openProfile(){openSheet('Training profile',profileBody());bindProfile();}
+function bindProfile(){const b=$('#sheetBody');const rerender=()=>{b.innerHTML=profileBody();bindProfile();};
+  b.querySelectorAll('[data-pset]').forEach(el=>el.addEventListener('click',()=>{setProfile(el.dataset.pset,el.dataset.pv);rerender();}));
+  b.querySelectorAll('[data-pprotect]').forEach(el=>el.addEventListener('click',()=>{toggleProtect(el.dataset.pprotect);rerender();}));
+  b.querySelectorAll('[data-pdelavoid]').forEach(el=>el.addEventListener('click',()=>{removeAvoid(el.dataset.pdelavoid);rerender();}));
+  const av=$('#pAvoid');if(av)av.addEventListener('click',openAvoidPicker);
+  const rst=$('#pReset');if(rst)rst.addEventListener('click',()=>{state.settings.profile=undefined;S.saveSettingsCloud();rerender();});}
+function openAvoidPicker(){
+  openSheet('Avoid which exercises?',`<div class="dim" style="font-size:12.5px;margin:-4px 2px 12px">Tap to toggle — the builder won't propose these.</div>
+    <div class="search" style="margin-bottom:12px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg><input id="avSearch" placeholder="Search exercises…"></div>
+    <div class="card list" id="avResults"></div>
+    <button class="btn primary block" id="avDone" style="margin-top:14px">Done</button>`);
+  const avoidSet=()=>new Set((state.settings.profile&&state.settings.profile.avoid)||[]);
+  const row=e=>{const on=avoidSet().has(e.id);return `<div class="ex-row" data-avtoggle="${e.id}"><div class="ex-ic">${exIcon(e.group)}</div><div style="flex:1;min-width:0"><div class="ex-name">${esc(e.name)}</div><div class="ex-sub">${e.group} · ${e.equip}</div></div><div class="ex-add" style="${on?'background:var(--warn);color:#fff':''}">${on?'✓':'＋'}</div></div>`;};
+  const inp=$('#avSearch'),refresh=()=>{const r=SR.searchEx(inp.value);$('#avResults').innerHTML=r.slice(0,60).map(row).join('')||'<div style="padding:20px;text-align:center" class="dim">No match.</div>';};
+  refresh();inp.addEventListener('input',refresh);
+  $('#avResults').addEventListener('click',ev=>{const b=ev.target.closest('[data-avtoggle]');if(!b)return;const id=b.dataset.avtoggle;avoidSet().has(id)?removeAvoid(id):addAvoid(id);refresh();});
+  $('#avDone').addEventListener('click',openProfile);
+}
 function openSettings(){
   const R=state.settings.rest,st=state.settings;
   openSheet('Settings',`
@@ -344,6 +395,7 @@ function openSettings(){
       <div class="stepper"><button data-bw="-1">−</button><button class="val mono" id="bwVal" title="Tap to type">${bw()?bw()+' '+U():'Set'}</button><button data-bw="1">＋</button></div></div>
     <div class="settingrow"><div><div style="font-weight:600">Theme</div><div class="dim" style="font-size:13px">Appearance</div></div>
       <div class="seg" id="segTheme"><button data-t="system" class="${st.theme==='system'?'on':''}">Auto</button><button data-t="light" class="${st.theme==='light'?'on':''}">Light</button><button data-t="dark" class="${st.theme==='dark'?'on':''}">Dark</button></div></div>
+    <button class="settingrow" id="btnProfile" style="width:100%;text-align:left;background:none;border:none;border-bottom:1px solid var(--line)"><div><div style="font-weight:600">Training profile</div><div class="dim" style="font-size:13px">How the builder tailors your workouts</div></div><span class="mono dim" style="font-size:13px">${profileSummary()} ›</span></button>
     <div style="height:18px"></div>
     <div class="eyebrow" style="margin-bottom:10px">Cloud backup</div>
     ${cloudSection()}
@@ -372,6 +424,7 @@ function openSettings(){
   $('#sheetBody').querySelectorAll('[data-bw]').forEach(b=>b.addEventListener('click',()=>{state.settings.bodyweight=Math.max(0,bw()+(+b.dataset.bw)*bwStep);S.saveSettingsCloud();$('#bwVal').textContent=bw()?bw()+' '+U():'Set';}));
   $('#bwVal').addEventListener('click',()=>openNumberSheet('Your bodyweight ('+U()+')',bw()||'',v=>{state.settings.bodyweight=Math.max(0,v);S.saveSettingsCloud();openSettings();}));
   const on=(sel,fn)=>{const el=$(sel);if(el)el.addEventListener('click',fn);};
+  on('#btnProfile',openProfile);
   on('#btnExport',exportData);
   const fi=$('#fileImport');if(fi)fi.addEventListener('change',importData);
   on('#btnResetDemo',()=>showConfirm('Reset the demo?','Reloads the original sample data and discards your changes.','Reset',()=>S.resetDemo()));

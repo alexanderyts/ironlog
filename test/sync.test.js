@@ -22,6 +22,21 @@ test('import converts a backup recorded in another unit is handled by parseImpor
 });
 const s=(id,updatedAt,date)=>({id,updatedAt,date:date||updatedAt,exercises:[]});
 
+test('cleanSettings sanitizes the training profile and seen flags (P1)',()=>{
+  const s=IL.sync.cleanSettings({unit:'lb',profile:{gym:'planetfitness',goal:'size',avoid:['x','back-squat'],protect:['Shoulders','Nope'],days:9,sets:'ramp'},seen:{profileIntro:true,junk:1}});
+  assert.deepEqual(s.profile,{goal:'size',sets:'ramp',avoid:['back-squat'],protect:['Shoulders']},'bad enum/id/day dropped, valid kept');
+  assert.deepEqual(s.seen,{profileIntro:true},'only true flags with clean keys');
+  const s2=IL.sync.cleanSettings({unit:'lb',profile:{gym:'x',days:9},seen:{a:1}});
+  assert.ok(!('profile'in s2)&&!('seen'in s2),'nothing valid → fields omitted (absent = Balanced = today)');
+});
+
+test('profile and seen round-trip through export → import (P1)',()=>{
+  const st={settings:{unit:'lb',settingsUpdatedAt:5,profile:{goal:'strength',gym:'machine',protect:['Shoulders']},seen:{profileIntro:true}},sessions:[],routines:[],deleted:{}};
+  const p=parseImport(IL.sync.exportPayload(st,'x'));
+  assert.deepEqual(p.settings.profile,{goal:'strength',gym:'machine',protect:['Shoulders']});
+  assert.deepEqual(p.settings.seen,{profileIntro:true});
+});
+
 test('import sanitizer keeps set.at and session.endedAt when real, drops junk (T1)',()=>{
   const p=parseImport({app:'ironlog',format:2,sessions:[
     {id:'t1',date:1000,updatedAt:1000,endedAt:1000+40*60000,exercises:[

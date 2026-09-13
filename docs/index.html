@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-9MsYJYMBXDyHTkqE8/eiSVsDl9rdnxB9jhVLzm5D00Q=' 'sha256-WPBob/luB2k1aalTWXpi6zk3SrIbj8GlZV7AlFdG7oA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-iBOQCaU1Xn0KO+Ns3pLpviweWYBdZENJd8POmr1zsdY=' 'sha256-WPBob/luB2k1aalTWXpi6zk3SrIbj8GlZV7AlFdG7oA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Ironlog</title>
@@ -383,8 +383,8 @@ html.standalone .tabbar{bottom:auto;top:calc(var(--screen-h,100vh) - var(--tab-h
 </div>
 
 <script>
-/* Ironlog v0.37.0 · site build */
-var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.37.0",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
+/* Ironlog v0.38.0 · site build */
+var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.38.0",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
 
 /* ===== src/data/exercises.js ===== */
 (function(){'use strict';
@@ -1646,7 +1646,20 @@ if(typeof module!=='undefined')module.exports=IL.analysis;
 // Pure merge/backup logic shared by every cloud backend (Claude DB, Dropbox, file import).
 var IL=globalThis.IL||(globalThis.IL={});
 if(typeof require==='function'&&!IL.data)require('../data/exercises.js');
-const MODES=(IL.data&&IL.data.MODES)||{};   // to validate an imported exercise's modality
+const MODES=(IL.data&&IL.data.MODES)||{},EX=(IL.data&&IL.data.EX)||{},GROUPS=(IL.data&&IL.data.GROUPS)||[];   // to validate imported modality / profile ids
+// Training profile (v6 P2 reads it; P1 only stores it). Each field is optional; a valid non-'auto'
+// value is kept, anything else is dropped (so absent = auto = Balanced = today's behaviour).
+const PROFILE_ENUM={goal:['size','strength','general'],gym:['full','machine','home'],length:['short','standard','long'],sets:['straight','ramp'],push:['guide','quiet']};
+function cleanProfile(p){if(!p||typeof p!=='object')return undefined;const o={};
+  Object.keys(PROFILE_ENUM).forEach(k=>{if(PROFILE_ENUM[k].indexOf(p[k])>=0)o[k]=p[k];});
+  if([2,3,4,5,6].indexOf(+p.days)>=0)o.days=+p.days;
+  if(Array.isArray(p.avoid)){const a=p.avoid.filter(id=>EX[id]).slice(0,60);if(a.length)o.avoid=a;}
+  if(Array.isArray(p.protect)){const g=p.protect.filter(x=>GROUPS.indexOf(x)>=0).slice(0,GROUPS.length);if(g.length)o.protect=g;}
+  return Object.keys(o).length?o:undefined;}
+// "Seen this announcement once" flags (e.g. the profile intro), synced so a dismissal sticks everywhere.
+function cleanSeen(v){if(!v||typeof v!=='object')return undefined;const o={};
+  Object.keys(v).forEach(k=>{if(v[k]===true&&/^[A-Za-z0-9_]{1,40}$/.test(k))o[k]=true;});
+  return Object.keys(o).length?o:undefined;}
 
 const TOMB_KEEP=90*86400000;   // remember deletions for 90 days so no device resurrects them
 
@@ -1713,6 +1726,8 @@ function cleanSettings(o){if(!o||typeof o!=='object')return null;
   const r=o.rest&&typeof o.rest==='object'?o.rest:{};
   s.rest={auto:r.auto!==false,sound:r.sound!==false,notify:!!r.notify,
     compound:Math.max(0,Math.min(3600,sNum(r.compound)||120)),isolation:Math.max(0,Math.min(3600,sNum(r.isolation)||75))};
+  const prof=cleanProfile(o.profile);if(prof)s.profile=prof;
+  const seen=cleanSeen(o.seen);if(seen)s.seen=seen;
   return s;
 }
 const DANGER_KEY=/^(__proto__|constructor|prototype)$/;
@@ -2196,6 +2211,7 @@ function homeView(){
       <div class="eyebrow">${new Date().toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric'})}</div>
       <h2 style="font-size:27px;margin-top:5px">${greet}.</h2>
     </div>
+    ${profileIntroCard()}
     ${state.active?resumeCard():''}
     <div class="statgrid" style="grid-template-columns:1fr 1fr 1fr;margin:16px 0 18px;gap:9px">
       <div class="card stat" style="padding:14px 12px"><div class="k">This wk</div><div class="v mono">${wk.length}</div></div>
@@ -2211,6 +2227,14 @@ function homeView(){
   </div>`;
 }
 function emptyHome(){return `<div class="card" style="padding:26px 18px;text-align:center;margin-top:20px"><div class="dim">No workouts logged yet.<br>Tap <b style="color:var(--accent)">Start a workout</b> above to log your first session.</div></div>`;}
+// One-time card introducing the optional training profile (P1). Dismissed by either button (synced).
+function profileIntroCard(){
+  if(seenFlag('profileIntro'))return '';
+  return `<div class="card" id="profileIntro" style="margin:16px 0 0;padding:16px;border:1px solid color-mix(in srgb,var(--accent) 45%,transparent)">
+    <div style="font-weight:700;font-size:15px">New: a training profile</div>
+    <div class="dim" style="font-size:13px;line-height:1.5;margin-top:5px">Tell Ironlog your goal, the kind of gym you use, days per week and anything you're protecting, and it builds around that. Skip it and you get the balanced default — the same as today.</div>
+    <div style="display:flex;gap:9px;margin-top:13px"><button class="btn primary sm" data-action="profileGo">Take me there</button><button class="btn ghost sm" data-action="profileSkip">I'm good</button></div></div>`;
+}
 function resumeCard(){
   const s=state.active;const sets=setsOf(s);
   return `<button class="resume" id="btnResume" data-action="resume">
@@ -2235,7 +2259,7 @@ function startWorkoutView(){
     <div class="card settingrow" style="margin:18px 0 0;padding:14px 15px"><div><div style="font-weight:600">Deload / recovery session</div><div class="dim" style="font-size:12.5px">Sore or beat up? Build it ~60% lighter — full range, focus on the stretch. Won't count against your progress or PRs.</div></div><button class="sw ${draft.deload?'on':''}" id="deloadToggle" data-action="deloadToggle" aria-label="Deload session"></button></div>
     <div class="spacer"></div><div class="spacer"></div>
     <div id="buildBtns">${buildButtons()}</div>
-    <div style="height:10px"></div>
+    <div class="dim" data-action="profileOpen" style="text-align:center;font-size:12px;margin:10px 0 2px;cursor:pointer">Profile: ${profileSummary()} · <span style="color:var(--accent)">change</span></div>
     <button class="btn ghost block" id="btnBlank" data-action="blank">Start from scratch</button>
     ${routineList()}
     ${recentTemplates()}
@@ -2797,6 +2821,57 @@ function watchViewport(){
   addEventListener('touchstart',()=>vlog('touch'),{passive:true,once:true});
   addEventListener('load',()=>vlog('load'));
 }
+/* ---------------- training profile (P1: optional, engine starts using it in P2) ---------------- */
+function seenFlag(k){return !!(state.settings.seen&&state.settings.seen[k]);}
+function markSeen(k){state.settings.seen=Object.assign({},state.settings.seen,{[k]:true});S.saveSettingsCloud();}
+// A short label for the "Profile: …" lines; "Balanced" when nothing is set.
+function profileSummary(){const p=state.settings.profile||{};const parts=[];
+  const g={size:'Size',strength:'Strength',general:'General'},gy={full:'Full gym',machine:'Machine gym',home:'Home'};
+  if(p.goal)parts.push(g[p.goal]);if(p.gym)parts.push(gy[p.gym]);if(p.days)parts.push(p.days+'d/wk');
+  return parts.length?parts.join(' · '):'Balanced';}
+function setProfile(field,val){const p=Object.assign({},state.settings.profile);
+  if(!val||val==='auto')delete p[field];else p[field]=field==='days'?+val:val;
+  state.settings.profile=Object.keys(p).length?p:undefined;S.saveSettingsCloud();}
+function toggleProtect(gp){const p=Object.assign({},state.settings.profile),set=new Set(p.protect||[]);
+  set.has(gp)?set.delete(gp):set.add(gp);if(set.size)p.protect=[...set];else delete p.protect;
+  state.settings.profile=Object.keys(p).length?p:undefined;S.saveSettingsCloud();}
+function addAvoid(id){const p=Object.assign({},state.settings.profile),set=new Set(p.avoid||[]);set.add(id);p.avoid=[...set];
+  state.settings.profile=p;S.saveSettingsCloud();}
+function removeAvoid(id){const p=Object.assign({},state.settings.profile),a=(p.avoid||[]).filter(x=>x!==id);
+  if(a.length)p.avoid=a;else delete p.avoid;state.settings.profile=Object.keys(p).length?p:undefined;S.saveSettingsCloud();}
+function pchips(field,opts){const c=(state.settings.profile&&state.settings.profile[field])||'auto';
+  return `<div class="chips">${opts.map(([v,l])=>`<button class="chip ${(''+c)===v?'on':''}" data-pset="${field}" data-pv="${v}">${l}</button>`).join('')}</div>`;}
+function prow(label,inner){return `<div style="margin-bottom:18px"><div class="eyebrow" style="margin-bottom:8px">${label}</div>${inner}</div>`;}
+function profileBody(){const p=state.settings.profile||{},avoid=p.avoid||[],protect=new Set(p.protect||[]);
+  return `<div class="dim" style="font-size:13px;margin:-4px 2px 16px;line-height:1.5">All optional — anything left on <b>Balanced</b> works exactly like today. Changes save automatically; the workout builder starts using these in the next update.</div>
+    ${prow('Main goal',pchips('goal',[['auto','Balanced'],['size','Size'],['strength','Strength'],['general','General']]))}
+    ${prow('Your gym',pchips('gym',[['auto','Balanced'],['full','Full gym'],['machine','Machine-focused'],['home','Home / minimal']]))}
+    ${prow('Days per week',pchips('days',[['auto','Any'],['2','2'],['3','3'],['4','4'],['5','5'],['6','6']]))}
+    ${prow('Session length',pchips('length',[['auto','Balanced'],['short','Short'],['standard','Standard'],['long','Long']]))}
+    ${prow('Set style',pchips('sets',[['auto','Balanced'],['straight','Straight'],['ramp','Ramping']]))}
+    ${prow('Coaching',pchips('push',[['auto','Balanced'],['guide','Guide me'],['quiet','Just record']]))}
+    ${prow('Protect — keep these light',`<div class="chips">${GROUPS.map(g=>`<button class="chip ${protect.has(g)?'on':''}" data-pprotect="${g}">${g}</button>`).join('')}</div>`)}
+    ${prow('Exercises to avoid',`${avoid.length?`<div class="chips" style="margin-bottom:9px">${avoid.map(id=>`<button class="chip on" data-pdelavoid="${id}">${esc(EX[id]?EX[id].name:id)} ✕</button>`).join('')}</div>`:''}<button class="btn ghost sm" id="pAvoid">＋ Add exercise to avoid</button>`)}
+    <button class="btn ghost block" id="pReset" style="margin-top:6px">Reset to Balanced</button>`;}
+function openProfile(){openSheet('Training profile',profileBody());bindProfile();}
+function bindProfile(){const b=$('#sheetBody');const rerender=()=>{b.innerHTML=profileBody();bindProfile();};
+  b.querySelectorAll('[data-pset]').forEach(el=>el.addEventListener('click',()=>{setProfile(el.dataset.pset,el.dataset.pv);rerender();}));
+  b.querySelectorAll('[data-pprotect]').forEach(el=>el.addEventListener('click',()=>{toggleProtect(el.dataset.pprotect);rerender();}));
+  b.querySelectorAll('[data-pdelavoid]').forEach(el=>el.addEventListener('click',()=>{removeAvoid(el.dataset.pdelavoid);rerender();}));
+  const av=$('#pAvoid');if(av)av.addEventListener('click',openAvoidPicker);
+  const rst=$('#pReset');if(rst)rst.addEventListener('click',()=>{state.settings.profile=undefined;S.saveSettingsCloud();rerender();});}
+function openAvoidPicker(){
+  openSheet('Avoid which exercises?',`<div class="dim" style="font-size:12.5px;margin:-4px 2px 12px">Tap to toggle — the builder won't propose these.</div>
+    <div class="search" style="margin-bottom:12px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg><input id="avSearch" placeholder="Search exercises…"></div>
+    <div class="card list" id="avResults"></div>
+    <button class="btn primary block" id="avDone" style="margin-top:14px">Done</button>`);
+  const avoidSet=()=>new Set((state.settings.profile&&state.settings.profile.avoid)||[]);
+  const row=e=>{const on=avoidSet().has(e.id);return `<div class="ex-row" data-avtoggle="${e.id}"><div class="ex-ic">${exIcon(e.group)}</div><div style="flex:1;min-width:0"><div class="ex-name">${esc(e.name)}</div><div class="ex-sub">${e.group} · ${e.equip}</div></div><div class="ex-add" style="${on?'background:var(--warn);color:#fff':''}">${on?'✓':'＋'}</div></div>`;};
+  const inp=$('#avSearch'),refresh=()=>{const r=SR.searchEx(inp.value);$('#avResults').innerHTML=r.slice(0,60).map(row).join('')||'<div style="padding:20px;text-align:center" class="dim">No match.</div>';};
+  refresh();inp.addEventListener('input',refresh);
+  $('#avResults').addEventListener('click',ev=>{const b=ev.target.closest('[data-avtoggle]');if(!b)return;const id=b.dataset.avtoggle;avoidSet().has(id)?removeAvoid(id):addAvoid(id);refresh();});
+  $('#avDone').addEventListener('click',openProfile);
+}
 function openSettings(){
   const R=state.settings.rest,st=state.settings;
   openSheet('Settings',`
@@ -2806,6 +2881,7 @@ function openSettings(){
       <div class="stepper"><button data-bw="-1">−</button><button class="val mono" id="bwVal" title="Tap to type">${bw()?bw()+' '+U():'Set'}</button><button data-bw="1">＋</button></div></div>
     <div class="settingrow"><div><div style="font-weight:600">Theme</div><div class="dim" style="font-size:13px">Appearance</div></div>
       <div class="seg" id="segTheme"><button data-t="system" class="${st.theme==='system'?'on':''}">Auto</button><button data-t="light" class="${st.theme==='light'?'on':''}">Light</button><button data-t="dark" class="${st.theme==='dark'?'on':''}">Dark</button></div></div>
+    <button class="settingrow" id="btnProfile" style="width:100%;text-align:left;background:none;border:none;border-bottom:1px solid var(--line)"><div><div style="font-weight:600">Training profile</div><div class="dim" style="font-size:13px">How the builder tailors your workouts</div></div><span class="mono dim" style="font-size:13px">${profileSummary()} ›</span></button>
     <div style="height:18px"></div>
     <div class="eyebrow" style="margin-bottom:10px">Cloud backup</div>
     ${cloudSection()}
@@ -2834,6 +2910,7 @@ function openSettings(){
   $('#sheetBody').querySelectorAll('[data-bw]').forEach(b=>b.addEventListener('click',()=>{state.settings.bodyweight=Math.max(0,bw()+(+b.dataset.bw)*bwStep);S.saveSettingsCloud();$('#bwVal').textContent=bw()?bw()+' '+U():'Set';}));
   $('#bwVal').addEventListener('click',()=>openNumberSheet('Your bodyweight ('+U()+')',bw()||'',v=>{state.settings.bodyweight=Math.max(0,v);S.saveSettingsCloud();openSettings();}));
   const on=(sel,fn)=>{const el=$(sel);if(el)el.addEventListener('click',fn);};
+  on('#btnProfile',openProfile);
   on('#btnExport',exportData);
   const fi=$('#fileImport');if(fi)fi.addEventListener('change',importData);
   on('#btnResetDemo',()=>showConfirm('Reset the demo?','Reloads the original sample data and discards your changes.','Reset',()=>S.resetDemo()));
@@ -3054,7 +3131,10 @@ const ACTIONS={
   blank:()=>startSession({ids:[],msg:draft.deload?'Deload — lighter loads, focus on the stretch':null,deload:draft.deload,source:'blank'}),
   deloadToggle:el=>{draft.deload=!draft.deload;el.classList.toggle('on',draft.deload);refreshBuildBtns();},
   staleFinish:()=>finishWorkout(),
-  staleDiscard:()=>discardActive()
+  staleDiscard:()=>discardActive(),
+  profileGo:()=>{markSeen('profileIntro');openProfile();},
+  profileSkip:()=>{markSeen('profileIntro');render();},
+  profileOpen:()=>openProfile()
 };
 function bind(){
   const v=$('#view');

@@ -1,7 +1,20 @@
 // Pure merge/backup logic shared by every cloud backend (Claude DB, Dropbox, file import).
 var IL=globalThis.IL||(globalThis.IL={});
 if(typeof require==='function'&&!IL.data)require('../data/exercises.js');
-const MODES=(IL.data&&IL.data.MODES)||{};   // to validate an imported exercise's modality
+const MODES=(IL.data&&IL.data.MODES)||{},EX=(IL.data&&IL.data.EX)||{},GROUPS=(IL.data&&IL.data.GROUPS)||[];   // to validate imported modality / profile ids
+// Training profile (v6 P2 reads it; P1 only stores it). Each field is optional; a valid non-'auto'
+// value is kept, anything else is dropped (so absent = auto = Balanced = today's behaviour).
+const PROFILE_ENUM={goal:['size','strength','general'],gym:['full','machine','home'],length:['short','standard','long'],sets:['straight','ramp'],push:['guide','quiet']};
+function cleanProfile(p){if(!p||typeof p!=='object')return undefined;const o={};
+  Object.keys(PROFILE_ENUM).forEach(k=>{if(PROFILE_ENUM[k].indexOf(p[k])>=0)o[k]=p[k];});
+  if([2,3,4,5,6].indexOf(+p.days)>=0)o.days=+p.days;
+  if(Array.isArray(p.avoid)){const a=p.avoid.filter(id=>EX[id]).slice(0,60);if(a.length)o.avoid=a;}
+  if(Array.isArray(p.protect)){const g=p.protect.filter(x=>GROUPS.indexOf(x)>=0).slice(0,GROUPS.length);if(g.length)o.protect=g;}
+  return Object.keys(o).length?o:undefined;}
+// "Seen this announcement once" flags (e.g. the profile intro), synced so a dismissal sticks everywhere.
+function cleanSeen(v){if(!v||typeof v!=='object')return undefined;const o={};
+  Object.keys(v).forEach(k=>{if(v[k]===true&&/^[A-Za-z0-9_]{1,40}$/.test(k))o[k]=true;});
+  return Object.keys(o).length?o:undefined;}
 
 const TOMB_KEEP=90*86400000;   // remember deletions for 90 days so no device resurrects them
 
@@ -68,6 +81,8 @@ function cleanSettings(o){if(!o||typeof o!=='object')return null;
   const r=o.rest&&typeof o.rest==='object'?o.rest:{};
   s.rest={auto:r.auto!==false,sound:r.sound!==false,notify:!!r.notify,
     compound:Math.max(0,Math.min(3600,sNum(r.compound)||120)),isolation:Math.max(0,Math.min(3600,sNum(r.isolation)||75))};
+  const prof=cleanProfile(o.profile);if(prof)s.profile=prof;
+  const seen=cleanSeen(o.seen);if(seen)s.seen=seen;
   return s;
 }
 const DANGER_KEY=/^(__proto__|constructor|prototype)$/;

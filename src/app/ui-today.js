@@ -20,6 +20,7 @@ function homeView(){
       <div class="eyebrow">${new Date().toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric'})}</div>
       <h2 style="font-size:27px;margin-top:5px">${greet}.</h2>
     </div>
+    ${profileIntroCard()}
     ${state.active?resumeCard():''}
     <div class="statgrid" style="grid-template-columns:1fr 1fr 1fr;margin:16px 0 18px;gap:9px">
       <div class="card stat" style="padding:14px 12px"><div class="k">This wk</div><div class="v mono">${wk.length}</div></div>
@@ -35,6 +36,14 @@ function homeView(){
   </div>`;
 }
 function emptyHome(){return `<div class="card" style="padding:26px 18px;text-align:center;margin-top:20px"><div class="dim">No workouts logged yet.<br>Tap <b style="color:var(--accent)">Start a workout</b> above to log your first session.</div></div>`;}
+// One-time card introducing the optional training profile (P1). Dismissed by either button (synced).
+function profileIntroCard(){
+  if(seenFlag('profileIntro'))return '';
+  return `<div class="card" id="profileIntro" style="margin:16px 0 0;padding:16px;border:1px solid color-mix(in srgb,var(--accent) 45%,transparent)">
+    <div style="font-weight:700;font-size:15px">New: a training profile</div>
+    <div class="dim" style="font-size:13px;line-height:1.5;margin-top:5px">Tell Ironlog your goal, the kind of gym you use, days per week and anything you're protecting, and it builds around that. Skip it and you get the balanced default — the same as today.</div>
+    <div style="display:flex;gap:9px;margin-top:13px"><button class="btn primary sm" data-action="profileGo">Take me there</button><button class="btn ghost sm" data-action="profileSkip">I'm good</button></div></div>`;
+}
 function resumeCard(){
   const s=state.active;const sets=setsOf(s);
   return `<button class="resume" id="btnResume" data-action="resume">
@@ -59,7 +68,7 @@ function startWorkoutView(){
     <div class="card settingrow" style="margin:18px 0 0;padding:14px 15px"><div><div style="font-weight:600">Deload / recovery session</div><div class="dim" style="font-size:12.5px">Sore or beat up? Build it ~60% lighter — full range, focus on the stretch. Won't count against your progress or PRs.</div></div><button class="sw ${draft.deload?'on':''}" id="deloadToggle" data-action="deloadToggle" aria-label="Deload session"></button></div>
     <div class="spacer"></div><div class="spacer"></div>
     <div id="buildBtns">${buildButtons()}</div>
-    <div style="height:10px"></div>
+    <div class="dim" data-action="profileOpen" style="text-align:center;font-size:12px;margin:10px 0 2px;cursor:pointer">Profile: ${profileSummary()} · <span style="color:var(--accent)">change</span></div>
     <button class="btn ghost block" id="btnBlank" data-action="blank">Start from scratch</button>
     ${routineList()}
     ${recentTemplates()}

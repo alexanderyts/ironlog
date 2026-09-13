@@ -166,6 +166,58 @@ test('UI: T3 — the Progress Time card summarises duration, rest and time-by-mu
   }finally{h.teardown();}
 });
 
+test('UI: P1 — the profile intro appears once; "I\'m good" dismisses it and changes nothing',()=>{
+  const h=launch();
+  try{
+    assert.ok(h.has('#profileIntro'),'intro card on first launch');
+    assert.equal(h.state.settings.profile,undefined,'no profile yet');
+    h.click('[data-action="profileSkip"]');
+    assert.ok(!h.has('#profileIntro'),'card gone after I\'m good');
+    assert.equal(h.state.settings.seen.profileIntro,true,'seen flag set');
+    assert.equal(h.state.settings.profile,undefined,'profile still absent');
+    h.IL.ui.render();assert.ok(!h.has('#profileIntro'),'stays gone');
+  }finally{h.teardown();}
+});
+
+test('UI: P1 — "Take me there" opens the profile; a choice saves it and bumps settingsUpdatedAt',()=>{
+  const h=launch();
+  try{
+    const before=h.state.settings.settingsUpdatedAt||0;
+    h.click('[data-action="profileGo"]');
+    assert.equal(h.state.settings.seen.profileIntro,true,'seen set on open');
+    assert.ok(h.$('[data-pset="gym"]'),'profile sheet open');
+    h.click(h.$$('[data-pset="gym"]').find(b=>b.dataset.pv==='machine'));
+    assert.equal(h.state.settings.profile.gym,'machine','choice saved');
+    assert.ok((h.state.settings.settingsUpdatedAt||0)>=before,'settingsUpdatedAt advanced');
+    h.click(h.$$('[data-pset="gym"]').find(b=>b.dataset.pv==='auto'));
+    assert.ok(!h.state.settings.profile||!h.state.settings.profile.gym,'Balanced clears the field');
+  }finally{h.teardown();}
+});
+
+test('UI: P1 — the New-workout screen shows the profile summary (Balanced → the choice)',()=>{
+  const h=launch();
+  try{
+    h.click('[data-action="startFlow"]');
+    assert.ok(h.text('#view').includes('Profile: Balanced'),'Balanced by default');
+    h.state.settings.profile={gym:'machine'};
+    h.click('[data-action="backHome"]');h.click('[data-action="startFlow"]');
+    assert.ok(h.text('#view').includes('Machine gym'),'reflects the choice');
+  }finally{h.teardown();}
+});
+
+test('UI: P1 CONTROL — a saved profile does NOT change the build yet (engine untouched until P2)',()=>{
+  const h=launch();
+  try{
+    pushHistory(h.state,h.S);h.IL.ui.render();
+    const build=()=>{h.click('[data-action="startFlow"]');['Chest','Shoulders','Triceps'].forEach(g=>h.click(h.$$('[data-g]').find(b=>b.dataset.g===g)));
+      h.click('[data-action="build"]');const ids=h.state.active.exercises.map(e=>e.id);h.state.active=null;h.S.persistActive();h.click('[data-action="backHome"]');return ids;};
+    const a=build();
+    h.state.settings.profile={goal:'strength',gym:'machine',protect:['Chest'],avoid:['barbell-bench-press']};h.IL.ui.render();
+    const b=build();
+    assert.deepEqual(b,a,'continued plan identical — profile stored but not read by the builder');
+  }finally{h.teardown();}
+});
+
 // ── Phase U1: controls & input usability ─────────────────────────────────────────────────────────
 const wait=ms=>new Promise(r=>setTimeout(r,ms));
 
