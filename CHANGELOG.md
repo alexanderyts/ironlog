@@ -2,6 +2,13 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.33.0 — 2026-09-13 · Foundation for what's next (Roadmap v6, Phase 0)
+No user-visible change — this is groundwork so the coming features (workout timing, an optional training profile) are built safely.
+- **The app finally has automated UI tests.** Until now, screen behaviour was only ever checked by hand. A test harness (jsdom) now boots the real app and runs the five flows that matter — finishing saves only your checked sets, the "unchecked sets" prompt, comma decimals, the deload build, presets — so they can't silently break. (120 tests, up from 112.)
+- **Your real backups are now a safety net.** A test runs your exported history through the engine and flags if a change would alter what the builder or coach does for your actual data, before it reaches your phone. (Kept private on the dev machine.)
+- **The biggest file (the UI, ~1,000 lines) was split into four** for navigability, with zero change to how it runs (verified byte-for-byte). Weak tests were tightened to check the *right* answer, not just that code ran.
+- Not verified: nothing new to verify — this phase changes no behaviour; all screens were re-checked in the browser.
+
 ## v0.32.0 — 2026-09-13 · Notes, Recovery view, commercial-gym machines
 - **Notes on exercises.** Tap "✎ Note" under any exercise while logging (or editing a past session) to leave a note — "left shoulder pinchy, stayed light", a form cue, anything. It's saved with that session and shown the next time you do the lift, right above the sets, so a lower-than-expected number has its reason next to it. The exercise info sheet lists your recent notes. Synced and backed up with the session. (500 characters max.)
 - **Deloads are yours — the app no longer assumes why.** Reverses v0.31.0's "deload as baseline": a deload never feeds your prescriptions, PRs, or the builder, whatever loads you chose (form work, injury, a light day). If you've only ever done a lift on a deload, the editor now says so ("your last deload here was 70×9 — set your baseline") and leaves the prefill blank.

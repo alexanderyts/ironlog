@@ -1,0 +1,92 @@
+// UI, part 1 of 4 — CORE: helpers, module state, toast/confirm/sheet infra, theme, cloud badge,
+// the router (render/setTab). The four ui-*.js files (core → today → views → bind) are concatenated
+// by build.js into ONE IIFE and share one lexical scope, exactly as the original single ui.js did;
+// the split is for navigability only. Everything that touches the DOM lives across these four.
+var IL=globalThis.IL||(globalThis.IL={});
+const CFG=IL.config||{},D=IL.data,P=IL.prog,B=IL.builder,A=IL.analysis,S=IL.store,SR=IL.search,DBX=IL.dropbox;
+const {EX,EXERCISES,GROUPS,PRESETS,exIcon,C,I,MODES,MODE_ORDER,EQUIP_MODE}=D;
+const modeOf=P.modeOf;
+const state=S.state;
+const APP_VERSION=CFG.VERSION||'0';
+
+/* ---------------- helpers ---------------- */
+const $=s=>document.querySelector(s);
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+const U=()=>state.settings.unit;
+const inc=()=>P.unitIncrement(U());
+const bw=()=>+state.settings.bodyweight||0;
+const {DAY,startOfDay,fmtVol}=P;
+function fmtDate(ts){return new Date(ts).toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'});}
+function relDay(ts){const t=startOfDay(Date.now()),d=startOfDay(ts);const diff=Math.round((t-d)/DAY);
+  if(diff===0)return'Today';if(diff===1)return'Yesterday';if(diff<7)return diff+' days ago';return fmtDate(ts);}
+const volOf=s=>P.sessionVolume(s,bw());
+const setsOf=s=>P.sessionSets(s);
+// A "Volume" stat label, tappable for a one-line explainer (the number itself, e.g. "12,480 lb", has
+// no context otherwise — see ROADMAP-v2 #1).
+function volLabel(label){return `<span data-vol-info style="cursor:pointer">${label||'Volume'} <span class="dim" style="font-weight:400">ⓘ</span></span>`;}
+const completedSessions=()=>state.sessions.filter(s=>s.completed!==false&&s.exercises.length);
+const ICON_BACK='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>';
+function demoURL(id){const e=EX[id];if(!e)return 'https://www.youtube.com/';return 'https://www.youtube.com/results?search_query='+encodeURIComponent('how to '+e.name+' proper form technique');}
+
+let toastT=null;
+function toast(msg,action){
+  const t=$('#toast'),b=$('#toastAct');$('#toastMsg').textContent=msg;
+  if(action){b.hidden=false;b.textContent=action.label;b.onclick=()=>{hideToast();action.fn();};t.classList.add('act');}
+  else{b.hidden=true;b.onclick=null;t.classList.remove('act');}
+  t.classList.add('on');clearTimeout(toastT);toastT=setTimeout(hideToast,action?6000:1900);
+}
+function hideToast(){$('#toast').classList.remove('on','act');}
+let _confirmCb=null;
+function showConfirm(title,msg,okLabel,cb,kind){
+  $('#cdTitle').textContent=title;$('#cdMsg').textContent=msg;
+  const ok=$('#cdOk');ok.textContent=okLabel;ok.className='btn '+(kind==='primary'?'primary':'danger');
+  _confirmCb=cb;$('#cdialog').classList.add('on');$('#cscrim').classList.add('on');
+}
+function closeConfirm(){$('#cdialog').classList.remove('on');$('#cscrim').classList.remove('on');_confirmCb=null;}
+function openSheet(title,body){$('#sheetTitle').textContent=title;$('#sheetBody').innerHTML=body;$('#sheet').classList.add('on');$('#scrim').classList.add('on');}
+function closeSheet(){$('#sheet').classList.remove('on');$('#scrim').classList.remove('on');}
+function applyTheme(){const t=state.settings.theme;if(t==='system')document.documentElement.removeAttribute('data-theme');else document.documentElement.setAttribute('data-theme',t);}
+function updateCloud(){
+  const el=$('#cloudStatus'),t=$('#cloudText');if(!el)return;
+  if(CFG.DEMO){el.className='cloud';t.textContent='Demo · sample data';return;}
+  if(state.cloudError&&state.cloudName!=='none'){el.className='cloud err';t.textContent='Sync problem';return;}
+  if(state.cloudName==='artifact'||state.cloudName==='dropbox'){
+    const pending=state.dirty.size||state.syncing;
+    el.className='cloud '+(pending?'local':'synced');
+    t.textContent=pending?'Syncing…':(state.cloudName==='dropbox'?'Synced':'Backed up');   // distinct wording — identical text here was mistaken for viewing the wrong build during Phase 2 debugging
+  }else{el.className='cloud local';t.textContent='On this phone';}
+}
+
+/* ---------------- router ---------------- */
+let currentTab='today';
+let todayScreen='home';          // 'home' | 'start' | 'active' | 'edit'
+let editSession=null,editDirty=false;
+// The New-workout screen's transient picks. Reset in exactly one place: resetDraft(), called by
+// startSession() when a workout begins — so nothing leaks into the next visit.
+let draft={groups:new Set(),deload:false};
+function resetDraft(){draft.groups=new Set();draft.deload=false;}
+let calMonth=new Date().getFullYear()*12+new Date().getMonth(),selDay=null;
+let libQuery='',libGroup='All';
+function setTab(t){vlog('tab '+t);currentTab=t;document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===t));render();window.scrollTo(0,0);}
+function render(){
+  const v=$('#view');if(!v)return;
+  // Error boundary: one malformed record must never white-screen the whole app. On failure, show a
+  // recoverable message instead of a blank page (the data is still safe in storage).
+  try{
+    if(currentTab==='today')v.innerHTML=viewToday();
+    else if(currentTab==='history')v.innerHTML=viewHistory();
+    else if(currentTab==='library')v.innerHTML=viewLibrary();
+    else if(currentTab==='progress')v.innerHTML=viewProgress();
+    bind();updateCloud();
+  }catch(err){
+    try{console.error('render failed',err);}catch(e){}
+    v.innerHTML='<div class="wrap" style="padding:40px 16px;text-align:center"><h2 style="font-size:20px">Something went wrong</h2>'
+      +'<p class="muted" style="margin:10px 0 18px">Your data is safe. Try reloading — if a tab keeps failing, tell us what you were doing.</p>'
+      +'<button class="btn primary" id="ilReload" style="display:inline-block">Reload</button></div>';
+    const rb=v.querySelector('#ilReload');if(rb)rb.onclick=()=>location.reload();   // JS handler (no inline on* — CSP-safe)
+  }
+}
+// current session being edited on the Today tab (the live workout or a past one)
+const cur=()=>todayScreen==='edit'?editSession:state.active;
+function persistCur(){if(todayScreen==='edit')editDirty=true;else S.persistActive();}
+

@@ -8,14 +8,22 @@ const cfg=fs.existsSync(path.join(root,'config.json'))?JSON.parse(fs.readFileSyn
 const read=p=>fs.readFileSync(path.join(root,p),'utf8');
 const write=(p,d)=>{const f=path.join(root,p);fs.mkdirSync(path.dirname(f),{recursive:true});fs.writeFileSync(f,d);console.log('  wrote',p,typeof d==='string'?(d.length/1024).toFixed(1)+' KB':d.length+' bytes');};
 
-const MODULES=['src/data/exercises.js','src/engine/progression.js','src/engine/search.js','src/engine/builder.js','src/engine/analysis.js','src/engine/sync.js','src/app/dropbox.js','src/app/store.js','src/app/ui.js'];
+// A module entry is either a file (its own IIFE, private scope, exports on IL) or an ARRAY of files
+// concatenated into ONE shared IIFE. The ui-* files are one such group: they were split from a single
+// 1,000-line ui.js purely for navigability and share one lexical scope exactly as before — no
+// functions hung on a namespace, no behaviour change.
+const UI=['src/app/ui-core.js','src/app/ui-today.js','src/app/ui-views.js','src/app/ui-bind.js'];
+const MODULES=['src/data/exercises.js','src/engine/progression.js','src/engine/search.js','src/engine/builder.js','src/engine/analysis.js','src/engine/sync.js','src/app/dropbox.js','src/app/store.js',UI];
 const FONTS='<link rel="preconnect" href="https://fonts.googleapis.com">\n<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>\n<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">';
 
 function bundle(target,demo){
   const head=`/* Ironlog v${pkg.version} · ${target}${demo?' demo':''} build */\nvar IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:${JSON.stringify(target)},DEMO:${!!demo},VERSION:${JSON.stringify(pkg.version)},DROPBOX_APP_KEY:${JSON.stringify(cfg.DROPBOX_APP_KEY||'')}};\n`;
   const mods=demo?[...MODULES.slice(0,7),'src/app/seed.js',...MODULES.slice(7)]:MODULES;   // seed data only ships in the demo
-  // each module is wrapped so its top-level consts stay private; exports go on IL
-  return head+mods.map(m=>`\n/* ===== ${m} ===== */\n(function(){'use strict';\n${read(m)}\n})();\n`).join('');
+  // each entry is wrapped in one IIFE (private scope, exports on IL); an array entry concatenates its
+  // files into that single IIFE so they share scope
+  return head+mods.map(m=>{const files=Array.isArray(m)?m:[m];
+    const src=files.map(f=>`/* ----- ${f} ----- */\n${read(f)}`).join('\n');
+    return `\n/* ===== ${files.join(' + ')} ===== */\n(function(){'use strict';\n${src}\n})();\n`;}).join('');
 }
 const css=read('src/styles.css'),body=read('src/template.html');
 

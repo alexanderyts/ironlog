@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-+lGuOeVCeAW6pGe0JKrUvvcD4px7x0CB2fMYRWxv00k=' 'sha256-WPBob/luB2k1aalTWXpi6zk3SrIbj8GlZV7AlFdG7oA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-QNCNhvP4RQVtJrxX/U5QwO/ytMQKL69xww70WQIZB/U=' 'sha256-WPBob/luB2k1aalTWXpi6zk3SrIbj8GlZV7AlFdG7oA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Ironlog</title>
@@ -366,11 +366,12 @@ html.standalone .tabbar{bottom:auto;top:calc(var(--screen-h,100vh) - var(--tab-h
 </div>
 
 <script>
-/* Ironlog v0.32.0 · site build */
-var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.32.0",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
+/* Ironlog v0.33.0 · site build */
+var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.33.0",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
 
 /* ===== src/data/exercises.js ===== */
 (function(){'use strict';
+/* ----- src/data/exercises.js ----- */
 // Exercise library + the metadata that powers the smart builder and analysis.
 // Loaded first; every other module reads from IL.data.
 var IL=globalThis.IL||(globalThis.IL={});
@@ -635,6 +636,7 @@ IL.data={C,I,EXERCISES,EX,GROUPS,PRESETS,META,REGIONS,IDEAL_PATS,PAT_RANK,EQUIP_
 
 /* ===== src/engine/progression.js ===== */
 (function(){'use strict';
+/* ----- src/engine/progression.js ----- */
 // Pure helpers for sets, volume, personal history and progressive overload.
 // No DOM, no app state: everything takes the sessions array it should look at.
 var IL=globalThis.IL||(globalThis.IL={});
@@ -886,6 +888,7 @@ if(typeof module!=='undefined')module.exports=IL.prog;
 
 /* ===== src/engine/search.js ===== */
 (function(){'use strict';
+/* ----- src/engine/search.js ----- */
 // Fuzzy "type a description" exercise search.
 var IL=globalThis.IL||(globalThis.IL={});
 if(typeof require==='function'&&!IL.data)require('../data/exercises.js');
@@ -914,6 +917,7 @@ if(typeof module!=='undefined')module.exports=IL.search;
 
 /* ===== src/engine/builder.js ===== */
 (function(){'use strict';
+/* ----- src/engine/builder.js ----- */
 // The intelligent workout builder: picks complementary exercises per muscle, orders the
 // session for maximum performance, and suggests what's missing. Pure: takes history in.
 var IL=globalThis.IL||(globalThis.IL={});
@@ -1274,6 +1278,7 @@ if(typeof module!=='undefined')module.exports=IL.builder;
 
 /* ===== src/engine/analysis.js ===== */
 (function(){'use strict';
+/* ----- src/engine/analysis.js ----- */
 // Effectiveness analysis: balance, coverage gaps, weekly volume adequacy, progression, PRs.
 var IL=globalThis.IL||(globalThis.IL={});
 if(typeof require==='function'&&!IL.data)require('../data/exercises.js');
@@ -1564,6 +1569,7 @@ if(typeof module!=='undefined')module.exports=IL.analysis;
 
 /* ===== src/engine/sync.js ===== */
 (function(){'use strict';
+/* ----- src/engine/sync.js ----- */
 // Pure merge/backup logic shared by every cloud backend (Claude DB, Dropbox, file import).
 var IL=globalThis.IL||(globalThis.IL={});
 if(typeof require==='function'&&!IL.data)require('../data/exercises.js');
@@ -1671,6 +1677,7 @@ if(typeof module!=='undefined')module.exports=IL.sync;
 
 /* ===== src/app/dropbox.js ===== */
 (function(){'use strict';
+/* ----- src/app/dropbox.js ----- */
 // Dropbox cloud save for the standalone (GitHub Pages) build. OAuth PKCE runs entirely in the
 // browser — no server, no secret. The app writes one JSON file to its own Dropbox app folder.
 var IL=globalThis.IL||(globalThis.IL={});
@@ -1748,6 +1755,7 @@ IL.dropbox={isConfigured,isConnected,connect,disconnect,handleRedirect,getMetada
 
 /* ===== src/app/store.js ===== */
 (function(){'use strict';
+/* ----- src/app/store.js ----- */
 // App state: local-first persistence (localStorage) plus a pluggable cloud backend.
 //   artifact  → Claude's built-in database (when the app runs inside a claude.ai artifact)
 //   dropbox   → one JSON file in the user's Dropbox app folder (standalone / GitHub Pages build)
@@ -1988,9 +1996,13 @@ IL.store={state,LS,uid,saveSessions,saveActive,saveSettings,saveRoutines,saveDir
 
 })();
 
-/* ===== src/app/ui.js ===== */
+/* ===== src/app/ui-core.js + src/app/ui-today.js + src/app/ui-views.js + src/app/ui-bind.js ===== */
 (function(){'use strict';
-// Views, interactions, rest timer and boot. Everything that touches the DOM lives here.
+/* ----- src/app/ui-core.js ----- */
+// UI, part 1 of 4 — CORE: helpers, module state, toast/confirm/sheet infra, theme, cloud badge,
+// the router (render/setTab). The four ui-*.js files (core → today → views → bind) are concatenated
+// by build.js into ONE IIFE and share one lexical scope, exactly as the original single ui.js did;
+// the split is for navigability only. Everything that touches the DOM lives across these four.
 var IL=globalThis.IL||(globalThis.IL={});
 const CFG=IL.config||{},D=IL.data,P=IL.prog,B=IL.builder,A=IL.analysis,S=IL.store,SR=IL.search,DBX=IL.dropbox;
 const {EX,EXERCISES,GROUPS,PRESETS,exIcon,C,I,MODES,MODE_ORDER,EQUIP_MODE}=D;
@@ -2079,6 +2091,10 @@ function render(){
 const cur=()=>todayScreen==='edit'?editSession:state.active;
 function persistCur(){if(todayScreen==='edit')editDirty=true;else S.persistActive();}
 
+
+/* ----- src/app/ui-today.js ----- */
+// UI, part 2 of 4 — TODAY: home, the New-workout screen, the live/edit session editor and set rows.
+// (Shares scope with ui-core/ui-views/ui-bind — see ui-core.js header.)
 /* ---------------- TODAY ---------------- */
 function viewToday(){
   if(todayScreen==='edit'&&editSession)return editorView(editSession,'edit');
@@ -2350,6 +2366,10 @@ function setRow(st,ei,si){
   </div>`;
 }
 
+
+/* ----- src/app/ui-views.js ----- */
+// UI, part 3 of 4 — VIEWS & SHEETS: History, Library, Progress (coach/recovery cards), the exercise
+// detail/notes/add sheets, Settings, and the iOS viewport code. (Shares scope — see ui-core.js.)
 /* ---------------- HISTORY ---------------- */
 function viewHistory(){
   const done=completedSessions();
@@ -2763,6 +2783,10 @@ function openSessionDetail(sid){
     toast('Session deleted',{label:'Undo',fn:()=>{S.restoreSession(copy);render();toast('Restored');}});}));
 }
 
+
+/* ----- src/app/ui-bind.js ----- */
+// UI, part 4 of 4 — ACTIONS & WIRING: finish/discard, the delegated event table + bindings, the rest
+// timer, and boot(). This file runs last, so boot() sees every function above. (Shares scope — see ui-core.js.)
 /* ---------------- actions ---------------- */
 function addExerciseToCur(id){
   // Lazy-inits an active session only when there isn't one — so it never overwrites a workout in
