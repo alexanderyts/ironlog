@@ -2,6 +2,13 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.39.1 — 2026-09-13 · Profile stability pass (two fixes from a cold review of P2)
+A deliberate re-read of the P2 change before moving on. Two things were wrong; both fixed, both now have a hand-computed test.
+- **"Just record" now really just records.** The coach line said "Recorded — last time was 185×8" but the set rows were still prefilled with the heavier 190×5 — the rows and the words disagreed. The rows now mirror last time too. A deload is untouched (still lighter on purpose).
+- **Ramping on a heavy-opener pattern.** If your last session was a heavy first set then lighter back-off sets (say 200×5, 180×8, 180×8), Ramping put the back-off *reps* on the top weight (200×8). It now carries the reps from the set that actually held the top weight (160×5 → 180×5 → 200×5).
+- Also checked and found sound: every gym filter leaves at least one exercise per muscle (Home is thin for Back/Hamstrings/Glutes but never empty); imported profiles are enum-checked and capped; an avoided lift's replacement correctly becomes the plan's anchor; the full suite passed 152/152 on three consecutive runs, so the earlier timing failure was load, not a defect.
+- Not verified on-device: nothing behavioural — both fixes were confirmed at runtime against expected values and end-to-end through the app's session-start path.
+
 ## v0.39.0 — 2026-09-13 · The builder listens to your profile (Roadmap v6, Phase P2)
 **Still nothing changes unless you set a profile.** Balanced remains byte-for-byte today's app; this update just makes the workout builder act on the profile you saved in P1.
 - **Avoid** — exercises you list are never proposed. If a plan you're already running contains one, it's swapped for another lift for the same muscle (with a reason: "you asked to avoid it"), and this holds even on a deload.

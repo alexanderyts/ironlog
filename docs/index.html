@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-/xBF/0qvSpXQ8BaXZ7W21uM17Aom48H/riOnrst7rgs=' 'sha256-WPBob/luB2k1aalTWXpi6zk3SrIbj8GlZV7AlFdG7oA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-B37z9UgM+Lznt7To+k4E6q/vlt5ZAAtUom48a0SNpQY=' 'sha256-WPBob/luB2k1aalTWXpi6zk3SrIbj8GlZV7AlFdG7oA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Ironlog</title>
@@ -383,8 +383,8 @@ html.standalone .tabbar{bottom:auto;top:calc(var(--screen-h,100vh) - var(--tab-h
 </div>
 
 <script>
-/* Ironlog v0.39.0 · site build */
-var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.39.0",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
+/* Ironlog v0.39.1 · site build */
+var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.39.1",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
 
 /* ===== src/data/exercises.js ===== */
 (function(){'use strict';
@@ -996,19 +996,23 @@ function shapeStyle(sets,style,ex,unit){
   if(w<=0)return sets;
   if(style==='straight')return sets.map(s=>({w,r:s.r,done:false}));
   if(style==='ramp'&&ex&&ex.tier===1){
-    const inc=unitIncrement(unit||'lb'),topR=sets[sets.length-1].r,grid=x=>Math.max(inc,Math.round(x/inc)*inc);
+    // reps come from the set that CARRIES the top weight — on a descending pattern (heavy opener,
+    // lighter back-offs) the last set holds back-off reps, which must not land on the top set
+    const inc=unitIncrement(unit||'lb'),topR=(sets.find(s=>(+s.w||0)===w)||sets[sets.length-1]).r,grid=x=>Math.max(inc,Math.round(x/inc)*inc);
     return[{w:grid(w*0.8),r:topR,done:false},{w:grid(w*0.9),r:topR,done:false},{w,r:topR,done:false}];
   }
   return sets;
 }
 function seedExercise(id,sessions,opts){
-  opts=opts||{};const {excludeId,unit,deload,extraSet,goal,setStyle}=opts;   // goal/setStyle: profile levers
+  opts=opts||{};const {excludeId,unit,deload,extraSet,goal,setStyle,push}=opts;   // goal/setStyle/push: profile levers
   const ex=EX[id];const mode=lastModeFor(sessions,id);
   const inst={id,name:ex?ex.name:id};if(mode)inst.mode=mode;
   const lp=lastPerf(sessions||[],id,{excludeId,mode:mode||undefined});   // real sessions only — a deload is never a baseline
   const rr=goal?repRange(ex,goal):(ex?ex.rr:[8,12]);   // goal shifts the target range in one place
   let sets;
-  if(lp&&lp.sets.length)sets=(deload?deloadSets(lp.sets,ex,unit):nextSets(lp.sets,ex,unit,goal?rr:undefined).sets).map(s=>({w:s.w,r:s.r,done:false}));
+  // push:'quiet' — "just record": the rows mirror last time exactly, never a bump. Must agree with
+  // suggestion(), which shows neutral text under quiet; a bumped row next to "Recorded" would lie.
+  if(lp&&lp.sets.length)sets=(deload?deloadSets(lp.sets,ex,unit):push==='quiet'?lp.sets.map(s=>({w:+s.w||0,r:+s.r||0})):nextSets(lp.sets,ex,unit,goal?rr:undefined).sets).map(s=>({w:s.w,r:s.r,done:false}));
   else{const n=prescribedSets(ex),r=ex?(deload?rr[1]:rr[0]):'';sets=Array.from({length:n},()=>({w:'',r:r,done:false}));}
   if(!deload&&setStyle)sets=shapeStyle(sets,setStyle,ex,unit);   // never reshape a deload — recovery has its own prescription
   if(deload&&sets.length>DELOAD_MAX_SETS)sets=sets.slice(0,DELOAD_MAX_SETS);   // a deload cuts volume as well as load
@@ -2364,7 +2368,7 @@ function recentTemplates(){
       <span class="ex-add" style="background:var(--surface-2)">↻</span></button>`).join('');
 }
 const SCHEMA=1;
-function newSession(exIds,deload,volumeBump){const pf=state.settings.profile||{},goal=pf.goal,setStyle=pf.sets;const s={id:S.uid(),schema:SCHEMA,date:Date.now(),updatedAt:Date.now(),completed:false,exercises:(exIds||[]).map(id=>B.seedExercise(id,state.sessions,{unit:U(),deload,extraSet:volumeBump&&volumeBump.indexOf(id)>=0,goal,setStyle}))};if(deload)s.deload=true;return s;}
+function newSession(exIds,deload,volumeBump){const pf=state.settings.profile||{},goal=pf.goal,setStyle=pf.sets,push=pf.push;const s={id:S.uid(),schema:SCHEMA,date:Date.now(),updatedAt:Date.now(),completed:false,exercises:(exIds||[]).map(id=>B.seedExercise(id,state.sessions,{unit:U(),deload,extraSet:volumeBump&&volumeBump.indexOf(id)>=0,goal,setStyle,push}))};if(deload)s.deload=true;return s;}
 // The ONLY way a workout begins. spec: {ids, deload, msg, volumeBump, source}. Every start path —
 // build / blank / repeat / routine / history-repeat — routes through here, so the draft reset (and,
 // from Phase 1, the discard guard) live in one place instead of at each call site.
@@ -3043,7 +3047,7 @@ function addExerciseToCur(id){
   if(todayScreen!=='edit'&&!state.active){S.setActive(newSession([]));}
   const t=cur();
   if(t.exercises.some(x=>x.id===id)){toast('Already added');return;}
-  {const pf=state.settings.profile||{};t.exercises.push(B.seedExercise(id,state.sessions,{excludeId:t.id,unit:U(),goal:pf.goal,setStyle:pf.sets}));}
+  {const pf=state.settings.profile||{};t.exercises.push(B.seedExercise(id,state.sessions,{excludeId:t.id,unit:U(),goal:pf.goal,setStyle:pf.sets,push:pf.push}));}
   persistCur();if(todayScreen!=='edit')todayScreen='active';
   if(currentTab!=='today')setTab('today');else render();
   toast(EX[id].name+' added');

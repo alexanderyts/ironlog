@@ -89,6 +89,11 @@ test('P2 sets: ramp makes a tier-1 top set a 3-step climb; straight flattens an 
   const asc=history(session(3,[['barbell-bench-press',[set(170,5),set(180,5),set(190,8)]]],{now:NOW}));
   assert.deepEqual(B.seedExercise('barbell-bench-press',asc,{unit:'lb'}).sets.map(s=>s.w),[175,185,195],'control: auto mirrors the ascending shape');
   assert.deepEqual(B.seedExercise('barbell-bench-press',asc,{unit:'lb',setStyle:'straight'}).sets.map(s=>s.w),[195,195,195],'straight: all sets at the top weight');
+  // descending pattern (heavy opener, lighter back-offs): the opener 200×5 fell short of 8 so auto
+  // mirrors; ramp must carry the OPENER's 5 reps to the top set, not the back-offs' 8
+  const desc=history(session(3,[['barbell-bench-press',[set(200,5),set(180,8),set(180,8)]]],{now:NOW}));
+  assert.deepEqual(B.seedExercise('barbell-bench-press',desc,{unit:'lb'}).sets.map(s=>[s.w,s.r]),[[200,5],[180,8],[180,8]],'control: auto mirrors the descending shape');
+  assert.deepEqual(B.seedExercise('barbell-bench-press',desc,{unit:'lb',setStyle:'ramp'}).sets.map(s=>[s.w,s.r]),[[160,5],[180,5],[200,5]],'ramp: top-set reps come from the set that carried the top weight');
 });
 
 // ── 7. push ─────────────────────────────────────────────────────────────────────────────────────
@@ -100,6 +105,11 @@ test('P2 push=quiet: the suggestion never bumps and mirrors last time; auto stil
   const quiet=P.suggestion(hist,'barbell-bench-press',{unit:'lb',push:'quiet'});
   assert.equal(quiet.kind,'match','quiet never suggests a bump');
   assert.deepEqual(quiet.next.map(s=>s.w),[185,185],'quiet mirrors last time exactly');
+  // the SET ROWS must agree with the coach line — a 190 prefilled next to "Recorded — last time was
+  // 185×8" would contradict it. Rows are seeded by seedExercise, so it needs the lever too.
+  assert.deepEqual(B.seedExercise('barbell-bench-press',hist,{unit:'lb'}).sets.map(s=>[s.w,s.r]),[[190,5],[190,5]],'control: auto rows carry the bump');
+  assert.deepEqual(B.seedExercise('barbell-bench-press',hist,{unit:'lb',push:'quiet'}).sets.map(s=>[s.w,s.r]),[[185,8],[185,8]],'quiet rows mirror last time — no bump in the rows either');
+  assert.deepEqual(B.seedExercise('barbell-bench-press',hist,{unit:'lb',push:'quiet',deload:true}).sets.map(s=>s.w),[110,110],'quiet never overrides a deload (60% of 185 on the 5lb grid)');
 });
 
 // ── audit-green: the invariants survive a profile ──────────────────────────────────────────────────

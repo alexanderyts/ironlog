@@ -114,7 +114,7 @@ function recentTemplates(){
       <span class="ex-add" style="background:var(--surface-2)">↻</span></button>`).join('');
 }
 const SCHEMA=1;
-function newSession(exIds,deload,volumeBump){const pf=state.settings.profile||{},goal=pf.goal,setStyle=pf.sets;const s={id:S.uid(),schema:SCHEMA,date:Date.now(),updatedAt:Date.now(),completed:false,exercises:(exIds||[]).map(id=>B.seedExercise(id,state.sessions,{unit:U(),deload,extraSet:volumeBump&&volumeBump.indexOf(id)>=0,goal,setStyle}))};if(deload)s.deload=true;return s;}
+function newSession(exIds,deload,volumeBump){const pf=state.settings.profile||{},goal=pf.goal,setStyle=pf.sets,push=pf.push;const s={id:S.uid(),schema:SCHEMA,date:Date.now(),updatedAt:Date.now(),completed:false,exercises:(exIds||[]).map(id=>B.seedExercise(id,state.sessions,{unit:U(),deload,extraSet:volumeBump&&volumeBump.indexOf(id)>=0,goal,setStyle,push}))};if(deload)s.deload=true;return s;}
 // The ONLY way a workout begins. spec: {ids, deload, msg, volumeBump, source}. Every start path —
 // build / blank / repeat / routine / history-repeat — routes through here, so the draft reset (and,
 // from Phase 1, the discard guard) live in one place instead of at each call site.

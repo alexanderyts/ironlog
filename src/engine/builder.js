@@ -25,19 +25,23 @@ function shapeStyle(sets,style,ex,unit){
   if(w<=0)return sets;
   if(style==='straight')return sets.map(s=>({w,r:s.r,done:false}));
   if(style==='ramp'&&ex&&ex.tier===1){
-    const inc=unitIncrement(unit||'lb'),topR=sets[sets.length-1].r,grid=x=>Math.max(inc,Math.round(x/inc)*inc);
+    // reps come from the set that CARRIES the top weight — on a descending pattern (heavy opener,
+    // lighter back-offs) the last set holds back-off reps, which must not land on the top set
+    const inc=unitIncrement(unit||'lb'),topR=(sets.find(s=>(+s.w||0)===w)||sets[sets.length-1]).r,grid=x=>Math.max(inc,Math.round(x/inc)*inc);
     return[{w:grid(w*0.8),r:topR,done:false},{w:grid(w*0.9),r:topR,done:false},{w,r:topR,done:false}];
   }
   return sets;
 }
 function seedExercise(id,sessions,opts){
-  opts=opts||{};const {excludeId,unit,deload,extraSet,goal,setStyle}=opts;   // goal/setStyle: profile levers
+  opts=opts||{};const {excludeId,unit,deload,extraSet,goal,setStyle,push}=opts;   // goal/setStyle/push: profile levers
   const ex=EX[id];const mode=lastModeFor(sessions,id);
   const inst={id,name:ex?ex.name:id};if(mode)inst.mode=mode;
   const lp=lastPerf(sessions||[],id,{excludeId,mode:mode||undefined});   // real sessions only — a deload is never a baseline
   const rr=goal?repRange(ex,goal):(ex?ex.rr:[8,12]);   // goal shifts the target range in one place
   let sets;
-  if(lp&&lp.sets.length)sets=(deload?deloadSets(lp.sets,ex,unit):nextSets(lp.sets,ex,unit,goal?rr:undefined).sets).map(s=>({w:s.w,r:s.r,done:false}));
+  // push:'quiet' — "just record": the rows mirror last time exactly, never a bump. Must agree with
+  // suggestion(), which shows neutral text under quiet; a bumped row next to "Recorded" would lie.
+  if(lp&&lp.sets.length)sets=(deload?deloadSets(lp.sets,ex,unit):push==='quiet'?lp.sets.map(s=>({w:+s.w||0,r:+s.r||0})):nextSets(lp.sets,ex,unit,goal?rr:undefined).sets).map(s=>({w:s.w,r:s.r,done:false}));
   else{const n=prescribedSets(ex),r=ex?(deload?rr[1]:rr[0]):'';sets=Array.from({length:n},()=>({w:'',r:r,done:false}));}
   if(!deload&&setStyle)sets=shapeStyle(sets,setStyle,ex,unit);   // never reshape a deload — recovery has its own prescription
   if(deload&&sets.length>DELOAD_MAX_SETS)sets=sets.slice(0,DELOAD_MAX_SETS);   // a deload cuts volume as well as load
