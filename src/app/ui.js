@@ -263,8 +263,8 @@ function editorView(s,mode){
       <h2 style="font-size:23px;margin-top:4px">${new Date(s.date).toLocaleDateString(undefined,{weekday:'long'})}'s session${s.deload?' <span class="deload-badge">Deload</span>':''}</h2></div>
     ${s.deload?`<div class="card" style="margin:0 0 14px;padding:12px 14px;background:var(--good-soft);border:1px solid color-mix(in srgb,var(--good) 30%,transparent)"><div style="font-weight:600;color:var(--good);font-size:13.5px">🌿 Recovery session</div><div class="dim" style="font-size:12.5px;margin-top:3px">Lighter loads on purpose — take each rep through a full range, feel the stretch, and stop 3–4 reps shy of failure. This won't affect your progression or PRs.</div></div>`:''}
     <div class="statgrid" style="margin:14px 0 18px">
-      <div class="card stat"><div class="k">Working sets</div><div class="v mono">${sets}</div></div>
-      <div class="card stat"><div class="k">${volLabel()}</div><div class="v mono">${fmtVol(vol)}<small>${U()}</small></div></div>
+      <div class="card stat"><div class="k">Working sets</div><div class="v mono" id="stSets">${sets}</div></div>
+      <div class="card stat"><div class="k">${volLabel()}</div><div class="v mono" id="stVol">${fmtVol(vol)}<small>${U()}</small></div></div>
     </div>
     <div id="logList">${s.exercises.map((e,i)=>logExercise(s,e,i,mode)).join('')||emptyLog()}</div>
     <div style="display:flex;gap:4px;flex-wrap:wrap;margin:0 0 6px">
@@ -747,6 +747,9 @@ function reorderCur(){
   t.exercises=B.orderByFatigue(t.exercises.map(e=>e.id),focus).map(id=>map[id]);
   persistCur();render();toast('Ordered for best performance');
 }
+// Keep the editor's Working-sets / Volume tiles honest after an in-place edit (stepper or typing on a
+// set that's already checked) without a full re-render, which would steal input focus.
+function refreshStats(){const t=cur();if(!t)return;const a=$('#stSets'),b=$('#stVol');if(a)a.textContent=setsOf(t);if(b)b.innerHTML=fmtVol(volOf(t))+'<small>'+U()+'</small>';}
 // Only sets the user actually checked done are saved (see finalizeSets). Edited-but-unticked sets are
 // resolved by confirmUnchecked() before this runs.
 function cleanSets(s){s.exercises=P.finalizeSets(s.exercises);}
@@ -884,7 +887,7 @@ function bindLog(root){
     const chk=e.target.closest('[data-check]');if(chk){const ei=+chk.dataset.check,si=+chk.dataset.s;const st=t.exercises[ei].sets[si];st.done=!st.done;
       if(st.done&&todayScreen==='active'&&state.settings.rest.auto&&!st.warm)startRest(restSecondsFor(t.exercises[ei].id));persistCur();render();return;}
     const wm=e.target.closest('[data-warm]');if(wm){const ei=+wm.dataset.warm,si=+wm.dataset.s;const st=t.exercises[ei].sets[si];st.warm=!st.warm;persistCur();render();toast(st.warm?'Marked as warm-up':'Counted as a working set');return;}
-    const step=e.target.closest('[data-step]');if(step){const ei=+step.dataset.ei,si=+step.dataset.s,f=step.dataset.step,d=+step.dataset.d;const st=t.exercises[ei].sets[si];let v=+st[f]||0;v+=f==='w'?d*inc():d;if(v<0)v=0;st[f]=v;st.t=1;persistCur();const inp=$(`input[data-f="${f}"][data-ei="${ei}"][data-s="${si}"]`);if(inp)inp.value=v;return;}
+    const step=e.target.closest('[data-step]');if(step){const ei=+step.dataset.ei,si=+step.dataset.s,f=step.dataset.step,d=+step.dataset.d;const st=t.exercises[ei].sets[si];let v=+st[f]||0;v+=f==='w'?d*inc():d;if(v<0)v=0;st[f]=v;st.t=1;persistCur();const inp=$(`input[data-f="${f}"][data-ei="${ei}"][data-s="${si}"]`);if(inp)inp.value=v;refreshStats();return;}
     const add=e.target.closest('[data-addset]');if(add){const ei=+add.dataset.addset;const sets=t.exercises[ei].sets;const last=sets[sets.length-1]||{w:'',r:''};sets.push({w:last.w,r:last.r,done:false});persistCur();render();return;}
     const rem=e.target.closest('[data-delset]');if(rem){const ei=+rem.dataset.delset;const sets=t.exercises[ei].sets;if(sets.length<=1)return;
       const idx=sets.length-1;
@@ -903,7 +906,7 @@ function bindLog(root){
     if(val!==inp.value)inp.value=val;   // reflect the sanitized value back (e.g. "12,5" -> "12.5")
     const st=t.exercises[ei].sets[si];st[f]=val===''?'':(f==='r'?parseInt(val)||val:parseFloat(val)||val);
     st.t=1;   // edited but not necessarily ticked — Finish will ask before dropping it
-    persistCur();});
+    persistCur();refreshStats();});
 }
 
 /* ---------------- rest timer ---------------- */

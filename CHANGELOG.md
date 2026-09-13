@@ -2,6 +2,13 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.31.0 — 2026-09-13 · Fixes from reviewing real data
+The first pass with the owner's actual history (`tools/review.js`) turned up three things.
+- **A deload with nothing before it now counts as your starting point.** If the only time you've done an exercise was on a deload, the app used to ignore it and prefill blanks next time. Now it prefills those exact loads (not progressed, not cut again) and says so. (progression.js `baselinePerf`; builder.js `seedExercise`.)
+- **The Working-sets and Volume tiles now update live** when you change the weight or reps of a set you've already checked off (they only updated on check/uncheck/remove before). (ui.js `refreshStats`, no re-render so typing keeps focus.)
+- **A checked set with zero reps is dropped at finish, and ignored in history**, so it can't prefill as "0×0" next time. (progression.js `finalizeSets`, `lastPerf`.)
+- 2 new tests (109).
+
 ## v0.30.0 — 2026-09-11 · Robustness & polish (Roadmap v5, Phase 8 — final)
 - **Weights fit on small phones.** A number like "102.5" no longer gets clipped in the weight box on a 375-px screen (verified). (styles.css: tighter set-row columns, 28-px steppers, 16-px input.)
 - **No crash from a retired exercise.** A workout or import that references an exercise id the app no longer knows can no longer crash Auto-order or the exercise-info tap. (builder.js `perfPriority` guards unknown ids; ui.js guards the detail taps.)

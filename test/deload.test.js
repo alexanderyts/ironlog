@@ -31,6 +31,23 @@ test('hints (undertrained/gaps) are ignored on a deload (Phase 3)',()=>{
   assert.deepEqual(d.reactions,[],'deload runs no reactions');
 });
 
+test('a deload with NO real history behind it becomes the baseline instead of being ignored',()=>{
+  const now=Date.now();
+  const hist=[session(2,[['barbell-bench-press',[set(70,9),set(60,10)]]],{now,deload:true})];   // only ever benched on a deload
+  const seeded=B.seedExercise('barbell-bench-press',hist,{unit:'lb'});
+  assert.deepEqual(seeded.sets.map(s=>[s.w,s.r]),[[70,9],[60,10]],'reused at its actual loads, not blank, not progressed');
+  const sg=P.suggestion(hist,'barbell-bench-press',{unit:'lb'});
+  assert.equal(sg.kind,'match');assert.match(sg.text,/deload/i);
+  // once a real session exists it takes precedence and progression resumes as normal
+  const withReal=[session(1,[['barbell-bench-press',[set(80,8),set(80,8)]]],{now})].concat(hist);
+  assert.equal(P.suggestion(withReal,'barbell-bench-press',{unit:'lb'}).lp.sets[0].w,80);
+});
+
+test('finishing drops a checked set that has zero reps (would otherwise prefill 0×0)',()=>{
+  const out=P.finalizeSets([{id:'romanian-deadlift',name:'RDL',sets:[{w:35,r:8,done:true},{w:'',r:'0',done:true}]}]);
+  assert.equal(out[0].sets.length,1);
+});
+
 test('deload seeding caps at 3 sets, and cuts the load (Phase 3)',()=>{
   const now=Date.now();
   const hist=[session(3,[['barbell-bench-press',[set(135,6),set(135,6),set(135,6),set(135,6),set(135,6)]]],{now})];

@@ -4,7 +4,7 @@ var IL=globalThis.IL||(globalThis.IL={});
 if(typeof require==='function'&&!IL.data)require('../data/exercises.js');
 if(typeof require==='function'&&!IL.prog)require('./progression.js');
 const {C,I,EXERCISES,EX,REGIONS,IDEAL_PATS,PAT_RANK,EQUIP_LOAD,LONG_LENGTH,regLabel,patLabel,hashId}=IL.data;
-const {lastPerf,lastModeFor,nextSets,deloadSets,modeOf,real,DAY}=IL.prog;
+const {lastPerf,baselinePerf,lastModeFor,nextSets,deloadSets,modeOf,real,DAY}=IL.prog;
 
 // Working sets a movement deserves when you've never logged it: main lifts 4, other compounds 3,
 // isolation 3, finishers 2. Reps prefilled at the bottom of the target range.
@@ -19,9 +19,12 @@ function seedExercise(id,sessions,opts){
   opts=opts||{};const {excludeId,unit,deload,extraSet}=opts;
   const ex=EX[id];const mode=lastModeFor(sessions,id);
   const inst={id,name:ex?ex.name:id};if(mode)inst.mode=mode;
-  const lp=lastPerf(sessions||[],id,{excludeId,mode:mode||undefined});
+  const lp=baselinePerf(sessions||[],id,{excludeId,mode:mode||undefined});
   let sets;
-  if(lp&&lp.sets.length)sets=(deload?deloadSets(lp.sets,ex,unit):nextSets(lp.sets,ex,unit).sets).map(s=>({w:s.w,r:s.r,done:false}));
+  // A deload standing in as the only baseline is reused at its actual loads: not progressed (it was
+  // never a full effort) and not cut again (it's already light).
+  if(lp&&lp.sets.length&&lp.fromDeload)sets=lp.sets.map(s=>({w:s.w,r:s.r,done:false}));
+  else if(lp&&lp.sets.length)sets=(deload?deloadSets(lp.sets,ex,unit):nextSets(lp.sets,ex,unit).sets).map(s=>({w:s.w,r:s.r,done:false}));
   else{const n=prescribedSets(ex),r=ex?(deload?ex.rr[1]:ex.rr[0]):'';sets=Array.from({length:n},()=>({w:'',r:r,done:false}));}
   if(deload&&sets.length>DELOAD_MAX_SETS)sets=sets.slice(0,DELOAD_MAX_SETS);   // a deload cuts volume as well as load
   if(extraSet&&!deload&&sets.length&&sets.length<MAX_SETS_PER_EX){const last=sets[sets.length-1];sets.push({w:last.w,r:last.r,done:false});}

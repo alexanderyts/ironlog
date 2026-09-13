@@ -26,7 +26,8 @@ function sessionSets(s){let n=0;s.exercises.forEach(e=>e.sets.forEach(st=>{if(is
 // edited-but-unticked sets BEFORE calling this, marking them done if the user says so.
 function finalizeSets(exercises){
   return (exercises||[]).map(e=>{
-    const sets=e.sets.filter(st=>st.done===true).map(st=>{const o=Object.assign({},st);delete o.t;o.done=true;return o;});
+    // only checked-off sets, and never a junk set with zero reps (it would prefill as 0×0 next time)
+    const sets=e.sets.filter(st=>st.done===true&&(+st.r||0)>0).map(st=>{const o=Object.assign({},st);delete o.t;o.done=true;return o;});
     return Object.assign({},e,{sets});
   }).filter(e=>e.sets.length);
 }
@@ -58,8 +59,10 @@ function lastPerf(sessions,exId,opts){
     if(s.deload&&!opts.includeDeload)continue;   // a deload is a recovery detour, not a progression data point
     if(opts.beforeTs&&s.date>=opts.beforeTs)continue;
     if(opts.excludeId&&s.id===opts.excludeId)continue;
-    const e=s.exercises.find(x=>x.id===exId&&(!opts.mode||modeOf(x)===opts.mode)&&x.sets.some(isWorking));
-    if(e)return{date:s.date,mode:modeOf(e),sets:e.sets.filter(isWorking).map(st=>({w:+st.w||0,r:+st.r||0}))};
+    // a checked set with zero reps (an old junk record) is not a performance — never carry it forward
+    const perfSet=st=>isWorking(st)&&(+st.r||0)>0;
+    const e=s.exercises.find(x=>x.id===exId&&(!opts.mode||modeOf(x)===opts.mode)&&x.sets.some(perfSet));
+    if(e)return{date:s.date,mode:modeOf(e),sets:e.sets.filter(perfSet).map(st=>({w:+st.w||0,r:+st.r||0}))};
   }
   return null;
 }
@@ -181,11 +184,23 @@ function deloadSets(last,ex,unit){
 }
 // Progressive-overload suggestion for an exercise. kind: 'new' | 'weight' | 'match' | 'reps'
 // 'weight' means the prescription (`next`) already carries the bump; the text explains it.
+// The most recent performance to progress FROM. Real sessions first; if there are none, the most
+// recent deload stands in as the baseline (a deload with nothing before it isn't "lighter than
+// anything" — it's the only data there is, and blank prefills would throw it away). `.fromDeload`
+// tells callers to reuse its loads as-is rather than progress or cut them.
+function baselinePerf(sessions,exId,opts){
+  opts=opts||{};
+  const lp=lastPerf(sessions,exId,opts);
+  if(lp)return lp;
+  const dl=lastPerf(sessions,exId,Object.assign({},opts,{includeDeload:true}));
+  return dl?Object.assign(dl,{fromDeload:true}):null;
+}
 function suggestion(sessions,exId,opts){
   opts=opts||{};const unit=opts.unit||'lb';
-  const lp=lastPerf(sessions,exId,{beforeTs:opts.activeDate,excludeId:opts.activeId,mode:opts.mode});
+  const lp=baselinePerf(sessions,exId,{beforeTs:opts.activeDate,excludeId:opts.activeId,mode:opts.mode});
   const ex=EX[exId];
   if(!lp||!lp.sets.length)return{lp:null,kind:'new',text:'First time logging this — set your baseline.',next:null};
+  if(lp.fromDeload)return{lp,kind:'match',pattern:setPattern(lp.sets).pattern,text:'Only a deload on record — start from those loads and beat them',setsStr:fmtPerf(lp.sets,unit),next:lp.sets.map(s=>({w:s.w,r:s.r}))};
   const n=nextSets(lp.sets,ex,unit),setsStr=fmtPerf(lp.sets,unit),inc=unitIncrement(unit);
   const ramp=n.pattern!=='flat';
   const topLbl=n.pattern==='descending'?'opener':'top set';
@@ -231,5 +246,5 @@ function calcStreak(sessions,now){
   return n;
 }
 
-IL.prog={DAY,startOfDay,e1rm,isWorking,setLoad,sessionVolume,sessionSets,finalizeSets,parseWeightInput,fmtVol,modeOf,real,lastPerf,lastModeFor,exerciseSeries,bestE1rmBefore,setPattern,fmtPerf,nextSets,deloadSets,suggestion,unitIncrement,convertWeight,convertSessions,calcStreak,weekIndex,weekStart};
+IL.prog={DAY,startOfDay,e1rm,isWorking,setLoad,sessionVolume,sessionSets,finalizeSets,parseWeightInput,fmtVol,modeOf,real,lastPerf,baselinePerf,lastModeFor,exerciseSeries,bestE1rmBefore,setPattern,fmtPerf,nextSets,deloadSets,suggestion,unitIncrement,convertWeight,convertSessions,calcStreak,weekIndex,weekStart};
 if(typeof module!=='undefined')module.exports=IL.prog;
