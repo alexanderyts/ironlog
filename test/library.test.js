@@ -33,20 +33,28 @@ test('a machine-only gym can still build every preset (commercial-gym pass)',()=
   void PRESETS;
 });
 
-test('rotation families: exercises have same-group alternatives to swap within',()=>{
-  const alt=B.replacementFor('machine-chest-press',['barbell-bench-press'],1);   // returns an exercise object
-  assert.ok(alt&&alt.group==='Chest','a chest accessory has a chest replacement');
-  const sh=B.replacementFor('lateral-raise',['overhead-press'],1);
-  assert.ok(sh&&sh.group==='Shoulders','a shoulder accessory has a shoulder replacement');
+test('rotation families: a stalled lift is replaced within its own group, deterministically',()=>{
+  // oracle: the swap is fixed (hashId tie-break), not seed-dependent — see replacementFor
+  assert.equal(B.replacementFor('machine-chest-press',['barbell-bench-press'],1).id,'dumbbell-bench-press');
+  assert.equal(B.replacementFor('lateral-raise',['overhead-press'],1).id,'machine-lateral-raise');
+  // property: the replacement is always same-group and never one already in the plan
+  ['machine-chest-press','lateral-raise','tricep-pushdown','lat-pulldown'].forEach(id=>{
+    const r=B.replacementFor(id,[id],7);assert.equal(r.group,EX[id].group,id+' → same group');assert.notEqual(r.id,id);
+  });
 });
 
-test('the new glute-medius region has an exercise and is covered by a fresh glute build',()=>{
+test('the new glute-medius region is covered by every fresh glute build',()=>{
   assert.ok(EXERCISES.some(e=>e.group==='Glutes'&&e.reg==='medius'),'a medius exercise exists');
-  for(let s=0;s<5;s++)assert.ok(B.buildRecommendation(['Glutes'],[],s).some(id=>EX[id].reg==='medius'),'glute build covers medius, seed '+s);
+  // oracle for seed 0, property for all seeds
+  assert.deepEqual(B.buildRecommendation(['Glutes'],[],0),['hip-thrust','machine-hip-thrust','hip-abduction']);
+  for(let s=0;s<20;s++)assert.ok(B.buildRecommendation(['Glutes'],[],s).some(id=>EX[id].reg==='medius'),'glute build covers medius, seed '+s);
 });
 
-test('a fresh build tends to include a lengthened-position (stretch) movement',()=>{
-  let withStretch=0;
-  for(let s=0;s<6;s++)if(B.buildRecommendation(['Hamstrings','Quads'],[],s).some(id=>LONG_LENGTH.has(id)))withStretch++;
-  assert.ok(withStretch>=4,'most builds include a stretch option ('+withStretch+'/6)');
+test('every fresh leg build includes a lengthened-position (stretch) movement',()=>{
+  // strengthened from ">=4 of 6": RDL/stiff-leg (both LONG_LENGTH) anchor hamstrings every time.
+  // oracle for seed 1, property across 20 seeds.
+  const s1=B.buildRecommendation(['Hamstrings','Quads'],[],1);
+  assert.ok(s1.includes('romanian-deadlift')&&s1.includes('stiff-leg-deadlift'),'seed 1: '+s1.join(','));
+  for(let s=0;s<20;s++){const ids=B.buildRecommendation(['Hamstrings','Quads'],[],s);
+    assert.ok(ids.some(id=>LONG_LENGTH.has(id)),'seed '+s+' has a stretch option: '+ids.join(','));}
 });

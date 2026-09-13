@@ -16,6 +16,20 @@ test('presets build a sane session and continue only when the same groups are pi
   // picking all 11 groups still caps the session size
   assert.ok(B.buildRecommendation(GROUPS,[],1).length<=B.MAX_SESSION_EX,'all groups still capped');
 });
+
+test('presets build the EXACT expected session (oracle for seed 1)',()=>{
+  // Pins what the builder actually chooses, so a library or scoring change surfaces here on purpose.
+  // If a change is intended, update these lists deliberately.
+  const expect={
+    'Full body':['front-squat','stiff-leg-deadlift','incline-barbell-press','barbell-row','overhead-press','lat-pulldown','dumbbell-pullover'],
+    'Push':['incline-barbell-press','barbell-bench-press','overhead-press','close-grip-bench','dumbbell-pullover','overhead-tricep-extension','leaning-cable-lateral'],
+    'Lower':['front-squat','stiff-leg-deadlift','hip-thrust','leg-extension','standing-calf-raise','hip-abduction','seated-calf-raise'],
+    'Pull':['barbell-row','lat-pulldown','face-pull','barbell-curl','incline-dumbbell-curl','hammer-curl'],
+    'Arms':['close-grip-bench','farmers-carry','barbell-curl','incline-dumbbell-curl','hammer-curl','reverse-wrist-curl','overhead-tricep-extension'],
+    'Upper':['incline-barbell-press','barbell-row','overhead-press','close-grip-bench','lat-pulldown','dumbbell-pullover','barbell-curl']
+  };
+  PRESETS.forEach(p=>assert.deepEqual(B.buildRecommendation(p.groups,[],1),expect[p.label],p.label));
+});
 const B=IL.builder;
 const names=ids=>ids.map(id=>EX[id].name);
 
