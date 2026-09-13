@@ -164,7 +164,7 @@ function buildAndStart(fresh){
   const dl=draft.deload;
   // Coach's findings feed the builder (Phase C). The engine ignores them on a deload (recovery isn't
   // the time to add volume/coverage), so we always pass them and let planWorkout decide.
-  const hints=A.buildHints(state.sessions,Date.now(),bw());
+  const hints=A.buildHints(state.sessions,Date.now(),bw(),state.settings.profile);
   const p=B.planWorkout([...draft.groups],state.sessions,null,{fresh,hints,deload:dl,profile:state.settings.profile});
   let msg='Workout built — adjust anything';
   if(p.deload)msg=p.mode==='continue'?'Deload — same plan, lighter loads, focus on the stretch':'Deload built — lighter loads, focus on the stretch';
@@ -180,7 +180,7 @@ function buildAndStart(fresh){
 }
 // Reaction 1: a one-tap nudge toward the muscles the coach says are light or unbalanced this week.
 function coachNudge(){
-  const h=A.buildHints(state.sessions,Date.now(),bw());
+  const h=A.buildHints(state.sessions,Date.now(),bw(),state.settings.profile);
   if(!h.suggestGroups.length)return '';
   return `<button class="btn ghost block" id="coachNudge" data-action="coachNudge" data-groups="${h.suggestGroups.join(',')}" style="justify-content:flex-start;gap:10px;margin:0 0 4px;height:auto;padding:12px 14px;border-style:dashed;text-align:left">
     <span style="color:var(--accent);font-size:16px;flex-shrink:0">✦</span>

@@ -117,7 +117,7 @@ function tipsCard(tips){
 function coachCard(done){
   if(!done.length)return '';
   const a=A.analyze(state.sessions,Date.now());
-  const tips=A.buildTips(a,state.sessions,Date.now(),bw());
+  const tips=A.buildTips(a,state.sessions,Date.now(),bw(),state.settings.profile);
   if(!a.readyForComparative){
     // early on: encouragement + whatever per-muscle tips (region/pattern gaps, progression) are
     // already individually meaningful — no full balance analysis yet, so no "Effectiveness" bars

@@ -2,6 +2,14 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.40.0 — 2026-09-13 · The coach listens to your profile (Roadmap v6, Phase P3)
+**Balanced is still exactly today's coach.** With a profile set, the Progress-tab coaching reads the same facts through your lens — it never changes what was measured, only what's worth saying.
+- **Days per week** — on a 2-day week most muscles can only be trained once, so the "spread this across two days" tip stays quiet. With 3 or more days it works as before.
+- **Goal** — the "volume is low" tip uses a landmark for your goal: *Size* ~10 sets/week, *Strength* ~6, *Balanced/General* ~8 (the same as today). The wording names it: "For size, chest at ~9 sets/week is below the ~10 that reliably grows it."
+- **Protect** — a muscle you're keeping light no longer gets nudged toward heavy compound lifts (no more "add an overhead press"). Instead you get one line crediting what's covering it: "You're keeping shoulders light — Lateral Raise is covering it." Light isolation gaps (say, rear delts) are still mentioned. The builder reads the same list, so it stops trying to add heavy work there too.
+- **Just record** — the monthly strength-trend line states the numbers and stops; it no longer tells you to lean on the +weight prompts you've turned off.
+- Not verified on-device: nothing behavioural — each lever has a test with hand-computed expected findings plus Balanced and off-lever controls, the real-data review snapshot is unchanged, and the protect line was confirmed in the rendered Progress tab through the app's own screen code (the browser preview has no history, so it only confirmed the tab still renders cleanly). The good-news protect line is placed after any warnings so the five-tip cap never drops a warning for it.
+
 ## v0.39.1 — 2026-09-13 · Profile stability pass (two fixes from a cold review of P2)
 A deliberate re-read of the P2 change before moving on. Two things were wrong; both fixed, both now have a hand-computed test.
 - **"Just record" now really just records.** The coach line said "Recorded — last time was 185×8" but the set rows were still prefilled with the heavier 190×5 — the rows and the words disagreed. The rows now mirror last time too. A deload is untouched (still lighter on purpose).

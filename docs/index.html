@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-B37z9UgM+Lznt7To+k4E6q/vlt5ZAAtUom48a0SNpQY=' 'sha256-WPBob/luB2k1aalTWXpi6zk3SrIbj8GlZV7AlFdG7oA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-6WUMZ7hTaRJLBSKzAfRQAPzwYZHHI+ebr52lH9zW86Q=' 'sha256-WPBob/luB2k1aalTWXpi6zk3SrIbj8GlZV7AlFdG7oA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Ironlog</title>
@@ -383,8 +383,8 @@ html.standalone .tabbar{bottom:auto;top:calc(var(--screen-h,100vh) - var(--tab-h
 </div>
 
 <script>
-/* Ironlog v0.39.1 · site build */
-var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.39.1",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
+/* Ironlog v0.40.0 · site build */
+var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.40.0",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
 
 /* ===== src/data/exercises.js ===== */
 (function(){'use strict';
@@ -1438,8 +1438,13 @@ function patPrio(g,p){return {'Hamstrings:hinge':5,'Hamstrings:iso':4,'Back:hpul
    a.readyForComparative; per-muscle gaps, deload and progression appear as soon as they're meaningful.
    All gaps/volume/freq candidates are returned (not pre-sliced) so the builder sees everything; the
    renderer does the display trimming. */
-function findings(a,sessions,now,bw){
-  now=now||Date.now();
+// Weekly working-set landmarks per goal (Schoenfeld 2017 dose-response; Israetel MEV/MAV). Only the
+// low end raises a finding; 'general' equals today's threshold so Balanced is unchanged.
+const VOL_LANDMARKS={size:[10,20],strength:[6,12],general:[8,15]};
+// `profile` (Roadmap v6 P3): the optional training profile is a LENS on the same facts — it never
+// changes what was measured, only which findings are worth raising and how they're worded.
+function findings(a,sessions,now,bw,profile){
+  now=now||Date.now();profile=profile||{};
   const F=[],trained=Object.keys(a.groupSets).filter(g=>a.groupSets[g]>=2);
   if(a.readyForComparative){
     if(a.push+a.pull>=6){
@@ -1455,12 +1460,30 @@ function findings(a,sessions,now,bw){
   else{const streakWk=calcStreak(sessions,now);if(streakWk>=6)F.push({type:'deload-due',lv:'info',weeks:streakWk});}
   trained.forEach(g=>{const seen=a.regSeen[g]||new Set();(REGIONS[g]||[]).forEach(r=>{if(!seen.has(r)){const ex=exampleFor(g,r);if(ex)F.push({type:'region-gap',lv:'info',group:g,reg:r,ex,prio:gapPrio(g,r)});}});});
   trained.forEach(g=>{const seen=a.patSeen[g]||new Set();(IDEAL_PATS[g]||[]).forEach(p=>{if(!seen.has(p)){const ex=EXERCISES.find(x=>x.group===g&&x.pat===p&&x.tier<=2)||EXERCISES.find(x=>x.group===g&&x.pat===p);if(ex)F.push({type:'pattern-gap',lv:'info',group:g,pat:p,exId:ex.id,exName:ex.name,prio:patPrio(g,p)});}});});
+  // 'protect': a muscle you're keeping light must not be nagged toward heavy compounds. Gap findings
+  // there whose suggested fix is a tier-1 compound are dropped and replaced by ONE 'protect' finding
+  // that credits what's covering it; isolation gaps (light, safe) stay. The builder reads the same
+  // list, so it stops gap-adding heavy work there too — coach and builder agree by construction.
+  const protect=new Set(profile.protect||[]);
+  if(protect.size){
+    const heavy=f=>{const x=f.exId?EX[f.exId]:EXERCISES.find(e=>e.name===f.ex);return !!x&&x.tier===1&&x.type==='compound';};
+    for(let i=F.length-1;i>=0;i--){const f=F[i];if((f.type==='region-gap'||f.type==='pattern-gap')&&protect.has(f.group)&&heavy(f))F.splice(i,1);}
+    const win=completed(sessions).filter(s=>s.date>=now-28*DAY&&s.date<now);
+    protect.forEach(g=>{if(trained.indexOf(g)<0)return;const names=[];
+      win.forEach(s=>s.exercises.forEach(e=>{const x=EX[e.id];if(x&&x.group===g&&e.sets.some(isWorking)&&names.indexOf(x.name)<0)names.push(x.name);}));
+      if(names.length)F.push({type:'protect',lv:'good',group:g,covering:names.slice(0,3)});});
+  }
   if(a.readyForComparative){
-    trained.filter(g=>a.groupSets[g]>=4&&g!=='Core'&&g!=='Calves').forEach(g=>{if(a.perWeek[g]<8)F.push({type:'volume-low',lv:'warn',group:g,perWeek:a.perWeek[g]});});
-    trained.filter(g=>g!=='Core'&&g!=='Calves'&&a.groupSets[g]/a.weeks>=6&&(a.groupFreq[g]||0)/a.weeks<1.5).forEach(g=>F.push({type:'freq-low',lv:'info',group:g,sets:a.groupSets[g]/a.weeks}));
+    // 'goal' moves the volume landmark; the finding carries the target only when it differs from Balanced
+    const goalVol=profile.goal==='size'||profile.goal==='strength'?profile.goal:null,volLo=(VOL_LANDMARKS[goalVol]||VOL_LANDMARKS.general)[0];
+    trained.filter(g=>a.groupSets[g]>=4&&g!=='Core'&&g!=='Calves').forEach(g=>{if(a.perWeek[g]<volLo)F.push(Object.assign({type:'volume-low',lv:'warn',group:g,perWeek:a.perWeek[g]},goalVol?{goal:goalVol,target:volLo}:{}));});
+    // 'days': on a 2-day week most muscles only fit once — a 1×/week frequency isn't a gap, it's the plan
+    if(!(profile.days&&profile.days<=2))
+      trained.filter(g=>g!=='Core'&&g!=='Calves'&&a.groupSets[g]/a.weeks>=6&&(a.groupFreq[g]||0)/a.weeks<1.5).forEach(g=>F.push({type:'freq-low',lv:'info',group:g,sets:a.groupSets[g]/a.weeks}));
   }
   const pr=progressionStat(sessions,now,bw);
-  if(pr.n>=2)F.push({type:'progression',lv:pr.up>=pr.n/2?'good':'info',up:pr.up,n:pr.n});
+  // push:'quiet' — the progression finding stays descriptive (no "lean on the +weight prompts")
+  if(pr.n>=2)F.push(Object.assign({type:'progression',lv:pr.up>=pr.n/2?'good':'info',up:pr.up,n:pr.n},profile.push==='quiet'?{quiet:true}:{}));
   return F;
 }
 // A stable identity for a finding, so the same concern across two time windows is recognised as the
@@ -1470,6 +1493,7 @@ function findingKey(f){
   if(f.type==='pattern-gap')return 'pattern-gap:'+f.group+':'+f.pat;
   if(f.type==='volume-low')return 'volume-low:'+f.group;
   if(f.type==='freq-low')return 'freq-low:'+f.group;
+  if(f.type==='protect')return 'protect:'+f.group;
   if(f.type==='deload-taken'||f.type==='deload-due')return 'deload';
   return f.type;
 }
@@ -1484,11 +1508,11 @@ function canResolve(f,curA){
   if(f.type==='region-gap'||f.type==='pattern-gap')return (curA.groupSets[f.group]||0)>0;   // still training it
   return curA.readyForComparative;   // balance / legs-low / volume-low / freq-low need a real current sample
 }
-function withStatus(sessions,now,bw){
+function withStatus(sessions,now,bw,profile){
   now=now||Date.now();
   const curA=analyze(sessions,now);
-  const cur=findings(curA,sessions,now,bw);
-  const prev=findings(analyze(sessions,now-28*DAY),sessions,now-28*DAY,bw);
+  const cur=findings(curA,sessions,now,bw,profile);
+  const prev=findings(analyze(sessions,now-28*DAY),sessions,now-28*DAY,bw,profile);   // same lens on both windows
   const prevByKey={};prev.forEach(p=>prevByKey[findingKey(p)]=p);
   const curKeys=new Set(cur.map(findingKey));
   const out=cur.map(f=>{const pf=prevByKey[findingKey(f)];return Object.assign({status:pf?'persisting':'new'},pf?{prev:pf}:{},f);});
@@ -1554,6 +1578,10 @@ function renderFinding(f,week){
     case 'volume-low':{
       if(st==='resolved')return {lv:'good',x:`${G} volume is back up where it should be — nice work.`};
       const pw=f.perWeek.toFixed(1),trend=(st==='persisting'&&f.prev&&f.perWeek>f.prev.perWeek)?` (up from ~${f.prev.perWeek.toFixed(1)}, keep climbing)`:'';
+      if(f.goal){const why=f.goal==='size'?'reliably grows it':'builds strength there';   // goal-aware landmark (P3)
+        return {lv:'warn',x:pickVariant(f,week,[
+          `For ${f.goal}, ${g} at ~<b>${pw}</b> sets/week${trend} is below the <b>~${f.target}</b> that ${why}.`,
+          `${G} is at ~<b>${pw}</b> sets/week${trend} — for ${f.goal} you want <b>${f.target}+</b>.`])};}
       return {lv:'warn',x:pickVariant(f,week,[
         `Only ~<b>${pw}</b> sets/week of ${g}${trend} — aim for <b>10+</b> to drive growth.`,
         `${G} is light at ~<b>${pw}</b> sets/week${trend}. Push toward <b>10+</b> weekly.`])};
@@ -1564,16 +1592,22 @@ function renderFinding(f,week){
         `You train ${g} hard but about once a week — splitting those <b>~${Math.round(f.sets)} sets</b> across <b>2 days</b> tends to build the muscle faster.`,
         `${G}'s volume is packed into one session. Spreading it over <b>2 days</b> a week grows it better than one big hit.`])};
     }
+    case 'protect':{
+      const names=f.covering.map(n=>`<b>${n}</b>`),list=names.length>1?names.slice(0,-1).join(', ')+' and '+names[names.length-1]:names[0],pl=names.length>1;
+      return {lv:'good',x:pickVariant(f,week,[
+        `You're keeping ${g} light — ${list} ${pl?'are':'is'} covering it.`,
+        `${G} stays light by your choice; ${list} ${pl?'keep':'keeps'} it moving.`])};
+    }
     case 'progression':return {lv:f.lv,x:pickVariant(f,week,[
-      `<b>${f.up}/${f.n}</b> of your tracked lifts are trending up in estimated strength this month.${f.up>=f.n/2?' Keep it going.':' Lean on the +weight prompts to push the rest.'}`,
-      `Strength trend: <b>${f.up}</b> of <b>${f.n}</b> lifts climbing this month.${f.up>=f.n/2?" That's a good ratio.":' A few need a nudge — the +weight prompts will help.'}`])};
+      `<b>${f.up}/${f.n}</b> of your tracked lifts are trending up in estimated strength this month.${f.up>=f.n/2?' Keep it going.':f.quiet?'':' Lean on the +weight prompts to push the rest.'}`,
+      `Strength trend: <b>${f.up}</b> of <b>${f.n}</b> lifts climbing this month.${f.up>=f.n/2?" That's a good ratio.":f.quiet?'':' A few need a nudge — the +weight prompts will help.'}`])};
   }
   return {lv:f.lv||'info',x:''};
 }
 // Coaching tips: status-aware and varied (Phase E). One resolved "win" is shown first as a positive
 // opener when something's been fixed; then the active guidance in the established priority order.
-function buildTips(a,sessions,now,bw){
-  const week=isoWeek(now),ann=withStatus(sessions,now,bw),t=[];
+function buildTips(a,sessions,now,bw,profile){
+  const week=isoWeek(now),ann=withStatus(sessions,now,bw,profile),t=[];
   const active=ann.filter(f=>f.status!=='resolved'),pick=ty=>active.filter(f=>f.type===ty);
   const resolved=ann.filter(f=>f.status==='resolved'&&RESOLVABLE.has(f.type)).sort((x,y)=>(y.prio||1)-(x.prio||1));
   if(resolved.length)t.push(renderFinding(resolved[0],week));
@@ -1583,6 +1617,7 @@ function buildTips(a,sessions,now,bw){
   active.filter(f=>f.type==='region-gap'||f.type==='pattern-gap').sort((x,y)=>y.prio-x.prio).slice(0,2).forEach(f=>t.push(renderFinding(f,week)));
   const vol=pick('volume-low').sort((x,y)=>x.perWeek-y.perWeek)[0];if(vol)t.push(renderFinding(vol,week));
   const freq=pick('freq-low').sort((x,y)=>y.sets-x.sets)[0];if(freq)t.push(renderFinding(freq,week));
+  pick('protect').forEach(f=>t.push(renderFinding(f,week)));   // good news goes AFTER the warnings so the 5-tip cap never drops a warning for it
   pick('progression').forEach(f=>t.push(renderFinding(f,week)));
   return t.slice(0,5);   // may be empty — the caller owns empty-state copy (too little history vs. nothing to flag)
 }
@@ -1594,9 +1629,9 @@ function buildTips(a,sessions,now,bw){
      • undertrained → +1 set on a continued plan (self-limiting: the finding clears once volume is
        adequate, so it accumulates toward the productive range then stops);
      • imbalance/legsLow → suggestGroups for the start-screen "train this next" nudge. */
-function buildHints(sessions,now,bw){
+function buildHints(sessions,now,bw,profile){
   const a=analyze(sessions,now);
-  const F=findings(a,sessions,now,bw);
+  const F=findings(a,sessions,now,bw,profile);
   const gaps=F.filter(f=>f.type==='region-gap'||f.type==='pattern-gap');
   const undertrained=F.filter(f=>f.type==='volume-low').map(f=>f.group);
   const imbalance=F.find(f=>f.type==='balance'&&f.lv==='warn')||null;
@@ -2418,7 +2453,7 @@ function buildAndStart(fresh){
   const dl=draft.deload;
   // Coach's findings feed the builder (Phase C). The engine ignores them on a deload (recovery isn't
   // the time to add volume/coverage), so we always pass them and let planWorkout decide.
-  const hints=A.buildHints(state.sessions,Date.now(),bw());
+  const hints=A.buildHints(state.sessions,Date.now(),bw(),state.settings.profile);
   const p=B.planWorkout([...draft.groups],state.sessions,null,{fresh,hints,deload:dl,profile:state.settings.profile});
   let msg='Workout built — adjust anything';
   if(p.deload)msg=p.mode==='continue'?'Deload — same plan, lighter loads, focus on the stretch':'Deload built — lighter loads, focus on the stretch';
@@ -2434,7 +2469,7 @@ function buildAndStart(fresh){
 }
 // Reaction 1: a one-tap nudge toward the muscles the coach says are light or unbalanced this week.
 function coachNudge(){
-  const h=A.buildHints(state.sessions,Date.now(),bw());
+  const h=A.buildHints(state.sessions,Date.now(),bw(),state.settings.profile);
   if(!h.suggestGroups.length)return '';
   return `<button class="btn ghost block" id="coachNudge" data-action="coachNudge" data-groups="${h.suggestGroups.join(',')}" style="justify-content:flex-start;gap:10px;margin:0 0 4px;height:auto;padding:12px 14px;border-style:dashed;text-align:left">
     <span style="color:var(--accent);font-size:16px;flex-shrink:0">✦</span>
@@ -2667,7 +2702,7 @@ function tipsCard(tips){
 function coachCard(done){
   if(!done.length)return '';
   const a=A.analyze(state.sessions,Date.now());
-  const tips=A.buildTips(a,state.sessions,Date.now(),bw());
+  const tips=A.buildTips(a,state.sessions,Date.now(),bw(),state.settings.profile);
   if(!a.readyForComparative){
     // early on: encouragement + whatever per-muscle tips (region/pattern gaps, progression) are
     // already individually meaningful — no full balance analysis yet, so no "Effectiveness" bars
