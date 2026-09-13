@@ -2,6 +2,18 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.39.0 — 2026-09-13 · The builder listens to your profile (Roadmap v6, Phase P2)
+**Still nothing changes unless you set a profile.** Balanced remains byte-for-byte today's app; this update just makes the workout builder act on the profile you saved in P1.
+- **Avoid** — exercises you list are never proposed. If a plan you're already running contains one, it's swapped for another lift for the same muscle (with a reason: "you asked to avoid it"), and this holds even on a deload.
+- **Gym** — *Machine-focused* stops proposing barbell lifts on fresh plans (unless you've logged that lift in Smith mode, which it keeps as Smith); *Home* proposes dumbbell and bodyweight moves only.
+- **Protect** — a muscle you're keeping light drops heavy free-weight compounds from what's *proposed* and never gets an extra set added to it.
+- **Session length** — Short trims the session, Long allows one more exercise.
+- **Goal** — *Size* prescribes a couple more reps before adding weight; *Strength* keeps reps low and adds load sooner. *Balanced* is unchanged.
+- **Set style** — *Ramping* turns a main lift's top set into a 3-step climb (e.g. 150 → 170 → 190); *Straight* keeps every set at the same weight.
+- **Coaching** — *Just record* stops the app from ever suggesting a heavier weight; it only mirrors last time.
+- **What this means, plainly:** a Machine-focused or Home profile can change which exercises a *continued* plan proposes for muscles you haven't trained yet, but it never retroactively rips out a lift you're already progressing — those are kept, and the per-exercise equipment chip still records how you actually did each one.
+- Not verified on-device: nothing behavioural — every lever has an automated test with a hand-computed expected result and an off-lever control, and the builder's churn/hold/anchor-safety audits were re-run with a profile set. One rest-timer hold-repeat UI test is timing-sensitive under parallel load (green on its own); it's unrelated to this change.
+
 ## v0.38.0 — 2026-09-13 · An optional training profile (Roadmap v6, Phase P1)
 **Nothing changes unless you want it to.** Everyone stays on the balanced default, which is exactly today's app.
 - A one-time card on Home introduces it: **Take me there** opens the settings, **I'm good** dismisses it for good (and it won't reappear on your other devices).

@@ -7,7 +7,7 @@ function addExerciseToCur(id){
   if(todayScreen!=='edit'&&!state.active){S.setActive(newSession([]));}
   const t=cur();
   if(t.exercises.some(x=>x.id===id)){toast('Already added');return;}
-  t.exercises.push(B.seedExercise(id,state.sessions,{excludeId:t.id,unit:U()}));
+  {const pf=state.settings.profile||{};t.exercises.push(B.seedExercise(id,state.sessions,{excludeId:t.id,unit:U(),goal:pf.goal,setStyle:pf.sets}));}
   persistCur();if(todayScreen!=='edit')todayScreen='active';
   if(currentTab!=='today')setTab('today');else render();
   toast(EX[id].name+' added');

@@ -205,16 +205,26 @@ test('UI: P1 — the New-workout screen shows the profile summary (Balanced → 
   }finally{h.teardown();}
 });
 
-test('UI: P1 CONTROL — a saved profile does NOT change the build yet (engine untouched until P2)',()=>{
+// P2 flips the P1 control: a saved profile now reaches the builder end-to-end. Oracle: the baseline
+// continued plan contains the barbell bench; after avoid:['barbell-bench-press'] it must be gone —
+// and SWAPPED (same session size), not merely dropped. Control: a goal-only profile changes reps,
+// never the exercise list, so the ids stay identical.
+test('UI: P2 — the profile reaches the builder: avoid swaps a lift out; goal alone leaves the list',()=>{
   const h=launch();
   try{
     pushHistory(h.state,h.S);h.IL.ui.render();
     const build=()=>{h.click('[data-action="startFlow"]');['Chest','Shoulders','Triceps'].forEach(g=>h.click(h.$$('[data-g]').find(b=>b.dataset.g===g)));
       h.click('[data-action="build"]');const ids=h.state.active.exercises.map(e=>e.id);h.state.active=null;h.S.persistActive();h.click('[data-action="backHome"]');return ids;};
     const a=build();
-    h.state.settings.profile={goal:'strength',gym:'machine',protect:['Chest'],avoid:['barbell-bench-press']};h.IL.ui.render();
+    assert.ok(a.includes('barbell-bench-press'),'baseline continued plan includes the barbell bench (oracle for the swap): '+a.join(','));
+    h.state.settings.profile={avoid:['barbell-bench-press']};h.IL.ui.render();
     const b=build();
-    assert.deepEqual(b,a,'continued plan identical — profile stored but not read by the builder');
+    assert.ok(!b.includes('barbell-bench-press'),'avoid removed the barbell bench: '+b.join(','));
+    assert.equal(b.length,a.length,'same session size — the bench was swapped, not just dropped');
+    // control: goal is a seed-only lever (reps/load), so the exercise list is unchanged from baseline
+    h.state.settings.profile={goal:'strength'};h.IL.ui.render();
+    const c=build();
+    assert.deepEqual(c,a,'goal:strength changes prescriptions, not which exercises are chosen');
   }finally{h.teardown();}
 });
 

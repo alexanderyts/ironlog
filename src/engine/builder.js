@@ -4,7 +4,7 @@ var IL=globalThis.IL||(globalThis.IL={});
 if(typeof require==='function'&&!IL.data)require('../data/exercises.js');
 if(typeof require==='function'&&!IL.prog)require('./progression.js');
 const {C,I,EXERCISES,EX,REGIONS,IDEAL_PATS,PAT_RANK,EQUIP_LOAD,LONG_LENGTH,regLabel,patLabel,hashId}=IL.data;
-const {lastPerf,lastModeFor,nextSets,deloadSets,modeOf,real,DAY}=IL.prog;
+const {lastPerf,lastModeFor,nextSets,deloadSets,repRange,modeOf,real,DAY,unitIncrement}=IL.prog;
 
 // Working sets a movement deserves when you've never logged it: main lifts 4, other compounds 3,
 // isolation 3, finishers 2. Reps prefilled at the bottom of the target range.
@@ -15,14 +15,31 @@ function prescribedSets(ex){if(!ex)return 3;if(ex.type===C)return ex.tier===1?4:
 // from that modality's history so the prescription is like-for-like.
 // extraSet (Phase C volume bump) duplicates the last set once, capped at MAX_SETS_PER_EX. Never on a
 // deload (a deload reduces work) — the caller already excludes deloads from volumeBump.
+// Set-style lever (Profile P2). 'ramp': a tier-1 lift's prescription becomes three ascending sets
+// [0.8w, 0.9w, w] on the plate grid — a built-in warm-up ramp to the top set. 'straight': forces
+// every set flat at the top weight even if last time ramped. Only reshapes weighted sets, so a
+// brand-new lift with no load yet is left as-is; reps are carried from the prescription.
+function shapeStyle(sets,style,ex,unit){
+  if(!sets.length)return sets;
+  const w=Math.max(...sets.map(s=>+s.w||0));
+  if(w<=0)return sets;
+  if(style==='straight')return sets.map(s=>({w,r:s.r,done:false}));
+  if(style==='ramp'&&ex&&ex.tier===1){
+    const inc=unitIncrement(unit||'lb'),topR=sets[sets.length-1].r,grid=x=>Math.max(inc,Math.round(x/inc)*inc);
+    return[{w:grid(w*0.8),r:topR,done:false},{w:grid(w*0.9),r:topR,done:false},{w,r:topR,done:false}];
+  }
+  return sets;
+}
 function seedExercise(id,sessions,opts){
-  opts=opts||{};const {excludeId,unit,deload,extraSet}=opts;
+  opts=opts||{};const {excludeId,unit,deload,extraSet,goal,setStyle}=opts;   // goal/setStyle: profile levers
   const ex=EX[id];const mode=lastModeFor(sessions,id);
   const inst={id,name:ex?ex.name:id};if(mode)inst.mode=mode;
   const lp=lastPerf(sessions||[],id,{excludeId,mode:mode||undefined});   // real sessions only — a deload is never a baseline
+  const rr=goal?repRange(ex,goal):(ex?ex.rr:[8,12]);   // goal shifts the target range in one place
   let sets;
-  if(lp&&lp.sets.length)sets=(deload?deloadSets(lp.sets,ex,unit):nextSets(lp.sets,ex,unit).sets).map(s=>({w:s.w,r:s.r,done:false}));
-  else{const n=prescribedSets(ex),r=ex?(deload?ex.rr[1]:ex.rr[0]):'';sets=Array.from({length:n},()=>({w:'',r:r,done:false}));}
+  if(lp&&lp.sets.length)sets=(deload?deloadSets(lp.sets,ex,unit):nextSets(lp.sets,ex,unit,goal?rr:undefined).sets).map(s=>({w:s.w,r:s.r,done:false}));
+  else{const n=prescribedSets(ex),r=ex?(deload?rr[1]:rr[0]):'';sets=Array.from({length:n},()=>({w:'',r:r,done:false}));}
+  if(!deload&&setStyle)sets=shapeStyle(sets,setStyle,ex,unit);   // never reshape a deload — recovery has its own prescription
   if(deload&&sets.length>DELOAD_MAX_SETS)sets=sets.slice(0,DELOAD_MAX_SETS);   // a deload cuts volume as well as load
   if(extraSet&&!deload&&sets.length&&sets.length<MAX_SETS_PER_EX){const last=sets[sets.length-1];sets.push({w:last.w,r:last.r,done:false});}
   inst.sets=sets;return inst;
@@ -73,11 +90,28 @@ function fillsGap(e,hints){
   if(!hints||!hints.gaps)return false;
   return hints.gaps.some(gp=>gp.group===e.group&&(gp.reg===e.reg||gp.pat===e.pat));
 }
+// Training-profile equipment/avoid/protect levers, applied to a candidate list in a FIXED order
+// (avoid → gym → protect) so they compose predictably. Each is a no-op when the profile is Balanced.
+// Never returns empty: if a lever would strand a group, it backs off to the least-restrictive result.
+function profilePool(list,g,profile,sessions){
+  if(!profile)return list;
+  const avoid=profile.avoid&&profile.avoid.length?new Set(profile.avoid):null;
+  let p=avoid?list.filter(e=>!avoid.has(e.id)):list;
+  const gymFilter=e=>profile.gym==='machine'?(e.equip!=='Barbell'||lastModeFor(sessions,e.id)==='smith')
+    :profile.gym==='home'?(e.equip==='Dumbbell'||e.equip==='Bodyweight')
+    :true;
+  const protectFilter=e=>(profile.protect&&profile.protect.indexOf(g)>=0)?!(e.tier===1&&e.type==='compound'&&(e.equip==='Barbell'||e.equip==='Dumbbell')):true;
+  const full=p.filter(e=>gymFilter(e)&&protectFilter(e));
+  if(full.length)return full;              // best case: all levers satisfied
+  const gymOnly=p.filter(gymFilter);
+  if(gymOnly.length)return gymOnly;        // protect emptied it → keep the gym constraint at least
+  return p.length?p:list;                  // gym emptied it → avoid-only, else the untouched list
+}
 // `trace` (optional array) collects {id, sc, why:[...]} for every pick — a window into WHY the builder
 // chose each exercise, used by tools/review.js. No effect on the result.
-function pickForGroup(g,per,seed,sessions,hints,trace){
+function pickForGroup(g,per,seed,sessions,hints,trace,profile){
   sessions=sessions||[];
-  const pool=EXERCISES.filter(e=>e.group===g);
+  const pool=profilePool(EXERCISES.filter(e=>e.group===g),g,profile,sessions);
   if(!pool.length)return [];
   const ideal=REGIONS[g]||['overall'],idealPats=IDEAL_PATS[g]||['iso'];
   const recent=lastSessionIds(sessions,g);
@@ -126,10 +160,11 @@ function pickForGroup(g,per,seed,sessions,hints,trace){
   return sel;
 }
 // groups: muscle groups in the order the user picked them (first = session focus)
-function buildRecommendation(groups,sessions,seed,hints,trace){
+function buildRecommendation(groups,sessions,seed,hints,trace,profile){
   groups=groups&&groups.length?groups.slice():['Chest','Back'];
   seed=seed==null?Math.floor(Math.random()*997):seed;
-  const total=groups.length>=4?7:groups.length===3?7:groups.length===2?6:4;
+  let total=groups.length>=3?7:groups.length===2?6:4;
+  if(profile){if(profile.length==='short')total=Math.min(total,5);else if(profile.length==='long')total=Math.min(total+1,8);}   // session-size lever
   const per={};const base=Math.max(1,Math.floor(total/groups.length));
   groups.forEach(g=>per[g]=base);
   let rem=total-base*groups.length;
@@ -137,11 +172,11 @@ function buildRecommendation(groups,sessions,seed,hints,trace){
   for(let i=0;i<rem;i++)per[bySize[i%bySize.length]]++;
   let out=[];
   groups.forEach(g=>{const cap=Math.min(per[g],Math.max((REGIONS[g]||['overall']).length,(IDEAL_PATS[g]||[]).length)+1,EXERCISES.filter(e=>e.group===g).length);
-    out.push(...pickForGroup(g,cap,seed,sessions,hints,trace).map(e=>e.id));});
-  // Hard session ceiling: picking many groups (e.g. all 11) must not produce a 11-exercise workout.
+    out.push(...pickForGroup(g,cap,seed,sessions,hints,trace,profile).map(e=>e.id));});
+  // Hard session ceiling: picking many groups (e.g. all 11) must not produce an 11-exercise workout.
   // orderByFatigue puts the highest-priority work first, so the slice drops the lowest-priority
-  // isolation last — a full-body pick lands on ~7 compound-led exercises.
-  return orderByFatigue(capHeavyAxial(out),groups[0]).slice(0,MAX_SESSION_EX);
+  // isolation last. The 'long' length lever raises the ceiling to 8.
+  return orderByFatigue(capHeavyAxial(out),groups[0]).slice(0,Math.max(MAX_SESSION_EX,total));
 }
 // Suggest exercises that COMPLEMENT what's already chosen — always from a muscle group already in
 // the workout (a pull day should never get a press "to balance" it; that's a program-level,
@@ -276,23 +311,24 @@ function planAnchor(ids,g){
 // The replacement for a rotated exercise is DETERMINISTIC (tie-broken by hashId, not the build seed)
 // so rebuilding a stalled plan gives the same swap — a rotation shouldn't be a lottery. (Seed still
 // varies fresh builds; only the continue-path rotation goes through here.)
-function replacementFor(exId,planIds,seed,hints){
+function replacementFor(exId,planIds,seed,hints,profile,sessions){
   const e=EX[exId];
-  const cands=EXERCISES.filter(x=>x.group===e.group&&x.id!==exId&&planIds.indexOf(x.id)<0);
+  const cands=profilePool(EXERCISES.filter(x=>x.group===e.group&&x.id!==exId&&planIds.indexOf(x.id)<0),e.group,profile,sessions);
   return cands.map(x=>{let sc=(x.reg===e.reg?4:0)+(x.pat===e.pat?3:0)+(x.type===e.type?1:0)+(x.tier===1?.5:x.tier===2?.3:0)+(fillsGap(x,hints)?2:0)+(hashId(x.id)%5)/100;return{x,sc};})
     .sort((a,b)=>b.sc-a.sc)[0]?.x||null;
 }
 // A same-group, same-pattern tier-1 alternative for a stalled anchor (bench→incline, squat→front
 // squat) — a variation for the block, never a change of pattern. Deterministic. Null if none.
-function anchorVariation(exId,planIds,seed){
+function anchorVariation(exId,planIds,seed,profile,sessions){
   const e=EX[exId];
-  const cands=EXERCISES.filter(x=>x.tier===1&&x.group===e.group&&x.pat===e.pat&&x.id!==exId&&planIds.indexOf(x.id)<0);
+  const cands=profilePool(EXERCISES.filter(x=>x.tier===1&&x.group===e.group&&x.pat===e.pat&&x.id!==exId&&planIds.indexOf(x.id)<0),e.group,profile,sessions);
   return cands.sort((a,b)=>perfPriority(b)-perfPriority(a)||(hashId(a.id)%5)-(hashId(b.id)%5))[0]||null;
 }
 // An exercise id to cover a flagged gap that isn't already in the plan (Phase C reaction 4).
-function gapFillExercise(gp,ids){
-  if(gp.type==='pattern-gap'&&gp.exId&&ids.indexOf(gp.exId)<0)return gp.exId;
-  const cands=EXERCISES.filter(x=>x.group===gp.group&&ids.indexOf(x.id)<0&&(gp.reg?x.reg===gp.reg:x.pat===gp.pat));
+function gapFillExercise(gp,ids,profile,sessions){
+  const avoided=id=>profile&&profile.avoid&&profile.avoid.indexOf(id)>=0;
+  if(gp.type==='pattern-gap'&&gp.exId&&ids.indexOf(gp.exId)<0&&!avoided(gp.exId))return gp.exId;
+  const cands=profilePool(EXERCISES.filter(x=>x.group===gp.group&&ids.indexOf(x.id)<0&&(gp.reg?x.reg===gp.reg:x.pat===gp.pat)),gp.group,profile,sessions);
   return cands.sort((a,b)=>(a.tier-b.tier)||(perfPriority(b)-perfPriority(a)))[0]?.id||null;
 }
 // What to train for these groups today. Returns {ids, mode:'continue'|'fresh', plan, rotation, streak,
@@ -302,11 +338,18 @@ function planWorkout(groups,sessions,seed,opts){
   opts=opts||{};sessions=sessions||[];
   groups=groups&&groups.length?groups.slice():['Chest','Back'];
   seed=seed==null?Math.floor(Math.random()*997):seed;
-  const deload=!!opts.deload;
+  const deload=!!opts.deload,profile=opts.profile;
+  const maxEx=profile&&profile.length==='long'?8:MAX_SESSION_EX;
+  const protect=new Set(profile&&profile.protect||[]);
   const hints=deload?null:opts.hints,reactions=[],volumeBump=[];   // a deload never adds volume/coverage
   const plan=opts.fresh?null:findPlan(groups,sessions,opts.now);
-  if(!plan)return{ids:buildRecommendation(groups,sessions,seed,hints),mode:'fresh',plan:null,rotation:null,streak:0,reactions,volumeBump,deload};
+  if(!plan)return{ids:buildRecommendation(groups,sessions,seed,hints,undefined,profile),mode:'fresh',plan:null,rotation:null,streak:0,reactions,volumeBump,deload};
   let ids=plan.exercises.map(e=>e.id).filter(id=>EX[id]);
+  // Profile 'avoid' applies even to a continued plan: swap any avoided lift for a same-group
+  // alternative (a user directive, not a reaction — so it holds on a deload too).
+  if(profile&&profile.avoid&&profile.avoid.length){const av=new Set(profile.avoid);
+    ids=ids.map(id=>{if(!av.has(id))return id;const to=replacementFor(id,ids,seed,hints,profile,sessions);
+      if(to){reactions.push({type:'avoid-swap',from:id,to:to.id,why:'swapped '+(EX[id]?EX[id].name:id)+' — you asked to avoid it'});return to.id;}return id;});}
   // A deload CONTINUES the plan verbatim — same exercises, just lighter (seedExercise cuts load and
   // volume). Zero structural changes: no stall check, rotation, anchor swap, gap-add or volume bump.
   if(deload)return{ids:orderByFatigue(capHeavyAxial(ids),groups[0]),mode:'continue',plan,rotation:null,streak:0,reactions,volumeBump,deload:true};
@@ -319,7 +362,7 @@ function planWorkout(groups,sessions,seed,opts){
     if(!recentDeload(sessions,{now:opts.now,exId:aid}))continue;
     const t=exerciseTenure(sessions,aid);
     if(t.weeks>=ANCHOR_STALL_WEEKS&&isStalled(sessions,aid,{mode:modeById[aid],now:opts.now})){
-      const to=anchorVariation(aid,ids,seed);
+      const to=anchorVariation(aid,ids,seed,profile,sessions);
       if(to){ids=ids.map(id=>id===aid?to.id:id);rotation={from:aid,to:to.id,why:'anchor-stalled',anchor:true};structural=true;break;}
     }
   }
@@ -328,20 +371,20 @@ function planWorkout(groups,sessions,seed,opts){
   if(!structural){
     const cands=ids.filter(id=>!anchors.has(id)).map(id=>({id,sessions:exerciseTenure(sessions,id).sessions,stalled:isStalled(sessions,id,{mode:modeById[id],now:opts.now})}))
       .filter(c=>c.stalled).sort((a,b)=>b.sessions-a.sessions);
-    if(cands.length){const c=cands[0],to=replacementFor(c.id,ids,seed,hints);
+    if(cands.length){const c=cands[0],to=replacementFor(c.id,ids,seed,hints,profile,sessions);
       if(to){ids=ids.map(id=>id===c.id?to.id:id);rotation={from:c.id,to:to.id,why:'stalled',streak:c.sessions};structural=true;}}
   }
   // 3. Gap-ADD (never a swap): one exercise for a flagged region/pattern the plan doesn't cover, only
   //    if there's room and no structural change happened yet. Self-limiting — once logged, gap clears.
-  if(!structural&&hints&&hints.gaps&&ids.length<MAX_SESSION_EX){
+  if(!structural&&hints&&hints.gaps&&ids.length<maxEx){
     const covered=gp=>ids.some(id=>EX[id]&&EX[id].group===gp.group&&(gp.reg?EX[id].reg===gp.reg:EX[id].pat===gp.pat));
-    const gp=hints.gaps.filter(g=>groups.indexOf(g.group)>=0&&!covered(g)).sort((a,b)=>b.prio-a.prio)[0];
-    if(gp){const add=gapFillExercise(gp,ids);if(add&&EX[add]){ids.push(add);structural=true;reactions.push({type:'gap-add',exId:add,group:gp.group,why:'covers '+(gp.reg?regLabel(gp.group,gp.reg):patLabel(gp.pat))});}}
+    const gp=hints.gaps.filter(g=>groups.indexOf(g.group)>=0&&!protect.has(g.group)&&!covered(g)).sort((a,b)=>b.prio-a.prio)[0];
+    if(gp){const add=gapFillExercise(gp,ids,profile,sessions);if(add&&EX[add]){ids.push(add);structural=true;reactions.push({type:'gap-add',exId:add,group:gp.group,why:'covers '+(gp.reg?regLabel(gp.group,gp.reg):patLabel(gp.pat))});}}
   }
   // 4. Volume bump (+1 set) for an undertrained group — one exercise each, self-limiting (the finding
   //    clears once weekly volume is adequate). seedExercise enforces the per-exercise set ceiling.
   if(hints&&hints.undertrained){
-    hints.undertrained.forEach(g=>{if(groups.indexOf(g)<0)return;
+    hints.undertrained.forEach(g=>{if(groups.indexOf(g)<0||protect.has(g))return;   // never add volume to a protected muscle
       const target=ids.find(id=>EX[id]&&EX[id].group===g&&anchors.has(id))||ids.find(id=>EX[id]&&EX[id].group===g);
       if(target&&volumeBump.indexOf(target)<0){volumeBump.push(target);reactions.push({type:'volume',exId:target,group:g,why:g.toLowerCase()+' volume is low — added a set'});}
     });

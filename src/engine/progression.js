@@ -172,8 +172,19 @@ function fmtPerf(sets,unit){
 
 // What to load next time, from last time's working sets. Returns {sets:[{w,r}], bumped, pattern,
 // anchor, short:(anchor reps missing), under:(any anchor set below the range)}
-function nextSets(last,ex,unit){
-  const lo=ex?ex.rr[0]:8,hi=ex?ex.rr[1]:12,inc=unitIncrement(unit||'lb');
+// Effective rep range for a fresh prescription, biased by the training goal (Profile P2). 'general'
+// or no profile = the exercise's own range (today's behaviour). 'strength' pins the target to the
+// low end so load is added as soon as that rep count is met (heavy, low-rep work). 'size' nudges the
+// whole window up by two reps — more reps banked before loading — capped at 15 so it never runs away.
+// One place owns the shift, so seedExercise and nextSets stay in agreement.
+function repRange(ex,goal){
+  const lo=ex?ex.rr[0]:8,hi=ex?ex.rr[1]:12;
+  if(goal==='strength')return[lo,lo];
+  if(goal==='size')return[Math.min(lo+2,15),Math.min(hi+2,15)];
+  return[lo,hi];
+}
+function nextSets(last,ex,unit,rr){
+  const lo=rr?rr[0]:(ex?ex.rr[0]:8),hi=rr?rr[1]:(ex?ex.rr[1]:12),inc=unitIncrement(unit||'lb');
   const p=setPattern(last);
   const anchorSets=p.anchor.map(i=>last[i]);
   const short=anchorSets.reduce((n,s)=>n+Math.max(0,hi-(+s.r||0)),0);
@@ -215,7 +226,12 @@ function suggestion(sessions,exId,opts){
     if(dl)return{lp:null,kind:'new',text:'No full session yet — your last deload here was '+fmtPerf(dl.sets,unit)+'. Set your baseline.',next:null,deloadRef:dl};
     return{lp:null,kind:'new',text:'First time logging this — set your baseline.',next:null};
   }
-  const n=nextSets(lp.sets,ex,unit),setsStr=fmtPerf(lp.sets,unit),inc=unitIncrement(unit);
+  const setsStr=fmtPerf(lp.sets,unit),inc=unitIncrement(unit);
+  // push:'quiet' (Profile P2) — the user asked the app to just record, never suggest heavier. Mirror
+  // last time as-is: no bump, neutral wording. The prescription still carries last time's numbers so
+  // they aren't retyped; the coach simply stops nudging.
+  if(opts.push==='quiet')return{lp,kind:'match',pattern:setPattern(lp.sets).pattern,text:'Recorded — last time was '+setsStr,setsStr,next:lp.sets.map(s=>({w:+s.w||0,r:+s.r||0}))};
+  const n=nextSets(lp.sets,ex,unit,opts.rr);
   const ramp=n.pattern!=='flat';
   const topLbl=n.pattern==='descending'?'opener':'top set';
   if(n.bumped){
@@ -260,5 +276,5 @@ function calcStreak(sessions,now){
   return n;
 }
 
-IL.prog={DAY,startOfDay,e1rm,isWorking,setLoad,sessionVolume,sessionSets,sessionDuration,setTimeline,lastSetAt,staleness,STALE_AFTER_MIN,LONG_SESSION_MIN,STALE_CONFIRM_MIN,END_PAD_MIN,finalizeSets,parseWeightInput,fmtVol,modeOf,real,lastPerf,lastModeFor,exerciseSeries,bestE1rmBefore,setPattern,fmtPerf,nextSets,deloadSets,suggestion,unitIncrement,convertWeight,convertSessions,calcStreak,weekIndex,weekStart};
+IL.prog={DAY,startOfDay,e1rm,isWorking,setLoad,sessionVolume,sessionSets,sessionDuration,setTimeline,lastSetAt,staleness,STALE_AFTER_MIN,LONG_SESSION_MIN,STALE_CONFIRM_MIN,END_PAD_MIN,finalizeSets,parseWeightInput,fmtVol,modeOf,real,lastPerf,lastModeFor,exerciseSeries,bestE1rmBefore,setPattern,fmtPerf,repRange,nextSets,deloadSets,suggestion,unitIncrement,convertWeight,convertSessions,calcStreak,weekIndex,weekStart};
 if(typeof module!=='undefined')module.exports=IL.prog;
