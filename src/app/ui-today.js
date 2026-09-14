@@ -27,7 +27,7 @@ function homeView(){
       <div class="card stat" style="padding:14px 12px"><div class="k">Streak</div><div class="v mono">${streak}<small>wk</small></div></div>
       <div class="card stat" style="padding:14px 12px"><div class="k">${volLabel()}</div><div class="v mono">${fmtVol(wkVol)}</div></div>
     </div>
-    ${state.active?'':startBlock(last)}
+    ${state.active?'':startBlock()}
     ${last?`<div class="eyebrow" style="margin:26px 2px 10px">Last session</div>${sessCard(last)}`:emptyHome()}
     <div class="eyebrow" style="margin:24px 2px 10px">Jump in</div>
     <button class="btn ghost block" id="btnGoLibrary" data-action="goLibrary" style="justify-content:space-between">
@@ -35,18 +35,12 @@ function homeView(){
   </div>`;
 }
 function emptyHome(){return `<div class="card" style="padding:26px 18px;text-align:center;margin-top:20px"><div class="dim">No workouts logged yet.<br>Tap <b style="color:var(--accent)">Start a workout</b> above to log your first session.</div></div>`;}
-// Home's primary action. With a recent plan it's ONE tap to continue it (weights carried forward),
-// with the full "what are you training?" picker demoted to secondary — the plan used to cost 4–5 taps (#9).
-function startBlock(last){
+// Home's primary action: YOU choose what to train. The app doesn't lead with a "plan" it decided —
+// it just opens the picker; guidance (your last session, the coach's suggestions, prefilled weights)
+// shows up once you've chosen.
+function startBlock(){
   const START=`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>`;
-  const groups=last?[...new Set(last.exercises.map(e=>EX[e.id]&&EX[e.id].group).filter(Boolean))]:[];
-  if(!groups.length)   // no history yet → just the picker
-    return `<button class="btn primary block" id="btnStartFlow" data-action="startFlow" style="height:56px;font-size:16px">${START} Start a workout</button>`;
-  const label=groups.slice(0,3).join(' · ')+(groups.length>3?' · +'+(groups.length-3):'');
-  return `<button class="btn primary block" data-action="nextUp" data-groups="${groups.join(',')}" style="height:auto;padding:13px 16px;font-size:16px;justify-content:space-between">
-      <span style="text-align:left;min-width:0"><span style="font-weight:700;display:block">Continue your plan</span><span style="font-size:12.5px;font-weight:500;opacity:.85">${esc(label)} · from ${relDay(last.date).toLowerCase()}</span></span>
-      <span style="font-size:20px;flex-shrink:0">→</span></button>
-    <button class="btn ghost block" id="btnStartFlow" data-action="startFlow" style="margin-top:9px">Something else</button>`;
+  return `<button class="btn primary block" id="btnStartFlow" data-action="startFlow" style="height:56px;font-size:16px">${START} Start a workout</button>`;
 }
 // One-time card introducing the optional training profile (P1). Dismissed by either button (synced).
 function profileIntroCard(){
@@ -70,7 +64,7 @@ function startWorkoutView(){
     <div style="padding:0 2px">
       <div class="eyebrow">New workout</div>
       <h2 style="font-size:24px;margin-top:6px">What are you training?</h2>
-      <p class="muted" style="margin:7px 0 0">Pick your muscle groups (first pick leads the session) and I'll build a balanced plan — or start from scratch.</p>
+      <p class="muted" style="margin:7px 0 0">Pick your muscle groups (first pick leads the session) and I'll fill in a balanced set of exercises with your weights from last time — or start from scratch.</p>
     </div>
     <div style="height:18px"></div>${coachNudge()}
     <div class="eyebrow" style="margin:16px 2px 10px">Quick picks</div>
@@ -94,18 +88,19 @@ function buildButtons(){
   const plan=draft.groups.size?B.findPlan([...draft.groups],state.sessions):null;
   if(!plan){const noSel=!draft.groups.size;   // building nothing silently defaulted to Chest+Back — make the user choose (#25)
     return `<button class="btn primary block" id="btnRecommend" data-action="build" ${noSel?'disabled':''} style="height:56px;font-size:16px${noSel?';opacity:.5':''}">${ICON_BUILD} ${noSel?'Pick a muscle group above':(dl?'Build me a deload':'Build me a workout')}</button>`;}
-  // On a deload we continue the SAME plan lighter — no "Session N" progression framing.
+  // The user picked these muscles and has trained them before — offer to build with the SAME exercises
+  // and their weights carried forward (that's the guidance), or shuffle in different exercises. No
+  // "plan"/"Session N" framing: the app remembers, it doesn't decide the program.
   if(dl)return `<button class="btn primary block" id="btnRecommend" data-action="build" style="height:auto;padding:12px 16px;font-size:16px;flex-direction:column;gap:2px">
-      <span style="display:flex;align-items:center;gap:8px">🌿 Deload this plan</span>
-      <span style="font-size:12.5px;font-weight:500;opacity:.85">${plan.exercises.length} exercises from ${relDay(plan.date).toLowerCase()} · lighter loads</span></button>
+      <span style="display:flex;align-items:center;gap:8px">🌿 Build a deload</span>
+      <span style="font-size:12.5px;font-weight:500;opacity:.85">same lifts as ${relDay(plan.date).toLowerCase()}, ~60% lighter</span></button>
     <div style="height:8px"></div>
-    <button class="btn ghost block" id="btnFresh" data-action="buildFresh">Build a fresh deload instead</button>`;
-  const wk=Math.min(...plan.exercises.map(e=>B.exerciseStreak(state.sessions,e.id)))+1;
+    <button class="btn ghost block" id="btnFresh" data-action="buildFresh">Different exercises instead</button>`;
   return `<button class="btn primary block" id="btnRecommend" data-action="build" style="height:auto;padding:12px 16px;font-size:16px;flex-direction:column;gap:2px">
-      <span style="display:flex;align-items:center;gap:8px">${ICON_BUILD} Continue your plan</span>
-      <span style="font-size:12.5px;font-weight:500;opacity:.85">Session ${wk} · ${plan.exercises.length} exercises from ${relDay(plan.date).toLowerCase()}</span></button>
+      <span style="display:flex;align-items:center;gap:8px">${ICON_BUILD} Build my workout</span>
+      <span style="font-size:12.5px;font-weight:500;opacity:.85">same lifts as ${relDay(plan.date).toLowerCase()} · weights prefilled from last time</span></button>
     <div style="height:8px"></div>
-    <button class="btn ghost block" id="btnFresh" data-action="buildFresh">Build a fresh plan instead</button>`;
+    <button class="btn ghost block" id="btnFresh" data-action="buildFresh">Different exercises instead</button>`;
 }
 // Re-render just the build buttons in place (their label depends on the picked groups / deload).
 function refreshBuildBtns(){const bb=$('#buildBtns');if(bb)bb.innerHTML=buildButtons();}
@@ -180,15 +175,15 @@ function buildAndStart(fresh){
   const hints=A.buildHints(state.sessions,Date.now(),bw(),state.settings.profile);
   const p=B.planWorkout([...draft.groups],state.sessions,null,{fresh,hints,deload:dl,profile:state.settings.profile});
   let msg='Workout built — adjust anything';
-  if(p.deload)msg=p.mode==='continue'?'Deload — same plan, lighter loads, focus on the stretch':'Deload built — lighter loads, focus on the stretch';
+  if(p.deload)msg=p.mode==='continue'?'Deload — same lifts as last time, lighter loads, focus on the stretch':'Deload built — lighter loads, focus on the stretch';
   else if(p.mode==='continue'){
     const gapAdd=(p.reactions||[]).find(r=>r.type==='gap-add');
-    if(p.lapsed)msg=`Welcome back — continued your plan from ${relDay(p.plan.date).toLowerCase()}, weights where you left off`;
-    else if(p.rotation&&p.rotation.anchor)msg=`Swapped ${EX[p.rotation.from].name} → ${EX[p.rotation.to].name} — it stalled through a deload`;
-    else if(p.rotation)msg=`Plan continued · swapped ${EX[p.rotation.from].name} → ${EX[p.rotation.to].name} (it stalled)`;
-    else if(gapAdd)msg=`Plan continued · added ${EX[gapAdd.exId].name} — ${gapAdd.why}`;
-    else if(p.volumeBump&&p.volumeBump.length){const vr=(p.reactions||[]).find(r=>r.type==='volume');msg='Plan continued · +1 set on '+((vr&&EX[vr.exId]&&EX[vr.exId].name)||(vr&&vr.group)||'a lift where volume was low');}
-    else msg='Plan continued — weights progressed from last time';
+    if(p.lapsed)msg=`Welcome back — weights carried from your session ${relDay(p.plan.date).toLowerCase()}`;
+    else if(p.rotation&&p.rotation.anchor)msg=`Suggested swap: ${EX[p.rotation.from].name} → ${EX[p.rotation.to].name} — it stalled through a deload`;
+    else if(p.rotation)msg=`Suggested swap: ${EX[p.rotation.from].name} → ${EX[p.rotation.to].name} (it stalled) — the rest carried from last time`;
+    else if(gapAdd)msg=`Weights from last time · added ${EX[gapAdd.exId].name} to round it out`;
+    else if(p.volumeBump&&p.volumeBump.length){const vr=(p.reactions||[]).find(r=>r.type==='volume');msg='Weights from last time · +1 set on '+((vr&&EX[vr.exId]&&EX[vr.exId].name)||(vr&&vr.group)||'a lift where volume was low');}
+    else msg='Weights carried from your last session — adjust anything';
   }
   startSession({ids:p.ids,msg,deload:p.deload,volumeBump:p.volumeBump,source:'build'});
 }

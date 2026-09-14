@@ -146,7 +146,10 @@ test('frequency nudge: real weekly volume packed into ~one session/week',()=>{
   // with date-dependent tips like a deload prompt and isn't a stable target after the Phase A refactor.
   const F=A.findings(a,hist,now,0);
   assert.ok(F.some(f=>f.type==='freq-low'&&f.group==='Chest'),'a low-frequency finding fires for chest');
-  assert.ok(A.renderFinding(F.find(f=>f.type==='freq-low'&&f.group==='Chest')).x.match(/train chest hard but about once a week/i),'and renders the expected copy');
+  // variant-independent: both wordings name the muscle and suggest spreading it over 2 days (asserting
+  // one specific variant flaked as the week rotated the phrasing)
+  const fx=A.renderFinding(F.find(f=>f.type==='freq-low'&&f.group==='Chest')).x;
+  assert.ok(/chest/i.test(fx)&&/2 days/i.test(fx),'renders chest freq copy: '+fx);
 });
 
 test('deload prompt appears only after a long unbroken training streak',()=>{

@@ -172,7 +172,6 @@ const ACTIONS={
   backHome:()=>leaveEditor(),
   build:()=>buildAndStart(false),
   buildFresh:()=>buildAndStart(true),
-  nextUp:el=>{draft.groups=new Set(el.dataset.groups.split(','));draft.deload=false;buildAndStart(false);},   // Home one-tap continue (#9)
   coachNudge:el=>{draft.groups=new Set(el.dataset.groups.split(','));render();},
   preset:el=>{const p=PRESETS.find(x=>x.label===el.dataset.preset);if(!p)return;
     draft.groups=presetOn(p)?new Set():new Set(p.groups);   // tap to select those groups; tap again to clear

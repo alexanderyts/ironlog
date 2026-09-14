@@ -84,9 +84,9 @@ test('UI: with a plan, toggling deload builds the same exercises lighter (no "Se
     h.IL.ui.render();
     h.click('[data-action="startFlow"]');
     ['Chest','Shoulders','Triceps'].forEach(g=>h.click(h.$$('[data-g]').find(b=>b.dataset.g===g)));
-    assert.ok(h.text('#btnRecommend').includes('Continue'),'normal label is Continue your plan');
+    assert.ok(h.text('#btnRecommend').includes('Build my workout'),'normal label is user-owned "Build my workout", not "your plan"');
     h.click('[data-action="deloadToggle"]');
-    assert.ok(h.text('#btnRecommend').includes('Deload this plan'),'deload label, no "Session N"');
+    assert.ok(h.text('#btnRecommend').includes('Build a deload'),'deload label');
     h.click('[data-action="build"]');
     const a=h.state.active;
     assert.equal(a.deload,true,'built as a deload');
@@ -403,11 +403,11 @@ test('C2: "Got it" hides a coaching note and Settings can bring it back',()=>{
       exercises:[{id:'barbell-bench-press',name:'B',sets:[{w:135,r:8,done:true},{w:135,r:8,done:true},{w:135,r:8,done:true}]},
                  {id:'overhead-press',name:'O',sets:[{w:75,r:8,done:true},{w:75,r:8,done:true}]}]});
     h.IL.ui.setTab('progress');h.IL.ui.render();
-    assert.ok(h.bodyText().includes('outrunning your pulling'),'the balance note is shown');
+    // variant-independent: assert the balance note's mute control is present (the exact wording rotates weekly)
     const got=h.$$('[data-mute]').find(b=>b.dataset.mute==='balance');
-    assert.ok(got,'a "Got it" control is offered on the note');
+    assert.ok(got,'the balance note is shown with a "Got it" control');
     h.click(got);
-    assert.ok(!h.bodyText().includes('outrunning your pulling'),'the note is hidden after Got it');
+    assert.ok(!h.$$('[data-mute]').some(b=>b.dataset.mute==='balance'),'the note (and its mute) is gone after Got it');
     assert.equal(h.state.settings.seen['mute:balance'],true,'the mute is stored (and syncs)');
     // Settings offers to bring it back
     h.IL.ui.openSettings();
@@ -427,14 +427,17 @@ test('D5/D7/D8: Home continues the plan in one tap; empty selection disables Bui
     h.click(h.$$('[data-g]').find(b=>b.dataset.g==='Chest'));
     assert.equal(h.$('#btnRecommend').disabled,false,'enabled once a group is chosen');
     h.click('[data-action="backHome"]');
-    // seed history so Home shows a one-tap "Continue your plan"
+    // The user drives: Home leads with "Start a workout" (the picker), NOT a "your plan" card. With
+    // history, picking those muscles offers to build with weights carried from last time (guidance).
     pushHistory(h.state,h.S);h.IL.ui.setTab('today');h.IL.ui.render();
-    const cont=h.$$('[data-action="nextUp"]')[0];
-    assert.ok(cont,'Home shows a one-tap Continue card');
-    assert.ok(h.bodyText().includes('Continue your plan'),'labelled Continue your plan');
-    h.click(cont);   // ONE tap → a workout is built and started
-    assert.ok(h.state.active,'a workout started from the single tap');
-    assert.ok(h.state.active.exercises.length>=1,'with exercises from the last plan');
+    assert.ok(!h.bodyText().includes('Continue your plan'),'Home does not claim a plan the user never set');
+    assert.ok(h.has('[data-action="startFlow"]'),'Home leads with Start a workout (user picks)');
+    h.click('[data-action="startFlow"]');
+    ['Chest','Shoulders','Triceps'].forEach(g=>h.click(h.$$('[data-g]').find(b=>b.dataset.g===g)));
+    assert.ok(h.text('#btnRecommend').match(/Build my workout/),'once picked, it offers to build with prefilled weights');
+    assert.ok(h.bodyText().match(/weights prefilled from last time/i),'framed as guidance, not a plan');
+    h.click('[data-action="build"]');
+    assert.ok(h.state.active&&h.state.active.exercises.length>=1,'the workout the user chose is built');
     // D8: History renders a page + a Show more when there are many sessions
     h.state.active=null;h.S.persistActive();
     const now=Date.now();h.state.sessions=[];for(let i=0;i<45;i++)h.state.sessions.push({id:'h'+i,schema:1,date:now-i*2*86400000,updatedAt:1,completed:true,exercises:[{id:'barbell-bench-press',name:'B',sets:[{w:135,r:6,done:true}]}]});

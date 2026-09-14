@@ -2,6 +2,11 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.45.1 — 2026-09-14 · You pick the workout; the app just remembers
+Two changes from your feedback on v0.45.
+- **Reverted the type changes.** The muted-text colour and the slightly larger labels from the last update are back to how they were. (One thing kept: the green Finish button uses dark text in dark mode — it was genuinely too faint to read before, and it's invisible in light mode.)
+- **The app no longer says "your plan".** You never set a plan, so it shouldn't claim one. Home now simply leads with **Start a workout** — you choose what you're training that day. Once you pick your muscles, it offers to fill in the same lifts with your **weights prefilled from last time** (or different exercises if you'd rather), and the last-session card and coach notes are there as guidance. The wording throughout ("Session N", "continue your plan", "plan continued") is gone — the app remembers and suggests; it doesn't drive.
+
 ## v0.45.0 — 2026-09-13 · Faster, clearer, one tap to your plan (Roadmap v7, Phase D)
 The between-sets experience: less friction, easier to read, sized for a thumb.
 - **One tap to keep going.** Home now leads with **Continue your plan · [your muscles] · from [when]** — a single tap builds your next session with the weights carried forward. The full "what are you training?" picker is still there behind **Something else**. (It used to take four or five taps to get to the same place.)
