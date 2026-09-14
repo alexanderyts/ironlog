@@ -7,6 +7,11 @@ test('sessionDuration: whole minutes from date→endedAt, null when untimed or n
   assert.equal(IL.prog.sessionDuration({date:start,endedAt:start+90*1000}),2,'rounds to nearest minute (1.5→2)');
   assert.equal(IL.prog.sessionDuration({date:start}),null,'no endedAt (pre-timing session) → null');
   assert.equal(IL.prog.sessionDuration({date:start,endedAt:start-5}),null,'end before start → null');
+  // a span beyond 8h is a forgotten Finish, not a workout: unknown rather than a 3,000-minute session
+  assert.equal(IL.prog.MAX_SESSION_MIN,480);
+  assert.equal(IL.prog.sessionDuration({date:start,endedAt:start+479*60000}),479,'control: 7h59 is still a (long) workout');
+  assert.equal(IL.prog.sessionDuration({date:start,endedAt:start+481*60000}),null,'8h01 → null');
+  assert.equal(IL.prog.sessionDuration({date:start,endedAt:start+50*3600000}),null,'the 50-hour session → null');
 });
 
 test('setTimeline: stamped checked sets as {exId,group,at}, oldest first; unstamped skipped (T1)',()=>{

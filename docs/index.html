@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-6WUMZ7hTaRJLBSKzAfRQAPzwYZHHI+ebr52lH9zW86Q=' 'sha256-WPBob/luB2k1aalTWXpi6zk3SrIbj8GlZV7AlFdG7oA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-UyccSTr19VdTpp3/VZjWbOTRAA9lZR1UPMBOHZgl2r8=' 'sha256-WPBob/luB2k1aalTWXpi6zk3SrIbj8GlZV7AlFdG7oA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Ironlog</title>
@@ -383,8 +383,8 @@ html.standalone .tabbar{bottom:auto;top:calc(var(--screen-h,100vh) - var(--tab-h
 </div>
 
 <script>
-/* Ironlog v0.40.0 · site build */
-var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.40.0",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
+/* Ironlog v0.40.1 · site build */
+var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.40.1",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
 
 /* ===== src/data/exercises.js ===== */
 (function(){'use strict';
@@ -678,7 +678,11 @@ function sessionSets(s){let n=0;s.exercises.forEach(e=>e.sets.forEach(st=>{if(is
 // How long a finished workout took, in whole minutes. `date` is the start (set at newSession); a set
 // gets `at` when checked; `endedAt` is stamped at Finish. Returns null when the session predates
 // timing (no endedAt) or the stamps are nonsense — so time stats simply skip old sessions.
-function sessionDuration(s){const a=+s.date,b=+s.endedAt;return (b>a&&isFinite(a)&&isFinite(b))?Math.round((b-a)/60000):null;}
+// A span over MAX_SESSION_MIN is not a workout, it's a forgotten Finish (the 50-hour session): treat
+// it as unknown so it neither shows on the card nor skews the Time averages. One comparison here
+// covers every reader — History, summary, density, trends — with no data migration.
+const MAX_SESSION_MIN=8*60;
+function sessionDuration(s){const a=+s.date,b=+s.endedAt;if(!(b>a&&isFinite(a)&&isFinite(b)))return null;const m=Math.round((b-a)/60000);return m>MAX_SESSION_MIN?null:m;}
 // Checked sets with a timestamp, as {exId, group, at}, oldest first — the raw material for time-per-
 // muscle and rest-taken analytics (T3). Sets with no stamp (old data, or unchecked) are omitted.
 function setTimeline(s){const out=[];(s.exercises||[]).forEach(e=>{const g=EX[e.id]?EX[e.id].group:null;e.sets.forEach(st=>{if(isFinite(+st.at)&&+st.at>0)out.push({exId:e.id,group:g,at:+st.at});});});return out.sort((a,b)=>a.at-b.at);}
@@ -932,7 +936,7 @@ function calcStreak(sessions,now){
   return n;
 }
 
-IL.prog={DAY,startOfDay,e1rm,isWorking,setLoad,sessionVolume,sessionSets,sessionDuration,setTimeline,lastSetAt,staleness,STALE_AFTER_MIN,LONG_SESSION_MIN,STALE_CONFIRM_MIN,END_PAD_MIN,finalizeSets,parseWeightInput,fmtVol,modeOf,real,lastPerf,lastModeFor,exerciseSeries,bestE1rmBefore,setPattern,fmtPerf,repRange,nextSets,deloadSets,suggestion,unitIncrement,convertWeight,convertSessions,calcStreak,weekIndex,weekStart};
+IL.prog={DAY,startOfDay,e1rm,isWorking,setLoad,sessionVolume,sessionSets,sessionDuration,MAX_SESSION_MIN,setTimeline,lastSetAt,staleness,STALE_AFTER_MIN,LONG_SESSION_MIN,STALE_CONFIRM_MIN,END_PAD_MIN,finalizeSets,parseWeightInput,fmtVol,modeOf,real,lastPerf,lastModeFor,exerciseSeries,bestE1rmBefore,setPattern,fmtPerf,repRange,nextSets,deloadSets,suggestion,unitIncrement,convertWeight,convertSessions,calcStreak,weekIndex,weekStart};
 if(typeof module!=='undefined')module.exports=IL.prog;
 
 })();
@@ -2492,7 +2496,7 @@ function editorView(s,mode){
   return `
   <div class="section">
     <div class="topbar"><button class="backbtn" id="btnBackHome" data-action="backHome">${ICON_BACK} ${edit?'Cancel':'Home'}</button>
-      ${edit?'':'<button class="linkbtn dim" id="btnDiscard">Discard</button>'}</div>
+      ${edit?'':`<span style="display:flex;gap:10px;align-items:center"><button class="linkbtn dim" id="btnDiscard">Discard</button><button class="btn good sm" id="btnFinishTop" ${sets===0?'disabled style="opacity:.5"':''}>Finish</button></span>`}</div>
     <div style="padding:0 2px 2px"><div class="eyebrow">${edit?'Editing · '+fmtDate(s.date):`Workout in progress · saves automatically · <span id="elapsedLbl">${fmtElapsed(s.date)}</span>`}</div>
       <h2 style="font-size:23px;margin-top:4px">${new Date(s.date).toLocaleDateString(undefined,{weekday:'long'})}'s session${s.deload?' <span class="deload-badge">Deload</span>':''}</h2></div>
     ${edit?'':staleBanner(s)}
@@ -3156,11 +3160,26 @@ function chooseEndThenCommit(s){
     const a=$('#endAtLast'),b=$('#endNow');
     if(a)a.addEventListener('click',()=>commitFinish(s,lastEnd,true));
     if(b)b.addEventListener('click',()=>commitFinish(s,now,false));
+  }else if(!st.lastSetAt&&st.sinceStart>=P.STALE_CONFIRM_MIN){
+    // No set timestamps at all (a workout that predates timing, or nothing was ever checked) and it
+    // was started a while ago: "now" would record the whole gap as training time — the 50-hour
+    // workout. Offer an honest estimate or no length rather than inventing one.
+    const hourIn=+s.date+60*60000;
+    openSheet('When did you finish?',`<div class="dim" style="font-size:13.5px;margin:-2px 2px 14px;line-height:1.5">This workout was started ${fmtDur(st.sinceStart)} ago and its sets aren't time-stamped, so Ironlog can't tell how long you trained.</div>
+      <button class="btn primary block" id="endNow" style="margin-bottom:9px">End now · ${fmtClock(now)}</button>
+      <button class="btn ghost block" id="endHour" style="margin-bottom:9px">About an hour after I started · ≈${fmtClock(hourIn)}</button>
+      <button class="btn ghost block" id="endNone">Don't record a length</button>`);
+    const a=$('#endNow'),b=$('#endHour'),c=$('#endNone');
+    if(a)a.addEventListener('click',()=>commitFinish(s,now,false));
+    if(b)b.addEventListener('click',()=>commitFinish(s,hourIn,true));
+    if(c)c.addEventListener('click',()=>commitFinish(s,null,false));
   }else commitFinish(s,now,false);
 }
+// endedAt may be null ("don't record a length"): the session then has no duration anywhere it's read.
 function commitFinish(s,endedAt,estimated){
   closeSheet();stopRest();stopElapsed();
-  s.endedAt=endedAt;if(estimated)s.endEstimated=true;else delete s.endEstimated;
+  if(endedAt)s.endedAt=endedAt;else delete s.endedAt;
+  if(estimated&&endedAt)s.endEstimated=true;else delete s.endEstimated;
   cleanSets(s);
   if(!s.exercises.length){toast('Log at least one set first');return;}
   const sm=workoutSummary(s);
@@ -3255,7 +3274,7 @@ function bind(){
   const sg=v.querySelector('[data-suggest]');if(sg)sg.addEventListener('click',()=>addExerciseToCur(sg.dataset.suggest));
   bindClick('#btnReorder',reorderCur);
   bindClick('#btnSaveRoutine',()=>saveAsRoutine(cur()));
-  bindClick('#btnFinish',finishWorkout);
+  bindClick('#btnFinish',finishWorkout);bindClick('#btnFinishTop',finishWorkout);   // two routes, one function
   bindClick('#btnSaveEdit',finishEdit);
   bindClick('#btnDiscard',discardActive);
   const ll=$('#logList');if(ll)bindLog(ll);

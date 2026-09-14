@@ -81,11 +81,26 @@ function chooseEndThenCommit(s){
     const a=$('#endAtLast'),b=$('#endNow');
     if(a)a.addEventListener('click',()=>commitFinish(s,lastEnd,true));
     if(b)b.addEventListener('click',()=>commitFinish(s,now,false));
+  }else if(!st.lastSetAt&&st.sinceStart>=P.STALE_CONFIRM_MIN){
+    // No set timestamps at all (a workout that predates timing, or nothing was ever checked) and it
+    // was started a while ago: "now" would record the whole gap as training time — the 50-hour
+    // workout. Offer an honest estimate or no length rather than inventing one.
+    const hourIn=+s.date+60*60000;
+    openSheet('When did you finish?',`<div class="dim" style="font-size:13.5px;margin:-2px 2px 14px;line-height:1.5">This workout was started ${fmtDur(st.sinceStart)} ago and its sets aren't time-stamped, so Ironlog can't tell how long you trained.</div>
+      <button class="btn primary block" id="endNow" style="margin-bottom:9px">End now · ${fmtClock(now)}</button>
+      <button class="btn ghost block" id="endHour" style="margin-bottom:9px">About an hour after I started · ≈${fmtClock(hourIn)}</button>
+      <button class="btn ghost block" id="endNone">Don't record a length</button>`);
+    const a=$('#endNow'),b=$('#endHour'),c=$('#endNone');
+    if(a)a.addEventListener('click',()=>commitFinish(s,now,false));
+    if(b)b.addEventListener('click',()=>commitFinish(s,hourIn,true));
+    if(c)c.addEventListener('click',()=>commitFinish(s,null,false));
   }else commitFinish(s,now,false);
 }
+// endedAt may be null ("don't record a length"): the session then has no duration anywhere it's read.
 function commitFinish(s,endedAt,estimated){
   closeSheet();stopRest();stopElapsed();
-  s.endedAt=endedAt;if(estimated)s.endEstimated=true;else delete s.endEstimated;
+  if(endedAt)s.endedAt=endedAt;else delete s.endedAt;
+  if(estimated&&endedAt)s.endEstimated=true;else delete s.endEstimated;
   cleanSets(s);
   if(!s.exercises.length){toast('Log at least one set first');return;}
   const sm=workoutSummary(s);
@@ -180,7 +195,7 @@ function bind(){
   const sg=v.querySelector('[data-suggest]');if(sg)sg.addEventListener('click',()=>addExerciseToCur(sg.dataset.suggest));
   bindClick('#btnReorder',reorderCur);
   bindClick('#btnSaveRoutine',()=>saveAsRoutine(cur()));
-  bindClick('#btnFinish',finishWorkout);
+  bindClick('#btnFinish',finishWorkout);bindClick('#btnFinishTop',finishWorkout);   // two routes, one function
   bindClick('#btnSaveEdit',finishEdit);
   bindClick('#btnDiscard',discardActive);
   const ll=$('#logList');if(ll)bindLog(ll);

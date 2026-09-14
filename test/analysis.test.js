@@ -39,11 +39,12 @@ test('timeTrends: 28-day averages skip untimed sessions (T3)',()=>{
   const sessions=[
     timed(2,[{id:'barbell-bench-press',sets:[{w:135,r:8,done:true,at:now-2*DAY+2*M},{w:135,r:8,done:true,at:now-2*DAY+5*M}]}],40*M),
     timed(5,[{id:'lateral-raise',sets:[{w:15,r:12,done:true,at:now-5*DAY+2*M},{w:15,r:12,done:true,at:now-5*DAY+3*M}]}],20*M),
-    {id:'old',schema:1,date:now-3*DAY,updatedAt:1,completed:true,exercises:[{id:'back-squat',sets:[{w:225,r:5,done:true}]}]}  // untimed → skipped
+    {id:'old',schema:1,date:now-3*DAY,updatedAt:1,completed:true,exercises:[{id:'back-squat',sets:[{w:225,r:5,done:true}]}]},  // untimed → skipped
+    timed(7,[{id:'deadlift',sets:[{w:315,r:5,done:true}]}],50*60*M)   // the forgotten-Finish "50-hour workout" → skipped, not averaged
   ];
   const t=A.timeTrends(sessions,now);
-  assert.equal(t.n,2,'only the two timed sessions count');
-  assert.equal(t.avgDuration,30,'(40+20)/2');
+  assert.equal(t.n,2,'only the two plausibly-timed sessions count');
+  assert.equal(t.avgDuration,30,'(40+20)/2 — a 50h session would have made this 1020');
   assert.equal(t.restCompound,180,'bench 3-min gap');
   assert.equal(t.restIsolation,60,'lateral 1-min gap');
 });

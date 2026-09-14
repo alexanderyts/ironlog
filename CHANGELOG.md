@@ -2,6 +2,13 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.40.1 — 2026-09-13 · The 50-hour workout, and a Finish you can find
+A real bug report: a workout started before Ironlog timed sets, finished two days later, was logged as 50 hours long. Plan in `PLAN-finish-and-duration.md`.
+- **Finish now asks when the sets have no timestamps.** If a workout was started a while ago and none of its sets carry a time, Finish offers *End now*, *About an hour after I started* (shown as ≈), or *Don't record a length* — instead of silently logging the whole gap as training time.
+- **A length over 8 hours is treated as unknown.** It's a forgotten Finish, not a workout: it no longer shows on the History card and no longer drags the Time averages. This also fixes the already-saved 50-hour session wherever it's read — no data editing needed.
+- **Finish is now in the top bar of a live workout,** next to Discard, as well as at the bottom. It's greyed until a set is checked. No changes to the tab bar or safe-area layout.
+- Not verified on-device: the top-bar button was checked in the browser; the no-timestamp Finish sheet and the 8-hour cap have automated tests with expected values and controls.
+
 ## v0.40.0 — 2026-09-13 · The coach listens to your profile (Roadmap v6, Phase P3)
 **Balanced is still exactly today's coach.** With a profile set, the Progress-tab coaching reads the same facts through your lens — it never changes what was measured, only what's worth saying.
 - **Days per week** — on a 2-day week most muscles can only be trained once, so the "spread this across two days" tip stays quiet. With 3 or more days it works as before.

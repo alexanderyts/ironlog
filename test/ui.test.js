@@ -135,6 +135,47 @@ test('UI: T2 — a long-idle workout shows the banner and Finish offers the last
   }finally{h.teardown();}
 });
 
+test('UI: a workout with no set timestamps, finished two days later, is never logged as 50 hours',()=>{
+  const h=launch();
+  try{
+    buildWorkout(h,['Chest']);
+    const active=h.state.active,now=Date.now();
+    h.click(h.$$('[data-check]')[0]);
+    // the real bug: a session that predates set timestamps (v0.35), left open for 50 hours
+    delete active.exercises[0].sets[0].at;active.date=now-50*3600000;
+    h.IL.ui.render();
+    h.click('#btnFinish');
+    assert.ok(h.has('#endNow')&&h.has('#endHour')&&h.has('#endNone'),'offered now / about an hour / no length — not silently "now"');
+    h.click('#endNone');
+    const saved=h.state.sessions.filter(s=>s.id===active.id)[0];
+    assert.ok(saved&&saved.completed,'saved');
+    assert.ok(!('endedAt'in saved),'no end time recorded');
+    assert.equal(h.IL.prog.sessionDuration(saved),null,'no length shown');
+    // control: an ordinary stamped workout still records endedAt ≈ now without any sheet
+    buildWorkout(h,['Back']);
+    const b=h.state.active;h.click(h.$$('[data-check]')[0]);h.click('#btnFinish');
+    const sb=h.state.sessions.filter(s=>s.id===b.id)[0];
+    assert.ok(sb.endedAt>=now&&h.IL.prog.sessionDuration(sb)<=1,'control: fresh workout ends now');
+  }finally{h.teardown();}
+});
+
+test('UI: Finish is in the top bar of the live editor — disabled with no set, enabled after one, and it finishes',()=>{
+  const h=launch();
+  try{
+    buildWorkout(h,['Chest']);
+    const active=h.state.active;
+    assert.ok(h.has('#btnFinishTop'),'top-bar Finish present');
+    assert.equal(h.$('#btnFinishTop').disabled,true,'disabled before any set is checked');
+    h.click(h.$$('[data-check]')[0]);
+    assert.equal(h.$('#btnFinishTop').disabled,false,'enabled once a set is done');
+    h.click('#btnFinishTop');
+    assert.equal(h.state.active,null,'top-bar Finish ends the workout');
+    assert.ok(h.state.sessions.some(s=>s.id===active.id&&s.completed),'and saves it');
+    // control: not offered while editing a past session
+    h.IL.ui.setTab('history');
+  }finally{h.teardown();}
+});
+
 test('UI: T2 — finishing a normal (not-idle) workout does NOT prompt for the end time (control)',()=>{
   const h=launch();
   try{
