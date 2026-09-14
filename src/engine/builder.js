@@ -23,7 +23,9 @@ function shapeStyle(sets,style,ex,unit){
   if(!sets.length)return sets;
   const w=Math.max(...sets.map(s=>+s.w||0));
   if(w<=0)return sets;
-  if(style==='straight')return sets.map(s=>({w,r:s.r,done:false}));
+  // straight = every set at the top weight AND the top set's reps. Carrying each set's own reps would
+  // put a back-off set's reps on the top weight (200×5/180×8/180×8 → 200×8) — the v0.39.1 ramp bug's twin (#18).
+  if(style==='straight'){const topR=(sets.find(s=>(+s.w||0)===w)||sets[sets.length-1]).r;return sets.map(s=>({w,r:topR,done:false}));}
   if(style==='ramp'&&ex&&ex.tier===1){
     // reps come from the set that CARRIES the top weight — on a descending pattern (heavy opener,
     // lighter back-offs) the last set holds back-off reps, which must not land on the top set
@@ -245,26 +247,39 @@ function complementSuggestions(chosenIds,limit){
      • Exposure is measured in WEEKS (exerciseTenure), which normalizes by frequency: 8 sessions at
        2×/week and 4 at 1×/week are both "4 weeks" of the same movement — a high-frequency lifter is
        never churned by a raw session counter (the bug this phase fixes). */
-const CONTINUE_DAYS=10,STALL_MIN_DAYS=14,ANCHOR_STALL_WEEKS=3,ANCHOR_DELOAD_DAYS=21,MAX_SESSION_EX=7,MAX_SETS_PER_EX=5,DELOAD_MAX_SETS=3;
+const CONTINUE_DAYS=10,LAPSE_DAYS=42,STALL_MIN_DAYS=14,ANCHOR_STALL_WEEKS=3,ANCHOR_DELOAD_DAYS=21,MAX_SESSION_EX=7,MAX_SETS_PER_EX=5,DELOAD_MAX_SETS=3;
 const WEEK=7*DAY;
 const {e1rm}=IL.prog;
 
 function sessionGroups(s){const g={};s.exercises.forEach(e=>{const x=EX[e.id];if(x)g[x.group]=(g[x.group]||0)+1;});return g;}
 // The most recent completed session (within the window) that trained exactly these groups —
 // tolerating one incidental add-on exercise from another group.
-function findPlan(groups,sessions,now){
+// The plan for these groups = the most recent matching real session. Walk ALL completed sessions with
+// a moving reference: a DELOAD advances the window instead of ending it (so a 3+1 block continues the
+// plan, not restarts it — #4), and a non-matching real session advances it too. Two windows: within
+// CONTINUE_DAYS it's the normal "Session N" continuation; out to LAPSE_DAYS (a missed week or a
+// holiday) it still continues but is flagged `meta.lapsed` so the caller skips stall/rotation/volume.
+function findPlan(groups,sessions,now,meta){
   now=now||Date.now();const want=new Set(groups);
-  for(const s of real(sessions)){          // completed, non-deload — resume the real plan
-    if(!s.exercises.length)continue;
-    if(now-s.date>CONTINUE_DAYS*DAY)break;
-    const sg=sessionGroups(s);
-    if(![...want].every(g=>sg[g]))continue;
-    // Tolerate ONE incidental add-on exercise from outside the picked groups — summed ACROSS all
-    // non-picked groups, so picking 'Chest' alone won't continue a whole push day (Chest+Shoulders+Triceps).
-    const extras=Object.keys(sg).filter(g=>!want.has(g)).reduce((a,g)=>a+sg[g],0);
-    if(extras>1)continue;
-    return s;
-  }
+  const completed=(sessions||[]).filter(s=>s.completed!==false&&s.exercises&&s.exercises.length);   // newest-first (upsert/history keep it sorted)
+  const scan=maxGap=>{
+    let ref=now;
+    for(const s of completed){
+      if(ref-s.date>maxGap*DAY)return null;      // the chain broke — nothing recent enough to continue
+      if(s.deload){ref=s.date;continue;}         // a deload bridges the gap without being the plan itself
+      const sg=sessionGroups(s);
+      if([...want].every(g=>sg[g])){
+        // tolerate ONE incidental add-on from outside the picked groups, summed across them, so picking
+        // 'Chest' alone won't continue a whole push day
+        const extras=Object.keys(sg).filter(g=>!want.has(g)).reduce((a,g)=>a+sg[g],0);
+        if(extras<=1)return s;
+      }
+      ref=s.date;
+    }
+    return null;
+  };
+  const near=scan(CONTINUE_DAYS);if(near)return near;
+  const far=scan(LAPSE_DAYS);if(far){if(meta)meta.lapsed=true;return far;}
   return null;
 }
 // How long this exercise has been in the plan: the run of consecutive most-recent sessions of its
@@ -291,7 +306,9 @@ function recentPerfs(sessions,exId,opts){
   for(let i=0;i<n;i++){
     const lp=lastPerf(sessions,exId,{beforeTs:before,mode:opts.mode});if(!lp)break;
     if(opts.since&&lp.date<opts.since)break;
-    out.push({date:lp.date,score:Math.max(...lp.sets.map(s=>s.w>0?e1rm(s.w,s.r):s.r)),top:Math.max(...lp.sets.map(s=>+s.w||0))});
+    const top=Math.max(...lp.sets.map(s=>+s.w||0));
+    const topR=Math.max(...lp.sets.filter(s=>(+s.w||0)===top).map(s=>+s.r||0));   // reps at the top weight — for double-progression detection
+    out.push({date:lp.date,score:Math.max(...lp.sets.map(s=>s.w>0?e1rm(s.w,s.r):s.r)),top,topR});
     before=lp.date;
   }
   return out;
@@ -311,7 +328,16 @@ function isStalled(sessions,exId,opts){
   const cutoff=p[0].date-STALL_MIN_DAYS*DAY;
   const recent=p.filter(x=>x.date>cutoff),old=p.filter(x=>x.date<=cutoff);
   if(!recent.length||!old.length)return false;                   // not enough calendar span yet
-  if(Math.max(...recent.map(x=>x.top))>Math.max(...old.map(x=>x.top)))return false;  // added weight = progressing
+  const rTop=Math.max(...recent.map(x=>x.top)),oTop=Math.max(...old.map(x=>x.top));
+  if(rTop>oTop)return false;                                      // added weight = progressing
+  // Same top weight but MORE reps at it = double progression before the next bump (100×12 → 105×8 →
+  // 105×9 → 105×10 is climbing, not stalled). e1RM ties here (Epley: 105×10 = 100×12) would otherwise
+  // read as a plateau and rotate the lift out mid-climb (#3).
+  if(rTop===oTop){
+    const rReps=Math.max(...recent.filter(x=>x.top===rTop).map(x=>x.topR));
+    const oReps=Math.max(...old.filter(x=>x.top===oTop).map(x=>x.topR));
+    if(rReps>oReps)return false;
+  }
   return Math.max(...recent.map(x=>x.score))<=Math.max(...old.map(x=>x.score));
 }
 // A deload taken within `days` that (when exId is given) actually trained that exercise's muscle —
@@ -358,8 +384,10 @@ function planWorkout(groups,sessions,seed,opts){
   const maxEx=profile&&profile.length==='long'?8:MAX_SESSION_EX;
   const protect=new Set(profile&&profile.protect||[]);
   const hints=deload?null:opts.hints,reactions=[],volumeBump=[];   // a deload never adds volume/coverage
-  const plan=opts.fresh?null:findPlan(groups,sessions,opts.now);
+  const meta={};
+  const plan=opts.fresh?null:findPlan(groups,sessions,opts.now,meta);
   if(!plan)return{ids:buildRecommendation(groups,sessions,seed,hints,undefined,profile),mode:'fresh',plan:null,rotation:null,streak:0,reactions,volumeBump,deload};
+  const lapsed=!!meta.lapsed;
   let ids=plan.exercises.map(e=>e.id).filter(id=>EX[id]);
   // Profile 'avoid' applies even to a continued plan: swap any avoided lift for a same-group
   // alternative (a user directive, not a reaction — so it holds on a deload too).
@@ -369,8 +397,14 @@ function planWorkout(groups,sessions,seed,opts){
   // A deload CONTINUES the plan verbatim — same exercises, just lighter (seedExercise cuts load and
   // volume). Zero structural changes: no stall check, rotation, anchor swap, gap-add or volume bump.
   if(deload)return{ids:orderByFatigue(capHeavyAxial(ids,profile,sessions),groups[0]),mode:'continue',plan,rotation:null,streak:0,reactions,volumeBump,deload:true};
+  // Coming back after a lapse (a missed week / holiday): continue the plan with weights carried from
+  // where you left off, but make NO structural change — you weren't stalled, you were away, and a
+  // detrained first session back shouldn't get extra volume or a rotation.
+  if(lapsed)return{ids:orderByFatigue(capHeavyAxial(ids,profile,sessions),groups[0]),mode:'continue',plan,rotation:null,streak:0,reactions,volumeBump,deload:false,lapsed:true};
   const modeById={};plan.exercises.forEach(e=>{if(EX[e.id])modeById[e.id]=modeOf(e);});
-  const anchors=new Set(groups.map(g=>planAnchor(ids,g)).filter(Boolean).map(e=>e.id));
+  // Anchors are protected from rotation: the group's key tier-1 lift AND every other tier-1 lift in the
+  // plan (a main deadlift/squat is not an "accessory" to be swapped out on a stall — #15).
+  const anchors=new Set([...groups.map(g=>planAnchor(ids,g)).filter(Boolean).map(e=>e.id),...ids.filter(id=>EX[id]&&EX[id].tier===1)]);
   let rotation=null,structural=false;   // at most ONE structural change per session (swap OR gap-add)
   // 1. Anchor variation swap — rare: a long-stalled main lift that a recent deload OF THAT MUSCLE
   //    didn't unstick.

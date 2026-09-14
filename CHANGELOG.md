@@ -2,6 +2,16 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.43.0 — 2026-09-13 · Continuity: the plan survives real life (Roadmap v7, Phase B)
+Ten fixes so the builder and the numbers hold up over months of normal training — missed weeks, deloads, long histories, unit switches. Balanced coaching output on real data is unchanged (the snapshot test confirms it).
+- **A deload week or a missed week no longer wipes your plan.** Coming back, Ironlog continues the same session with your weights where you left off (up to about six weeks away — it says "welcome back, continued from…"), instead of shuffling in random exercises. A deload block bridges the gap rather than resetting it.
+- **Doing exactly what the app told you is no longer read as a stall.** When you add reps at the same weight week to week (100×12 → 105×8 → 9 → 10), it now sees that as progress and keeps the lift, instead of swapping it out.
+- **Your main lifts stay put.** A flat deadlift or squat is never rotated out like an accessory — only lighter accessory lifts rotate, and only on a real stall.
+- **"Time for a deload" is honest again.** It counts from your last deload (not through it), so it won't claim "12 weeks without a deload" three weeks after one, and it mentions it once per block instead of every week. A single week off no longer resets your streak.
+- **Assist machines work the right way round.** On an assisted pull-up, progress means *less* assist — the prescription lowers the weight and your record is the least assist, not the most.
+- **Size goal no longer shrinks high-rep moves** (a plank or a farmer's carry keeps its long rep range), a converted weight snaps back onto the plate grid on the next bump instead of drifting, the set prescription follows your last *real* session's equipment (a deload on different gear won't switch it), "Straight" sets now hold the top set's reps, and the weekly streak is correct in every timezone (a New Zealand daylight-saving change used to miscount it).
+- Not verified on-device: every change has an automated test with a hand-computed expected value and a control (including the timezone one, run in four zones); the real-data review snapshot is unchanged.
+
 ## v0.42.0 — 2026-09-13 · Trust: nothing is lost silently (Roadmap v7, Phase A)
 The first phase after the big review. All about not losing data — none of your workouts or coaching change. Plan in `ROADMAP-v7.md`.
 - **A full phone can't swallow a finished workout any more.** If saving fails because storage is full, Ironlog keeps the workout open on your phone (a reload brings it right back) and tells you plainly, instead of showing "Workout complete" over nothing. The header shows "Storage full", and Settings now shows how much space Ironlog is using so you can see it coming.

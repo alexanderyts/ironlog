@@ -5,8 +5,8 @@
 // there is fine and faster. A pure cache-first strategy for everything (the previous approach) meant
 // an installed PWA could get stuck on an old version indefinitely once anything was cached, with no
 // way to notice a new deploy without the user manually clearing site data — this fixes that for good.
-const V='ironlog-0.42.0';
-const VER='0.42.0';
+const V='ironlog-0.43.0';
+const VER='0.43.0';
 // Report this worker's version so the page can decide whether an "Update ready" toast is warranted.
 self.addEventListener('message',e=>{if(e.data==='version'&&e.ports&&e.ports[0])e.ports[0].postMessage({v:VER});});
 const ASSETS=['./','./index.html','./manifest.webmanifest','./icon-192.png','./icon-512.png','./apple-touch-icon.png'];

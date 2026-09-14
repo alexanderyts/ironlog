@@ -264,3 +264,41 @@ test('A3: finalizeSets drops a loaded lift ticked with no weight, keeps a bodywe
   const gone=IL.prog.finalizeSets([{id:'barbell-bench-press',sets:[{w:'',r:6,done:true}]}]);
   assert.equal(gone.length,0,'a weightless-only loaded exercise is dropped');
 });
+
+test('B-continuity: calcStreak tolerates one empty week but not two (#7)',()=>{
+  const wk=i=>({id:'s'+i,schema:1,date:NOW-i*7*86400000,updatedAt:1,completed:true,exercises:[{id:'barbell-bench-press',sets:[{w:135,r:6,done:true}]}]});
+  const NOW=new Date(2026,8,9,12).getTime();   // fixed Wed so week math is deterministic
+  assert.equal(P.calcStreak([0,1,2,3,4].map(wk),NOW),5,'five straight weeks');
+  assert.equal(P.calcStreak([0,1,3,4].map(wk),NOW),4,'one empty week (wk2) is hopped');
+  assert.equal(P.calcStreak([0,1,4].map(wk),NOW),2,'two empty weeks in a row end the streak');
+  assert.equal(P.calcStreak([1,2,3].map(wk),NOW),3,'a not-yet-trained current week does not break it');
+});
+
+test('B-continuity: repRange size cap cannot shrink a naturally high-rep move (#17)',()=>{
+  const {EX}=IL.data;
+  assert.deepEqual(P.repRange(EX['plank'],'size'),[32,60],'plank 30–60 stays 30–60-ish, not [15,15]');
+  assert.deepEqual(P.repRange(EX['lateral-raise'],'size'),[14,20],'12–20 → 14–20, cap is max(15,hi)=20');
+  assert.deepEqual(P.repRange(EX['barbell-bench-press'],'size'),[7,10],'a normal 5–8 lift still shifts +2');
+  assert.deepEqual(P.repRange(EX['barbell-bench-press'],'general'),[5,8],'control: general = native');
+});
+
+test('B-continuity: assisted pull-up progresses by LESS assist and its PR is the least assist (#16)',()=>{
+  const {EX}=IL.data;const A=IL.analysis;const {history,NOW}=require('./load.js');
+  const hist=history(session(3,[['assisted-pull-up',[set(60,12),set(60,12)]]],{now:NOW}));
+  assert.deepEqual(P.nextSets(hist[0].exercises[0].sets,EX['assisted-pull-up'],'lb').sets,[{w:55,r:8},{w:55,r:8}],'hit top reps → 5 lb LESS assist');
+  assert.equal(P.nextSets([set(0,12)],EX['assisted-pull-up'],'lb').bumped,false,'at 0 assist there is nothing to remove');
+  // PR: least assist wins, no bogus 1RM estimate
+  const pr=A.personalRecords(history(session(3,[['assisted-pull-up',[set(90,8)]]],{now:NOW}),session(10,[['assisted-pull-up',[set(60,8)]]],{now:NOW})),0,5).find(p=>p.id==='assisted-pull-up');
+  assert.equal(pr.load,60,'60 lb assist beats 90 lb assist');
+  assert.equal(pr.showEst,false,'no estimated 1RM for an assist machine');
+  // control: a normal barbell lift still ranks by highest e1RM
+  const pb=A.personalRecords(history(session(3,[['barbell-bench-press',[set(185,5)]]],{now:NOW}),session(10,[['barbell-bench-press',[set(135,5)]]],{now:NOW})),0,5).find(p=>p.id==='barbell-bench-press');
+  assert.equal(pb.load,185);
+});
+
+test('B-continuity: a bump snaps an off-grid top (converted weight) onto the plate grid (#29)',()=>{
+  const {EX}=IL.data,ex=EX['back-squat'],hi=ex.rr[1];
+  assert.equal(P.nextSets([set(102.1,hi),set(102.1,hi)],ex,'kg').newTop,105,'102.1 → 102.5 → 105, not 104.6');
+  assert.equal(P.nextSets([set(100,hi),set(100,hi)],ex,'kg').newTop,102.5,'control: on-grid 100 → 102.5 unchanged');
+  assert.equal(P.nextSets([set(225,hi),set(225,hi)],ex,'lb').newTop,230,'control: lb stays exact');
+});

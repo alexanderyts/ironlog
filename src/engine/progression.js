@@ -2,7 +2,7 @@
 // No DOM, no app state: everything takes the sessions array it should look at.
 var IL=globalThis.IL||(globalThis.IL={});
 if(typeof require==='function'&&!IL.data)require('../data/exercises.js');
-const {EX,BW_FACTOR,EQUIP_MODE,MODES}=IL.data;
+const {EX,BW_FACTOR,EQUIP_MODE,MODES,INVERTED_LOAD}=IL.data;
 
 // The modality a logged exercise instance was performed with: its explicit `mode`, else derived
 // from the exercise's fixed equipment. Stable for any instance, so mode-less history (and every
@@ -123,7 +123,7 @@ function bestE1rmBefore(sessions,exId,opts){
 // deload still tells you which equipment you last reached for.
 function lastModeFor(sessions,exId){
   for(const s of sessions||[]){
-    if(s.completed===false)continue;
+    if(s.completed===false||s.deload)continue;   // mode follows the last REAL session; a deload done on other equipment must not switch the prescription's modality (#28)
     const e=s.exercises.find(x=>x.id===exId);
     if(e)return e.mode||null;
   }
@@ -185,13 +185,14 @@ function fmtPerf(sets,unit){
 // whole window up by two reps — more reps banked before loading — capped at 15 so it never runs away.
 // One place owns the shift, so seedExercise and nextSets stay in agreement.
 function repRange(ex,goal){
-  const lo=ex?ex.rr[0]:8,hi=ex?ex.rr[1]:12;
+  const lo=ex?ex.rr[0]:8,hi=ex?ex.rr[1]:12,cap=Math.max(15,hi);   // the cap can't shrink a naturally high-rep move (plank 30–60, carry 20–40) — #17
   if(goal==='strength')return[lo,lo];
-  if(goal==='size')return[Math.min(lo+2,15),Math.min(hi+2,15)];
+  if(goal==='size')return[Math.min(lo+2,cap),Math.min(hi+2,cap)];
   return[lo,hi];
 }
 function nextSets(last,ex,unit,rr){
-  const lo=rr?rr[0]:(ex?ex.rr[0]:8),hi=rr?rr[1]:(ex?ex.rr[1]:12),inc=unitIncrement(unit||'lb');
+  const lo=rr?rr[0]:(ex?ex.rr[0]:8),hi=rr?rr[1]:(ex?ex.rr[1]:12),baseInc=unitIncrement(unit||'lb');
+  const inverted=!!(ex&&INVERTED_LOAD&&INVERTED_LOAD.has(ex.id)),inc=inverted?-baseInc:baseInc;   // assist machines: LESS weight is harder, so a bump REDUCES load (#16)
   const p=setPattern(last);
   const anchorSets=p.anchor.map(i=>last[i]);
   const short=anchorSets.reduce((n,s)=>n+Math.max(0,hi-(+s.r||0)),0);
@@ -199,12 +200,16 @@ function nextSets(last,ex,unit,rr){
   const weighted=p.top>0;
   const ready=weighted&&short===0;
   if(!ready)return{sets:last.map(s=>({w:+s.w||0,r:+s.r||0})),bumped:false,pattern:p.pattern,anchor:p.anchor,short,under,weighted};
-  const newTop=p.top+inc;
+  // Snap an off-grid top (a converted 102.1 kg) onto the plate half-grid BEFORE adding, so it lands
+  // on 102.5→105 instead of drifting 104.6/107.1 forever (#29); a value already on the grid is unchanged.
+  const half=baseInc/2,off=Math.abs(p.top/half-Math.round(p.top/half))>1e-6;
+  let newTop=(off?roundTo(p.top,half):p.top)+inc;
+  if(inverted)newTop=Math.max(0,newTop);
   const sets=last.map((s,i)=>{
     const w=+s.w||0;
     if(p.anchor.includes(i))return{w:newTop,r:lo};
-    const shifted=Math.min(newTop,Math.max(w,roundTo(w*newTop/p.top,inc)));
-    return{w:shifted,r:+s.r||0};
+    const scaled=roundTo(w*newTop/p.top,baseInc);
+    return{w:inverted?Math.max(0,scaled):Math.min(newTop,Math.max(w,scaled)),r:+s.r||0};
   });
   return{sets,bumped:true,pattern:p.pattern,anchor:p.anchor,short:0,under:false,weighted,newTop};
 }
@@ -241,8 +246,10 @@ function suggestion(sessions,exId,opts){
   const n=nextSets(lp.sets,ex,unit,opts.rr);
   const ramp=n.pattern!=='flat';
   const topLbl=n.pattern==='descending'?'opener':'top set';
+  const inverted=!!(ex&&INVERTED_LOAD&&INVERTED_LOAD.has(ex.id));   // assist machine: a bump means LESS assist
   if(n.bumped){
-    const text=ramp?`${n.pattern==='descending'?'Opener':'Top set'} hit the range — ${topLbl} prefilled at ${n.newTop}${unit}, the rest shifted up`
+    const text=inverted?(n.newTop>0?`Hit top reps — prefilled ${inc}${unit} less assist`:'Hit top reps with no assist — try an unassisted rep next')
+              :ramp?`${n.pattern==='descending'?'Opener':'Top set'} hit the range — ${topLbl} prefilled at ${n.newTop}${unit}, the rest shifted up`
                    :`Hit top reps last time — prefilled +${inc}${unit}`;
     return{lp,kind:'weight',pattern:n.pattern,text,setsStr,next:n.sets};
   }
@@ -274,15 +281,27 @@ function convertSessions(sessions,from,to,now,stamp){
 // floor(ts/7days) bucketed on a fixed epoch boundary that fell mid-week and split them), and neither
 // drifts across a daylight-saving change.
 function weekStart(ts){const d=new Date(ts),day=(d.getDay()+6)%7;return new Date(d.getFullYear(),d.getMonth(),d.getDate()-day).getTime();}
-function weekIndex(ts){return Math.round(weekStart(ts)/(7*DAY));}   // round absorbs the DST ±1h
-// Consecutive weeks with at least one workout (current week may be untrained yet)
+// Week index anchored to a FIXED Monday (the epoch's first Monday, local). Subtracting a Monday from a
+// Monday keeps the ratio near a whole number, so round() can't flip on a DST week — the old
+// weekStart(ts)/(7*DAY) sat near x.5 in +12/+13h zones (NZ) and stepped by 0 or 2 across a DST change (#30).
+const WEEK_EPOCH=weekStart(4*DAY);
+function weekIndex(ts){return Math.round((weekStart(ts)-WEEK_EPOCH)/(7*DAY));}
+// Consecutive weeks with at least one workout. The current week may be untrained yet (doesn't break it),
+// and ONE empty week between two trained weeks is tolerated — a single week off (travel, a rest week)
+// shouldn't zero a streak; two empty weeks in a row do end it (#7).
 function calcStreak(sessions,now){
   now=now||Date.now();const done=sessions.filter(s=>s.completed!==false&&s.exercises.length);
   if(!done.length)return 0;
   const weeks=new Set(done.map(s=>weekIndex(s.date)));
   const cur=weekIndex(now);
-  let wk=cur,n=0;while(weeks.has(wk)){n++;wk--;}
-  if(n===0&&weeks.has(cur-1)){wk=cur-1;while(weeks.has(wk)){n++;wk--;}}
+  let wk=weeks.has(cur)?cur:cur-1;          // a not-yet-trained current week doesn't count against the streak
+  if(!weeks.has(wk))return 0;
+  let n=0,skipped=false;
+  while(true){
+    if(weeks.has(wk)){n++;wk--;skipped=false;}
+    else if(!skipped&&weeks.has(wk-1)){skipped=true;wk--;}   // hop one empty week if the week before it was trained
+    else break;
+  }
   return n;
 }
 

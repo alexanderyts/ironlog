@@ -141,3 +141,15 @@ test('P3 protect: the good-news line never displaces a warning under the 5-tip c
   assert.equal(prot.length,5,'cap holds');
   assert.ok(!prot.some(t=>/keeping shoulders light|stays light/.test(t)),'the protect line yields its slot to the warning when the cap is full');
 });
+
+test('B-continuity: deload-due counts from the last deload and fires once per block (#7)',()=>{
+  const {weekly,NOW}=require('./load.js');
+  const dd=(h)=>A.findings(A.analyze(h,NOW),h,NOW,0).find(f=>f.type==='deload-due');
+  // 7 straight weeks, no deload → 7%6=1 (<2) → fires with weeks:7
+  assert.deepEqual((dd(weekly([['barbell-bench-press',()=>[set(185,6),set(185,6)]]],7,{now:NOW}))||{}).weeks,7);
+  // 8 straight weeks → 8%6=2 (not <2) → the block window is closed, no nag
+  assert.equal(dd(weekly([['barbell-bench-press',()=>[set(185,6),set(185,6)]]],8,{now:NOW})),undefined);
+  // a deload 3 weeks ago silences it even after many weeks of training (was the "12 weeks" bug)
+  const withDeload=history(...[3,10,17,24,31,38,45,52].map((d,i)=>session(d,[['barbell-bench-press',[set(185,6),set(185,6)]]],{now:NOW,deload:d===17})));
+  assert.equal(dd(withDeload),undefined,'3 weeks after a deload, no "you never deload" nag');
+});

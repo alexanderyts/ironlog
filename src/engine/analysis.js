@@ -2,7 +2,7 @@
 var IL=globalThis.IL||(globalThis.IL={});
 if(typeof require==='function'&&!IL.data)require('../data/exercises.js');
 if(typeof require==='function'&&!IL.prog)require('./progression.js');
-const {EX,EXERCISES,REGIONS,IDEAL_PATS,LOWER_GROUPS,MODES,regLabel,patLabel,exampleFor,hashId}=IL.data;
+const {EX,EXERCISES,REGIONS,IDEAL_PATS,LOWER_GROUPS,MODES,INVERTED_LOAD,regLabel,patLabel,exampleFor,hashId}=IL.data;
 const {DAY,startOfDay,e1rm,isWorking,setLoad,sessionVolume,sessionSets,sessionDuration,setTimeline,modeOf,calcStreak,real,weekIndex,weekStart,lastPerf}=IL.prog;
 
 // completed() INCLUDES deloads on purpose — volume/frequency/PR-window analysis wants everything the
@@ -78,7 +78,12 @@ function findings(a,sessions,now,bw,profile){
   const lastDeload=completed(sessions).filter(s=>s.deload&&s.date<now).sort((x,y)=>y.date-x.date)[0];
   const sinceDeload=lastDeload?Math.round((now-lastDeload.date)/DAY):Infinity;
   if(sinceDeload<=14)F.push({type:'deload-taken',lv:'good',days:sinceDeload});
-  else{const streakWk=calcStreak(sessions,now);if(streakWk>=6)F.push({type:'deload-due',lv:'info',weeks:streakWk});}
+  else{const streakWk=calcStreak(sessions,now),weeksSince=Math.floor(sinceDeload/7);
+    // Count from the LAST deload, not the training streak (which runs through deloads), so it can't say
+    // "12 weeks without a deload" three weeks after one. Fire once per ~6-week block (weeks 6–7, 12–13…),
+    // not every week (#7).
+    const weeks=Math.min(streakWk,weeksSince);
+    if(weeks>=6&&weeks%6<2)F.push({type:'deload-due',lv:'info',weeks});}
   trained.forEach(g=>{const seen=a.regSeen[g]||new Set();(REGIONS[g]||[]).forEach(r=>{if(!seen.has(r)){const ex=exampleFor(g,r);if(ex)F.push({type:'region-gap',lv:'info',group:g,reg:r,ex,prio:gapPrio(g,r)});}});});
   trained.forEach(g=>{const seen=a.patSeen[g]||new Set();(IDEAL_PATS[g]||[]).forEach(p=>{if(!seen.has(p)){const ex=EXERCISES.find(x=>x.group===g&&x.pat===p&&x.tier<=2)||EXERCISES.find(x=>x.group===g&&x.pat===p);if(ex)F.push({type:'pattern-gap',lv:'info',group:g,pat:p,exId:ex.id,exName:ex.name,prio:patPrio(g,p)});}});});
   // 'protect': a muscle you're keeping light must not be nagged toward heavy compounds. Gap findings
@@ -270,8 +275,10 @@ function personalRecords(sessions,bw,limit){
   real(sessions).forEach(s=>{s.exercises.forEach(e=>{const mode=modeOf(e);e.sets.forEach(st=>{
     if(!isWorking(st))return;const w=setLoad(e.id,st.w,bw),r=+st.r||0;if(!w||!r)return;
     const est=e1rm(w,r);const ex=EX[e.id];const key=e.id+':'+mode;
-    const showEst=!!ex&&ex.type==='compound'&&!!(MODES[mode]&&MODES[mode].e1rm);
-    if(!best[key]||est>best[key].est)best[key]={id:e.id,mode,w:+st.w||0,load:w,r,est,name:ex?ex.name:e.name,date:s.date,compound:!!ex&&ex.type==='compound',showEst,bodyweight:mode==='bodyweight'};
+    const inverted=!!(ex&&INVERTED_LOAD&&INVERTED_LOAD.has(e.id));   // assist machine: the PR is the LEAST assist, and no 1RM estimate (#16)
+    const showEst=!!ex&&ex.type==='compound'&&!inverted&&!!(MODES[mode]&&MODES[mode].e1rm);
+    const better=inverted?(!best[key]||w<best[key].load):(!best[key]||est>best[key].est);
+    if(better)best[key]={id:e.id,mode,w:+st.w||0,load:w,r,est,name:ex?ex.name:e.name,date:s.date,compound:!!ex&&ex.type==='compound',showEst,inverted,bodyweight:mode==='bodyweight'};
   })})});
   // e1RM-comparable lifts first (by e1RM); the rest after, by load
   return Object.values(best).sort((a,b)=>(b.showEst-a.showEst)||(a.showEst?b.est-a.est:b.load-a.load)).slice(0,limit||8);

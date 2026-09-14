@@ -170,7 +170,8 @@ function buildAndStart(fresh){
   if(p.deload)msg=p.mode==='continue'?'Deload — same plan, lighter loads, focus on the stretch':'Deload built — lighter loads, focus on the stretch';
   else if(p.mode==='continue'){
     const gapAdd=(p.reactions||[]).find(r=>r.type==='gap-add');
-    if(p.rotation&&p.rotation.anchor)msg=`Swapped ${EX[p.rotation.from].name} → ${EX[p.rotation.to].name} — it stalled through a deload`;
+    if(p.lapsed)msg=`Welcome back — continued your plan from ${relDay(p.plan.date).toLowerCase()}, weights where you left off`;
+    else if(p.rotation&&p.rotation.anchor)msg=`Swapped ${EX[p.rotation.from].name} → ${EX[p.rotation.to].name} — it stalled through a deload`;
     else if(p.rotation)msg=`Plan continued · swapped ${EX[p.rotation.from].name} → ${EX[p.rotation.to].name} (it stalled)`;
     else if(gapAdd)msg=`Plan continued · added ${EX[gapAdd.exId].name} — ${gapAdd.why}`;
     else if(p.volumeBump&&p.volumeBump.length)msg='Plan continued · +1 set where your volume was low';

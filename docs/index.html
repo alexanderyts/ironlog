@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-qRZErdpKRcYUrAqZhGPrB49+EtuvrIfTSm1l+QVGF4w=' 'sha256-WPBob/luB2k1aalTWXpi6zk3SrIbj8GlZV7AlFdG7oA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-/eV7EbSK+L6l/gsKoG31Fw20hHqhHh8zcgWu8V5T73c=' 'sha256-WPBob/luB2k1aalTWXpi6zk3SrIbj8GlZV7AlFdG7oA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Ironlog</title>
@@ -383,8 +383,8 @@ html.standalone .tabbar{bottom:auto;top:calc(var(--screen-h,100vh) - var(--tab-h
 </div>
 
 <script>
-/* Ironlog v0.42.0 · site build */
-var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.42.0",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
+/* Ironlog v0.43.0 · site build */
+var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.43.0",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
 
 /* ===== src/data/exercises.js ===== */
 (function(){'use strict';
@@ -574,6 +574,9 @@ const META={
 const LONG_LENGTH=new Set(['incline-dumbbell-fly','dumbbell-pullover','cable-pullover','bayesian-cable-curl','incline-dumbbell-curl','cable-overhead-extension','overhead-tricep-extension','leaning-cable-lateral','sissy-squat','romanian-deadlift','stiff-leg-deadlift','seated-leg-curl']);
 // Single-limb movements (for future per-side volume handling and to diversify rotation families).
 const UNILATERAL=new Set(['single-arm-cable-row','concentration-curl','single-arm-pushdown','reverse-lunge','single-leg-curl','single-leg-hip-thrust','single-leg-calf-raise','bulgarian-split-squat','walking-lunge','step-up','dumbbell-row','cable-kickback']);
+// Assist machines where LESS weight is harder: progression REDUCES the load and a PR is the lowest
+// assist, not the highest (#16). The engine flips the increment and the PR ranking for these ids.
+const INVERTED_LOAD=new Set(['assisted-pull-up']);
 
 const EXERCISES=RAW.map(r=>{const m=META[r[0]]||['overall','iso',3];
   return {id:r[0],name:r[1],group:r[2],muscles:r[3],equip:r[4],type:r[5],rr:r[6],instr:r[7],alias:r[8],reg:m[0],pat:m[1],tier:m[2]||3};});
@@ -647,7 +650,7 @@ function patLabel(p){return {hpush:'horizontal press',vpush:'overhead press',hpu
 function exampleFor(group,reg){const e=EXERCISES.find(x=>x.group===group&&x.reg===reg&&x.type===C)||EXERCISES.find(x=>x.group===group&&x.reg===reg);return e?e.name:null;}
 function hashId(s){let h=0;for(let i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))>>>0;return h;}
 
-IL.data={C,I,EXERCISES,EX,GROUPS,PRESETS,META,REGIONS,IDEAL_PATS,PAT_RANK,EQUIP_LOAD,MODES,MODE_ORDER,EQUIP_MODE,LONG_LENGTH,UNILATERAL,PUSH_PATS,PULL_PATS,LOWER_GROUPS,BW_FACTOR,GROUP_ICON,exIcon,regLabel,patLabel,exampleFor,hashId};
+IL.data={C,I,EXERCISES,EX,GROUPS,PRESETS,META,REGIONS,IDEAL_PATS,PAT_RANK,EQUIP_LOAD,MODES,MODE_ORDER,EQUIP_MODE,LONG_LENGTH,UNILATERAL,INVERTED_LOAD,PUSH_PATS,PULL_PATS,LOWER_GROUPS,BW_FACTOR,GROUP_ICON,exIcon,regLabel,patLabel,exampleFor,hashId};
 
 })();
 
@@ -658,7 +661,7 @@ IL.data={C,I,EXERCISES,EX,GROUPS,PRESETS,META,REGIONS,IDEAL_PATS,PAT_RANK,EQUIP_
 // No DOM, no app state: everything takes the sessions array it should look at.
 var IL=globalThis.IL||(globalThis.IL={});
 if(typeof require==='function'&&!IL.data)require('../data/exercises.js');
-const {EX,BW_FACTOR,EQUIP_MODE,MODES}=IL.data;
+const {EX,BW_FACTOR,EQUIP_MODE,MODES,INVERTED_LOAD}=IL.data;
 
 // The modality a logged exercise instance was performed with: its explicit `mode`, else derived
 // from the exercise's fixed equipment. Stable for any instance, so mode-less history (and every
@@ -779,7 +782,7 @@ function bestE1rmBefore(sessions,exId,opts){
 // deload still tells you which equipment you last reached for.
 function lastModeFor(sessions,exId){
   for(const s of sessions||[]){
-    if(s.completed===false)continue;
+    if(s.completed===false||s.deload)continue;   // mode follows the last REAL session; a deload done on other equipment must not switch the prescription's modality (#28)
     const e=s.exercises.find(x=>x.id===exId);
     if(e)return e.mode||null;
   }
@@ -841,13 +844,14 @@ function fmtPerf(sets,unit){
 // whole window up by two reps — more reps banked before loading — capped at 15 so it never runs away.
 // One place owns the shift, so seedExercise and nextSets stay in agreement.
 function repRange(ex,goal){
-  const lo=ex?ex.rr[0]:8,hi=ex?ex.rr[1]:12;
+  const lo=ex?ex.rr[0]:8,hi=ex?ex.rr[1]:12,cap=Math.max(15,hi);   // the cap can't shrink a naturally high-rep move (plank 30–60, carry 20–40) — #17
   if(goal==='strength')return[lo,lo];
-  if(goal==='size')return[Math.min(lo+2,15),Math.min(hi+2,15)];
+  if(goal==='size')return[Math.min(lo+2,cap),Math.min(hi+2,cap)];
   return[lo,hi];
 }
 function nextSets(last,ex,unit,rr){
-  const lo=rr?rr[0]:(ex?ex.rr[0]:8),hi=rr?rr[1]:(ex?ex.rr[1]:12),inc=unitIncrement(unit||'lb');
+  const lo=rr?rr[0]:(ex?ex.rr[0]:8),hi=rr?rr[1]:(ex?ex.rr[1]:12),baseInc=unitIncrement(unit||'lb');
+  const inverted=!!(ex&&INVERTED_LOAD&&INVERTED_LOAD.has(ex.id)),inc=inverted?-baseInc:baseInc;   // assist machines: LESS weight is harder, so a bump REDUCES load (#16)
   const p=setPattern(last);
   const anchorSets=p.anchor.map(i=>last[i]);
   const short=anchorSets.reduce((n,s)=>n+Math.max(0,hi-(+s.r||0)),0);
@@ -855,12 +859,16 @@ function nextSets(last,ex,unit,rr){
   const weighted=p.top>0;
   const ready=weighted&&short===0;
   if(!ready)return{sets:last.map(s=>({w:+s.w||0,r:+s.r||0})),bumped:false,pattern:p.pattern,anchor:p.anchor,short,under,weighted};
-  const newTop=p.top+inc;
+  // Snap an off-grid top (a converted 102.1 kg) onto the plate half-grid BEFORE adding, so it lands
+  // on 102.5→105 instead of drifting 104.6/107.1 forever (#29); a value already on the grid is unchanged.
+  const half=baseInc/2,off=Math.abs(p.top/half-Math.round(p.top/half))>1e-6;
+  let newTop=(off?roundTo(p.top,half):p.top)+inc;
+  if(inverted)newTop=Math.max(0,newTop);
   const sets=last.map((s,i)=>{
     const w=+s.w||0;
     if(p.anchor.includes(i))return{w:newTop,r:lo};
-    const shifted=Math.min(newTop,Math.max(w,roundTo(w*newTop/p.top,inc)));
-    return{w:shifted,r:+s.r||0};
+    const scaled=roundTo(w*newTop/p.top,baseInc);
+    return{w:inverted?Math.max(0,scaled):Math.min(newTop,Math.max(w,scaled)),r:+s.r||0};
   });
   return{sets,bumped:true,pattern:p.pattern,anchor:p.anchor,short:0,under:false,weighted,newTop};
 }
@@ -897,8 +905,10 @@ function suggestion(sessions,exId,opts){
   const n=nextSets(lp.sets,ex,unit,opts.rr);
   const ramp=n.pattern!=='flat';
   const topLbl=n.pattern==='descending'?'opener':'top set';
+  const inverted=!!(ex&&INVERTED_LOAD&&INVERTED_LOAD.has(ex.id));   // assist machine: a bump means LESS assist
   if(n.bumped){
-    const text=ramp?`${n.pattern==='descending'?'Opener':'Top set'} hit the range — ${topLbl} prefilled at ${n.newTop}${unit}, the rest shifted up`
+    const text=inverted?(n.newTop>0?`Hit top reps — prefilled ${inc}${unit} less assist`:'Hit top reps with no assist — try an unassisted rep next')
+              :ramp?`${n.pattern==='descending'?'Opener':'Top set'} hit the range — ${topLbl} prefilled at ${n.newTop}${unit}, the rest shifted up`
                    :`Hit top reps last time — prefilled +${inc}${unit}`;
     return{lp,kind:'weight',pattern:n.pattern,text,setsStr,next:n.sets};
   }
@@ -930,15 +940,27 @@ function convertSessions(sessions,from,to,now,stamp){
 // floor(ts/7days) bucketed on a fixed epoch boundary that fell mid-week and split them), and neither
 // drifts across a daylight-saving change.
 function weekStart(ts){const d=new Date(ts),day=(d.getDay()+6)%7;return new Date(d.getFullYear(),d.getMonth(),d.getDate()-day).getTime();}
-function weekIndex(ts){return Math.round(weekStart(ts)/(7*DAY));}   // round absorbs the DST ±1h
-// Consecutive weeks with at least one workout (current week may be untrained yet)
+// Week index anchored to a FIXED Monday (the epoch's first Monday, local). Subtracting a Monday from a
+// Monday keeps the ratio near a whole number, so round() can't flip on a DST week — the old
+// weekStart(ts)/(7*DAY) sat near x.5 in +12/+13h zones (NZ) and stepped by 0 or 2 across a DST change (#30).
+const WEEK_EPOCH=weekStart(4*DAY);
+function weekIndex(ts){return Math.round((weekStart(ts)-WEEK_EPOCH)/(7*DAY));}
+// Consecutive weeks with at least one workout. The current week may be untrained yet (doesn't break it),
+// and ONE empty week between two trained weeks is tolerated — a single week off (travel, a rest week)
+// shouldn't zero a streak; two empty weeks in a row do end it (#7).
 function calcStreak(sessions,now){
   now=now||Date.now();const done=sessions.filter(s=>s.completed!==false&&s.exercises.length);
   if(!done.length)return 0;
   const weeks=new Set(done.map(s=>weekIndex(s.date)));
   const cur=weekIndex(now);
-  let wk=cur,n=0;while(weeks.has(wk)){n++;wk--;}
-  if(n===0&&weeks.has(cur-1)){wk=cur-1;while(weeks.has(wk)){n++;wk--;}}
+  let wk=weeks.has(cur)?cur:cur-1;          // a not-yet-trained current week doesn't count against the streak
+  if(!weeks.has(wk))return 0;
+  let n=0,skipped=false;
+  while(true){
+    if(weeks.has(wk)){n++;wk--;skipped=false;}
+    else if(!skipped&&weeks.has(wk-1)){skipped=true;wk--;}   // hop one empty week if the week before it was trained
+    else break;
+  }
   return n;
 }
 
@@ -1004,7 +1026,9 @@ function shapeStyle(sets,style,ex,unit){
   if(!sets.length)return sets;
   const w=Math.max(...sets.map(s=>+s.w||0));
   if(w<=0)return sets;
-  if(style==='straight')return sets.map(s=>({w,r:s.r,done:false}));
+  // straight = every set at the top weight AND the top set's reps. Carrying each set's own reps would
+  // put a back-off set's reps on the top weight (200×5/180×8/180×8 → 200×8) — the v0.39.1 ramp bug's twin (#18).
+  if(style==='straight'){const topR=(sets.find(s=>(+s.w||0)===w)||sets[sets.length-1]).r;return sets.map(s=>({w,r:topR,done:false}));}
   if(style==='ramp'&&ex&&ex.tier===1){
     // reps come from the set that CARRIES the top weight — on a descending pattern (heavy opener,
     // lighter back-offs) the last set holds back-off reps, which must not land on the top set
@@ -1226,26 +1250,39 @@ function complementSuggestions(chosenIds,limit){
      • Exposure is measured in WEEKS (exerciseTenure), which normalizes by frequency: 8 sessions at
        2×/week and 4 at 1×/week are both "4 weeks" of the same movement — a high-frequency lifter is
        never churned by a raw session counter (the bug this phase fixes). */
-const CONTINUE_DAYS=10,STALL_MIN_DAYS=14,ANCHOR_STALL_WEEKS=3,ANCHOR_DELOAD_DAYS=21,MAX_SESSION_EX=7,MAX_SETS_PER_EX=5,DELOAD_MAX_SETS=3;
+const CONTINUE_DAYS=10,LAPSE_DAYS=42,STALL_MIN_DAYS=14,ANCHOR_STALL_WEEKS=3,ANCHOR_DELOAD_DAYS=21,MAX_SESSION_EX=7,MAX_SETS_PER_EX=5,DELOAD_MAX_SETS=3;
 const WEEK=7*DAY;
 const {e1rm}=IL.prog;
 
 function sessionGroups(s){const g={};s.exercises.forEach(e=>{const x=EX[e.id];if(x)g[x.group]=(g[x.group]||0)+1;});return g;}
 // The most recent completed session (within the window) that trained exactly these groups —
 // tolerating one incidental add-on exercise from another group.
-function findPlan(groups,sessions,now){
+// The plan for these groups = the most recent matching real session. Walk ALL completed sessions with
+// a moving reference: a DELOAD advances the window instead of ending it (so a 3+1 block continues the
+// plan, not restarts it — #4), and a non-matching real session advances it too. Two windows: within
+// CONTINUE_DAYS it's the normal "Session N" continuation; out to LAPSE_DAYS (a missed week or a
+// holiday) it still continues but is flagged `meta.lapsed` so the caller skips stall/rotation/volume.
+function findPlan(groups,sessions,now,meta){
   now=now||Date.now();const want=new Set(groups);
-  for(const s of real(sessions)){          // completed, non-deload — resume the real plan
-    if(!s.exercises.length)continue;
-    if(now-s.date>CONTINUE_DAYS*DAY)break;
-    const sg=sessionGroups(s);
-    if(![...want].every(g=>sg[g]))continue;
-    // Tolerate ONE incidental add-on exercise from outside the picked groups — summed ACROSS all
-    // non-picked groups, so picking 'Chest' alone won't continue a whole push day (Chest+Shoulders+Triceps).
-    const extras=Object.keys(sg).filter(g=>!want.has(g)).reduce((a,g)=>a+sg[g],0);
-    if(extras>1)continue;
-    return s;
-  }
+  const completed=(sessions||[]).filter(s=>s.completed!==false&&s.exercises&&s.exercises.length);   // newest-first (upsert/history keep it sorted)
+  const scan=maxGap=>{
+    let ref=now;
+    for(const s of completed){
+      if(ref-s.date>maxGap*DAY)return null;      // the chain broke — nothing recent enough to continue
+      if(s.deload){ref=s.date;continue;}         // a deload bridges the gap without being the plan itself
+      const sg=sessionGroups(s);
+      if([...want].every(g=>sg[g])){
+        // tolerate ONE incidental add-on from outside the picked groups, summed across them, so picking
+        // 'Chest' alone won't continue a whole push day
+        const extras=Object.keys(sg).filter(g=>!want.has(g)).reduce((a,g)=>a+sg[g],0);
+        if(extras<=1)return s;
+      }
+      ref=s.date;
+    }
+    return null;
+  };
+  const near=scan(CONTINUE_DAYS);if(near)return near;
+  const far=scan(LAPSE_DAYS);if(far){if(meta)meta.lapsed=true;return far;}
   return null;
 }
 // How long this exercise has been in the plan: the run of consecutive most-recent sessions of its
@@ -1272,7 +1309,9 @@ function recentPerfs(sessions,exId,opts){
   for(let i=0;i<n;i++){
     const lp=lastPerf(sessions,exId,{beforeTs:before,mode:opts.mode});if(!lp)break;
     if(opts.since&&lp.date<opts.since)break;
-    out.push({date:lp.date,score:Math.max(...lp.sets.map(s=>s.w>0?e1rm(s.w,s.r):s.r)),top:Math.max(...lp.sets.map(s=>+s.w||0))});
+    const top=Math.max(...lp.sets.map(s=>+s.w||0));
+    const topR=Math.max(...lp.sets.filter(s=>(+s.w||0)===top).map(s=>+s.r||0));   // reps at the top weight — for double-progression detection
+    out.push({date:lp.date,score:Math.max(...lp.sets.map(s=>s.w>0?e1rm(s.w,s.r):s.r)),top,topR});
     before=lp.date;
   }
   return out;
@@ -1292,7 +1331,16 @@ function isStalled(sessions,exId,opts){
   const cutoff=p[0].date-STALL_MIN_DAYS*DAY;
   const recent=p.filter(x=>x.date>cutoff),old=p.filter(x=>x.date<=cutoff);
   if(!recent.length||!old.length)return false;                   // not enough calendar span yet
-  if(Math.max(...recent.map(x=>x.top))>Math.max(...old.map(x=>x.top)))return false;  // added weight = progressing
+  const rTop=Math.max(...recent.map(x=>x.top)),oTop=Math.max(...old.map(x=>x.top));
+  if(rTop>oTop)return false;                                      // added weight = progressing
+  // Same top weight but MORE reps at it = double progression before the next bump (100×12 → 105×8 →
+  // 105×9 → 105×10 is climbing, not stalled). e1RM ties here (Epley: 105×10 = 100×12) would otherwise
+  // read as a plateau and rotate the lift out mid-climb (#3).
+  if(rTop===oTop){
+    const rReps=Math.max(...recent.filter(x=>x.top===rTop).map(x=>x.topR));
+    const oReps=Math.max(...old.filter(x=>x.top===oTop).map(x=>x.topR));
+    if(rReps>oReps)return false;
+  }
   return Math.max(...recent.map(x=>x.score))<=Math.max(...old.map(x=>x.score));
 }
 // A deload taken within `days` that (when exId is given) actually trained that exercise's muscle —
@@ -1339,8 +1387,10 @@ function planWorkout(groups,sessions,seed,opts){
   const maxEx=profile&&profile.length==='long'?8:MAX_SESSION_EX;
   const protect=new Set(profile&&profile.protect||[]);
   const hints=deload?null:opts.hints,reactions=[],volumeBump=[];   // a deload never adds volume/coverage
-  const plan=opts.fresh?null:findPlan(groups,sessions,opts.now);
+  const meta={};
+  const plan=opts.fresh?null:findPlan(groups,sessions,opts.now,meta);
   if(!plan)return{ids:buildRecommendation(groups,sessions,seed,hints,undefined,profile),mode:'fresh',plan:null,rotation:null,streak:0,reactions,volumeBump,deload};
+  const lapsed=!!meta.lapsed;
   let ids=plan.exercises.map(e=>e.id).filter(id=>EX[id]);
   // Profile 'avoid' applies even to a continued plan: swap any avoided lift for a same-group
   // alternative (a user directive, not a reaction — so it holds on a deload too).
@@ -1350,8 +1400,14 @@ function planWorkout(groups,sessions,seed,opts){
   // A deload CONTINUES the plan verbatim — same exercises, just lighter (seedExercise cuts load and
   // volume). Zero structural changes: no stall check, rotation, anchor swap, gap-add or volume bump.
   if(deload)return{ids:orderByFatigue(capHeavyAxial(ids,profile,sessions),groups[0]),mode:'continue',plan,rotation:null,streak:0,reactions,volumeBump,deload:true};
+  // Coming back after a lapse (a missed week / holiday): continue the plan with weights carried from
+  // where you left off, but make NO structural change — you weren't stalled, you were away, and a
+  // detrained first session back shouldn't get extra volume or a rotation.
+  if(lapsed)return{ids:orderByFatigue(capHeavyAxial(ids,profile,sessions),groups[0]),mode:'continue',plan,rotation:null,streak:0,reactions,volumeBump,deload:false,lapsed:true};
   const modeById={};plan.exercises.forEach(e=>{if(EX[e.id])modeById[e.id]=modeOf(e);});
-  const anchors=new Set(groups.map(g=>planAnchor(ids,g)).filter(Boolean).map(e=>e.id));
+  // Anchors are protected from rotation: the group's key tier-1 lift AND every other tier-1 lift in the
+  // plan (a main deadlift/squat is not an "accessory" to be swapped out on a stall — #15).
+  const anchors=new Set([...groups.map(g=>planAnchor(ids,g)).filter(Boolean).map(e=>e.id),...ids.filter(id=>EX[id]&&EX[id].tier===1)]);
   let rotation=null,structural=false;   // at most ONE structural change per session (swap OR gap-add)
   // 1. Anchor variation swap — rare: a long-stalled main lift that a recent deload OF THAT MUSCLE
   //    didn't unstick.
@@ -1403,7 +1459,7 @@ if(typeof module!=='undefined')module.exports=IL.builder;
 var IL=globalThis.IL||(globalThis.IL={});
 if(typeof require==='function'&&!IL.data)require('../data/exercises.js');
 if(typeof require==='function'&&!IL.prog)require('./progression.js');
-const {EX,EXERCISES,REGIONS,IDEAL_PATS,LOWER_GROUPS,MODES,regLabel,patLabel,exampleFor,hashId}=IL.data;
+const {EX,EXERCISES,REGIONS,IDEAL_PATS,LOWER_GROUPS,MODES,INVERTED_LOAD,regLabel,patLabel,exampleFor,hashId}=IL.data;
 const {DAY,startOfDay,e1rm,isWorking,setLoad,sessionVolume,sessionSets,sessionDuration,setTimeline,modeOf,calcStreak,real,weekIndex,weekStart,lastPerf}=IL.prog;
 
 // completed() INCLUDES deloads on purpose — volume/frequency/PR-window analysis wants everything the
@@ -1479,7 +1535,12 @@ function findings(a,sessions,now,bw,profile){
   const lastDeload=completed(sessions).filter(s=>s.deload&&s.date<now).sort((x,y)=>y.date-x.date)[0];
   const sinceDeload=lastDeload?Math.round((now-lastDeload.date)/DAY):Infinity;
   if(sinceDeload<=14)F.push({type:'deload-taken',lv:'good',days:sinceDeload});
-  else{const streakWk=calcStreak(sessions,now);if(streakWk>=6)F.push({type:'deload-due',lv:'info',weeks:streakWk});}
+  else{const streakWk=calcStreak(sessions,now),weeksSince=Math.floor(sinceDeload/7);
+    // Count from the LAST deload, not the training streak (which runs through deloads), so it can't say
+    // "12 weeks without a deload" three weeks after one. Fire once per ~6-week block (weeks 6–7, 12–13…),
+    // not every week (#7).
+    const weeks=Math.min(streakWk,weeksSince);
+    if(weeks>=6&&weeks%6<2)F.push({type:'deload-due',lv:'info',weeks});}
   trained.forEach(g=>{const seen=a.regSeen[g]||new Set();(REGIONS[g]||[]).forEach(r=>{if(!seen.has(r)){const ex=exampleFor(g,r);if(ex)F.push({type:'region-gap',lv:'info',group:g,reg:r,ex,prio:gapPrio(g,r)});}});});
   trained.forEach(g=>{const seen=a.patSeen[g]||new Set();(IDEAL_PATS[g]||[]).forEach(p=>{if(!seen.has(p)){const ex=EXERCISES.find(x=>x.group===g&&x.pat===p&&x.tier<=2)||EXERCISES.find(x=>x.group===g&&x.pat===p);if(ex)F.push({type:'pattern-gap',lv:'info',group:g,pat:p,exId:ex.id,exName:ex.name,prio:patPrio(g,p)});}});});
   // 'protect': a muscle you're keeping light must not be nagged toward heavy compounds. Gap findings
@@ -1671,8 +1732,10 @@ function personalRecords(sessions,bw,limit){
   real(sessions).forEach(s=>{s.exercises.forEach(e=>{const mode=modeOf(e);e.sets.forEach(st=>{
     if(!isWorking(st))return;const w=setLoad(e.id,st.w,bw),r=+st.r||0;if(!w||!r)return;
     const est=e1rm(w,r);const ex=EX[e.id];const key=e.id+':'+mode;
-    const showEst=!!ex&&ex.type==='compound'&&!!(MODES[mode]&&MODES[mode].e1rm);
-    if(!best[key]||est>best[key].est)best[key]={id:e.id,mode,w:+st.w||0,load:w,r,est,name:ex?ex.name:e.name,date:s.date,compound:!!ex&&ex.type==='compound',showEst,bodyweight:mode==='bodyweight'};
+    const inverted=!!(ex&&INVERTED_LOAD&&INVERTED_LOAD.has(e.id));   // assist machine: the PR is the LEAST assist, and no 1RM estimate (#16)
+    const showEst=!!ex&&ex.type==='compound'&&!inverted&&!!(MODES[mode]&&MODES[mode].e1rm);
+    const better=inverted?(!best[key]||w<best[key].load):(!best[key]||est>best[key].est);
+    if(better)best[key]={id:e.id,mode,w:+st.w||0,load:w,r,est,name:ex?ex.name:e.name,date:s.date,compound:!!ex&&ex.type==='compound',showEst,inverted,bodyweight:mode==='bodyweight'};
   })})});
   // e1RM-comparable lifts first (by e1RM); the rest after, by load
   return Object.values(best).sort((a,b)=>(b.showEst-a.showEst)||(a.showEst?b.est-a.est:b.load-a.load)).slice(0,limit||8);
@@ -2504,7 +2567,8 @@ function buildAndStart(fresh){
   if(p.deload)msg=p.mode==='continue'?'Deload — same plan, lighter loads, focus on the stretch':'Deload built — lighter loads, focus on the stretch';
   else if(p.mode==='continue'){
     const gapAdd=(p.reactions||[]).find(r=>r.type==='gap-add');
-    if(p.rotation&&p.rotation.anchor)msg=`Swapped ${EX[p.rotation.from].name} → ${EX[p.rotation.to].name} — it stalled through a deload`;
+    if(p.lapsed)msg=`Welcome back — continued your plan from ${relDay(p.plan.date).toLowerCase()}, weights where you left off`;
+    else if(p.rotation&&p.rotation.anchor)msg=`Swapped ${EX[p.rotation.from].name} → ${EX[p.rotation.to].name} — it stalled through a deload`;
     else if(p.rotation)msg=`Plan continued · swapped ${EX[p.rotation.from].name} → ${EX[p.rotation.to].name} (it stalled)`;
     else if(gapAdd)msg=`Plan continued · added ${EX[gapAdd.exId].name} — ${gapAdd.why}`;
     else if(p.volumeBump&&p.volumeBump.length)msg='Plan continued · +1 set where your volume was low';

@@ -18,12 +18,18 @@ test('continues a recent plan for the same muscles instead of reshuffling',()=>{
   assert.equal(p.rotation,null,'nothing rotates on week 2');
 });
 
-test('fresh build when the plan is older than the window, for different muscles, or on request',()=>{
+test('a plan past the 10-day window still CONTINUES within the 6-week lapse window (flagged, no structural change); beyond it / other muscles / on request it is fresh (#4)',()=>{
   const now=Date.now();
-  const old=[pushDay(B.CONTINUE_DAYS+2,now)];
-  assert.equal(B.planWorkout(['Chest','Shoulders','Triceps'],old,3,{now}).mode,'fresh');
-  assert.equal(B.planWorkout(['Back','Biceps'],[pushDay(3,now)],3,{now}).mode,'fresh');
-  assert.equal(B.planWorkout(['Chest','Shoulders','Triceps'],[pushDay(3,now)],3,{now,fresh:true}).mode,'fresh');
+  // 12 days ago — past "Session N" (10d) but within the lapse window (42d): continue the plan, weights
+  // where you left off, and make NO structural change (you were away, not stalled)
+  const lapsed=B.planWorkout(['Chest','Shoulders','Triceps'],[pushDay(B.CONTINUE_DAYS+2,now)],3,{now});
+  assert.equal(lapsed.mode,'continue');assert.equal(lapsed.lapsed,true);
+  assert.equal(lapsed.rotation,null,'no rotation on a returning session');assert.equal(lapsed.volumeBump.length,0,'no volume bump on a returning session');
+  assert.deepEqual(new Set(lapsed.ids),new Set(PUSH),'same plan continued, not reshuffled');
+  // beyond the lapse window (45 days) → genuinely fresh
+  assert.equal(B.planWorkout(['Chest','Shoulders','Triceps'],[pushDay(45,now)],3,{now}).mode,'fresh','a plan older than 6 weeks is a fresh start');
+  assert.equal(B.planWorkout(['Back','Biceps'],[pushDay(3,now)],3,{now}).mode,'fresh','different muscles → fresh');
+  assert.equal(B.planWorkout(['Chest','Shoulders','Triceps'],[pushDay(3,now)],3,{now,fresh:true}).mode,'fresh','fresh:true forces it');
 });
 
 test('an incidental add-on exercise does not break plan matching; a second group does',()=>{
