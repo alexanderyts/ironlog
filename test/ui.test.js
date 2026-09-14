@@ -416,3 +416,32 @@ test('C2: "Got it" hides a coaching note and Settings can bring it back',()=>{
     assert.ok(!h.state.settings.seen['mute:balance'],'un-mute clears it');
   }finally{h.teardown();}
 });
+
+test('D5/D7/D8: Home continues the plan in one tap; empty selection disables Build; History paginates',()=>{
+  const h=launch();
+  try{
+    // D7: on the New-workout screen with nothing picked, Build is disabled
+    h.click('[data-action="startFlow"]');
+    assert.equal(h.$('#btnRecommend').disabled,true,'Build is disabled with no muscle group chosen');
+    assert.ok(h.text('#btnRecommend').match(/Pick a muscle/),'and says to pick one');
+    h.click(h.$$('[data-g]').find(b=>b.dataset.g==='Chest'));
+    assert.equal(h.$('#btnRecommend').disabled,false,'enabled once a group is chosen');
+    h.click('[data-action="backHome"]');
+    // seed history so Home shows a one-tap "Continue your plan"
+    pushHistory(h.state,h.S);h.IL.ui.setTab('today');h.IL.ui.render();
+    const cont=h.$$('[data-action="nextUp"]')[0];
+    assert.ok(cont,'Home shows a one-tap Continue card');
+    assert.ok(h.bodyText().includes('Continue your plan'),'labelled Continue your plan');
+    h.click(cont);   // ONE tap → a workout is built and started
+    assert.ok(h.state.active,'a workout started from the single tap');
+    assert.ok(h.state.active.exercises.length>=1,'with exercises from the last plan');
+    // D8: History renders a page + a Show more when there are many sessions
+    h.state.active=null;h.S.persistActive();
+    const now=Date.now();h.state.sessions=[];for(let i=0;i<45;i++)h.state.sessions.push({id:'h'+i,schema:1,date:now-i*2*86400000,updatedAt:1,completed:true,exercises:[{id:'barbell-bench-press',name:'B',sets:[{w:135,r:6,done:true}]}]});
+    h.IL.ui.setTab('history');h.IL.ui.render();
+    assert.equal(h.$$('[data-sess]').length,30,'first page is 30 cards');
+    assert.ok(h.has('#btnHistMore'),'a Show more button is offered');
+    h.click('#btnHistMore');
+    assert.equal(h.$$('[data-sess]').length,45,'Show more reveals the rest');
+  }finally{h.teardown();}
+});

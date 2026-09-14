@@ -285,7 +285,7 @@ test('B-continuity: repRange size cap cannot shrink a naturally high-rep move (#
 test('B-continuity: assisted pull-up progresses by LESS assist and its PR is the least assist (#16)',()=>{
   const {EX}=IL.data;const A=IL.analysis;const {history,NOW}=require('./load.js');
   const hist=history(session(3,[['assisted-pull-up',[set(60,12),set(60,12)]]],{now:NOW}));
-  assert.deepEqual(P.nextSets(hist[0].exercises[0].sets,EX['assisted-pull-up'],'lb').sets,[{w:55,r:8},{w:55,r:8}],'hit top reps → 5 lb LESS assist');
+  assert.deepEqual(P.nextSets(hist[0].exercises[0].sets,EX['assisted-pull-up'],'lb').sets,[{w:55,r:9},{w:55,r:9}],'hit top reps → 5 lb LESS assist; wide range (8–12) resets to lo+1=9 (#11)');
   assert.equal(P.nextSets([set(0,12)],EX['assisted-pull-up'],'lb').bumped,false,'at 0 assist there is nothing to remove');
   // PR: least assist wins, no bogus 1RM estimate
   const pr=A.personalRecords(history(session(3,[['assisted-pull-up',[set(90,8)]]],{now:NOW}),session(10,[['assisted-pull-up',[set(60,8)]]],{now:NOW})),0,5).find(p=>p.id==='assisted-pull-up');
@@ -301,4 +301,20 @@ test('B-continuity: a bump snaps an off-grid top (converted weight) onto the pla
   assert.equal(P.nextSets([set(102.1,hi),set(102.1,hi)],ex,'kg').newTop,105,'102.1 → 102.5 → 105, not 104.6');
   assert.equal(P.nextSets([set(100,hi),set(100,hi)],ex,'kg').newTop,102.5,'control: on-grid 100 → 102.5 unchanged');
   assert.equal(P.nextSets([set(225,hi),set(225,hi)],ex,'lb').newTop,230,'control: lb stays exact');
+});
+
+test('D4: increment and rep-reset scale with the equipment (#11)',()=>{
+  const {EX}=IL.data;const {history,session,set,NOW}=require('./load.js');
+  // lateral raise: isolation, wide range 12–20 → 2.5-lb step, reset to lo+1=13 (was a 5-lb jump to ×12)
+  const lr=history(session(3,[['lateral-raise',[set(15,20),set(15,20)]]],{now:NOW}));
+  assert.deepEqual(P.nextSets(lr[0].exercises[0].sets,EX['lateral-raise'],'lb').sets,[{w:17.5,r:13},{w:17.5,r:13}]);
+  // dumbbell press: 8–12 (hi-lo=4) → 2.5-lb step, reset to 9
+  const db=history(session(3,[['dumbbell-bench-press',[set(50,12),set(50,12)]]],{now:NOW}));
+  assert.deepEqual(P.nextSets(db[0].exercises[0].sets,EX['dumbbell-bench-press'],'lb').sets,[{w:52.5,r:9},{w:52.5,r:9}]);
+  // control: barbell bench 5–8 (hi-lo=3) → 5-lb step, reset to lo=5, unchanged from before
+  const bb=history(session(3,[['barbell-bench-press',[set(185,8),set(185,8)]]],{now:NOW}));
+  assert.deepEqual(P.nextSets(bb[0].exercises[0].sets,EX['barbell-bench-press'],'lb').sets,[{w:190,r:5},{w:190,r:5}]);
+  assert.equal(P.unitIncrement('lb',EX['lateral-raise']),2.5,'isolation step');
+  assert.equal(P.unitIncrement('lb',EX['barbell-bench-press']),5,'barbell step');
+  assert.equal(P.unitIncrement('kg',EX['dumbbell-bench-press']),1,'dumbbell kg step');
 });

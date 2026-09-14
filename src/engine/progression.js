@@ -129,7 +129,13 @@ function lastModeFor(sessions,exId){
   }
   return null;
 }
-function unitIncrement(unit){return unit==='kg'?2.5:5;}
+// The load step for one progression bump. A barbell adds 5 lb / 2.5 kg; a per-hand dumbbell or any
+// isolation move adds HALF that (2.5 lb / 1 kg) — a flat 5 lb was a 20–33% jump on a lateral raise or
+// a per-dumbbell press and overshot every time (#11). Pass `ex` to get the equipment-aware step.
+function unitIncrement(unit,ex){
+  if(ex&&(ex.equip==='Dumbbell'||ex.type==='isolation'))return unit==='kg'?1:2.5;
+  return unit==='kg'?2.5:5;
+}
 
 /* ── Pattern-aware progressive overload ──────────────────────────────────────────────────────────
    Lifters don't only do straight sets. The three patterns that matter, and what they mean for the
@@ -191,7 +197,8 @@ function repRange(ex,goal){
   return[lo,hi];
 }
 function nextSets(last,ex,unit,rr){
-  const lo=rr?rr[0]:(ex?ex.rr[0]:8),hi=rr?rr[1]:(ex?ex.rr[1]:12),baseInc=unitIncrement(unit||'lb');
+  const lo=rr?rr[0]:(ex?ex.rr[0]:8),hi=rr?rr[1]:(ex?ex.rr[1]:12),baseInc=unitIncrement(unit||'lb',ex);
+  const resetR=(hi-lo>=4)?lo+1:lo;   // on a wide range, resetting to the very bottom drops too many reps — start one above (#11)
   const inverted=!!(ex&&INVERTED_LOAD&&INVERTED_LOAD.has(ex.id)),inc=inverted?-baseInc:baseInc;   // assist machines: LESS weight is harder, so a bump REDUCES load (#16)
   const p=setPattern(last);
   const anchorSets=p.anchor.map(i=>last[i]);
@@ -207,7 +214,7 @@ function nextSets(last,ex,unit,rr){
   if(inverted)newTop=Math.max(0,newTop);
   const sets=last.map((s,i)=>{
     const w=+s.w||0;
-    if(p.anchor.includes(i))return{w:newTop,r:lo};
+    if(p.anchor.includes(i))return{w:newTop,r:resetR};
     const scaled=roundTo(w*newTop/p.top,baseInc);
     return{w:inverted?Math.max(0,scaled):Math.min(newTop,Math.max(w,scaled)),r:+s.r||0};
   });
@@ -220,7 +227,7 @@ function nextSets(last,ex,unit,rr){
    Bodyweight moves stay bodyweight (just do easy, controlled reps). Because lastPerf skips deloads,
    this pulls from the last REAL session, and the deload itself never becomes a progression anchor. */
 function deloadSets(last,ex,unit){
-  const hi=ex?ex.rr[1]:12,inc=unitIncrement(unit||'lb');
+  const hi=ex?ex.rr[1]:12,inc=unitIncrement(unit||'lb',ex);
   return last.map(s=>{const w=+s.w||0;const dw=w>0?Math.max(inc,Math.round(w*0.6/inc)*inc):0;return{w:dw,r:hi};});
 }
 // Progressive-overload suggestion for an exercise. kind: 'new' | 'weight' | 'match' | 'reps'
@@ -238,7 +245,7 @@ function suggestion(sessions,exId,opts){
     if(dl)return{lp:null,kind:'new',text:'No full session yet — your last deload here was '+fmtPerf(dl.sets,unit)+'. Set your baseline.',next:null,deloadRef:dl};
     return{lp:null,kind:'new',text:'First time logging this — set your baseline.',next:null};
   }
-  const setsStr=fmtPerf(lp.sets,unit),inc=unitIncrement(unit);
+  const setsStr=fmtPerf(lp.sets,unit),inc=unitIncrement(unit,ex);
   // push:'quiet' (Profile P2) — the user asked the app to just record, never suggest heavier. Mirror
   // last time as-is: no bump, neutral wording. The prescription still carries last time's numbers so
   // they aren't retyped; the coach simply stops nudging.

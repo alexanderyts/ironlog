@@ -172,6 +172,7 @@ const ACTIONS={
   backHome:()=>leaveEditor(),
   build:()=>buildAndStart(false),
   buildFresh:()=>buildAndStart(true),
+  nextUp:el=>{draft.groups=new Set(el.dataset.groups.split(','));draft.deload=false;buildAndStart(false);},   // Home one-tap continue (#9)
   coachNudge:el=>{draft.groups=new Set(el.dataset.groups.split(','));render();},
   preset:el=>{const p=PRESETS.find(x=>x.label===el.dataset.preset);if(!p)return;
     draft.groups=presetOn(p)?new Set():new Set(p.groups);   // tap to select those groups; tap again to clear
@@ -214,6 +215,7 @@ function bind(){
   const cal=v.querySelector('.cal-grid');
   if(cal)cal.addEventListener('click',e=>{const c=e.target.closest('[data-day]');if(!c)return;const d=+c.dataset.day;selDay=selDay===d?null:d;render();});
   v.querySelectorAll('[data-mon]').forEach(b=>b.addEventListener('click',()=>{calMonth+=+b.dataset.mon;selDay=null;render();}));
+  bindClick('#btnHistMore',()=>{histShown+=30;render();});
   // [data-sess] is handled by the delegated #view listener above (fires from History AND the Home card).
   // progress: PR rows open the lift's detail (with its progress trend)
   const prc=$('#prCard');if(prc)prc.addEventListener('click',e=>{const r=e.target.closest('[data-openex]');if(r&&EX[r.dataset.openex])openSheet(EX[r.dataset.openex].name,exerciseDetail(r.dataset.openex));});
@@ -228,7 +230,7 @@ function bind(){
 // One stepper tick on a set's weight/reps (shared by tap and hold-to-repeat).
 function stepSet(ei,si,f,d){
   const t=cur();if(!t||!t.exercises[ei]||!t.exercises[ei].sets[si])return;const st=t.exercises[ei].sets[si];
-  let v=+st[f]||0;v+=f==='w'?d*inc():d;if(v<0)v=0;st[f]=v;st.t=1;persistCur();
+  let v=+st[f]||0;v+=f==='w'?d*inc(EX[t.exercises[ei].id]):d;if(v<0)v=0;st[f]=v;st.t=1;persistCur();   // the +/- step matches the lift's increment (2.5 for dumbbells/isolation)
   const inp=$(`input[data-f="${f}"][data-ei="${ei}"][data-s="${si}"]`);if(inp)inp.value=v;refreshStats();
   try{if(navigator.vibrate)navigator.vibrate(8);}catch(e){}   // light haptic where the platform has one (Android); iOS Safari has none
 }

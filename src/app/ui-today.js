@@ -27,8 +27,7 @@ function homeView(){
       <div class="card stat" style="padding:14px 12px"><div class="k">Streak</div><div class="v mono">${streak}<small>wk</small></div></div>
       <div class="card stat" style="padding:14px 12px"><div class="k">${volLabel()}</div><div class="v mono">${fmtVol(wkVol)}</div></div>
     </div>
-    ${state.active?'':`<button class="btn primary block" id="btnStartFlow" data-action="startFlow" style="height:56px;font-size:16px">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg> Start a workout</button>`}
+    ${state.active?'':startBlock(last)}
     ${last?`<div class="eyebrow" style="margin:26px 2px 10px">Last session</div>${sessCard(last)}`:emptyHome()}
     <div class="eyebrow" style="margin:24px 2px 10px">Jump in</div>
     <button class="btn ghost block" id="btnGoLibrary" data-action="goLibrary" style="justify-content:space-between">
@@ -36,6 +35,19 @@ function homeView(){
   </div>`;
 }
 function emptyHome(){return `<div class="card" style="padding:26px 18px;text-align:center;margin-top:20px"><div class="dim">No workouts logged yet.<br>Tap <b style="color:var(--accent)">Start a workout</b> above to log your first session.</div></div>`;}
+// Home's primary action. With a recent plan it's ONE tap to continue it (weights carried forward),
+// with the full "what are you training?" picker demoted to secondary — the plan used to cost 4–5 taps (#9).
+function startBlock(last){
+  const START=`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>`;
+  const groups=last?[...new Set(last.exercises.map(e=>EX[e.id]&&EX[e.id].group).filter(Boolean))]:[];
+  if(!groups.length)   // no history yet → just the picker
+    return `<button class="btn primary block" id="btnStartFlow" data-action="startFlow" style="height:56px;font-size:16px">${START} Start a workout</button>`;
+  const label=groups.slice(0,3).join(' · ')+(groups.length>3?' · +'+(groups.length-3):'');
+  return `<button class="btn primary block" data-action="nextUp" data-groups="${groups.join(',')}" style="height:auto;padding:13px 16px;font-size:16px;justify-content:space-between">
+      <span style="text-align:left;min-width:0"><span style="font-weight:700;display:block">Continue your plan</span><span style="font-size:12.5px;font-weight:500;opacity:.85">${esc(label)} · from ${relDay(last.date).toLowerCase()}</span></span>
+      <span style="font-size:20px;flex-shrink:0">→</span></button>
+    <button class="btn ghost block" id="btnStartFlow" data-action="startFlow" style="margin-top:9px">Something else</button>`;
+}
 // One-time card introducing the optional training profile (P1). Dismissed by either button (synced).
 function profileIntroCard(){
   if(seenFlag('profileIntro'))return '';
@@ -80,7 +92,8 @@ const ICON_BUILD='<svg width="18" height="18" viewBox="0 0 24 24" fill="none" st
 function buildButtons(){
   const dl=draft.deload;
   const plan=draft.groups.size?B.findPlan([...draft.groups],state.sessions):null;
-  if(!plan)return `<button class="btn primary block" id="btnRecommend" data-action="build" style="height:56px;font-size:16px">${ICON_BUILD} ${dl?'Build me a deload':'Build me a workout'}</button>`;
+  if(!plan){const noSel=!draft.groups.size;   // building nothing silently defaulted to Chest+Back — make the user choose (#25)
+    return `<button class="btn primary block" id="btnRecommend" data-action="build" ${noSel?'disabled':''} style="height:56px;font-size:16px${noSel?';opacity:.5':''}">${ICON_BUILD} ${noSel?'Pick a muscle group above':(dl?'Build me a deload':'Build me a workout')}</button>`;}
   // On a deload we continue the SAME plan lighter — no "Session N" progression framing.
   if(dl)return `<button class="btn primary block" id="btnRecommend" data-action="build" style="height:auto;padding:12px 16px;font-size:16px;flex-direction:column;gap:2px">
       <span style="display:flex;align-items:center;gap:8px">🌿 Deload this plan</span>
@@ -276,7 +289,7 @@ function logExercise(s,e,ei,mode){
       <button class="linkbtn dim" data-note="${ei}">✎ ${e.note?'Edit note':'Note'}</button>
       <a class="linkbtn dim" href="${demoURL(e.id)}" target="_blank" rel="noopener noreferrer" style="margin-left:auto;text-decoration:none">▶ Watch demo</a>
     </div>
-    ${ei===0?'<div class="hint">Tip: tap a set number to mark it a warm-up (kept out of PRs and volume).</div>':''}
+    ${ei===0&&state.sessions.length<3?'<div class="hint">Tip: tap a set number to mark it a warm-up (kept out of PRs and volume).</div>':''}
   </div>`;
 }
 function setRow(st,ei,si){

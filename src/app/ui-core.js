@@ -13,7 +13,7 @@ const APP_VERSION=CFG.VERSION||'0';
 const $=s=>document.querySelector(s);
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 const U=()=>state.settings.unit;
-const inc=()=>P.unitIncrement(U());
+const inc=ex=>P.unitIncrement(U(),ex);
 const bw=()=>+state.settings.bodyweight||0;
 const {DAY,startOfDay,fmtVol}=P;
 // Minutes → a short human duration: "5 min", "1 h 12 min", "2 h". Used for workout length.
@@ -74,9 +74,9 @@ let editSession=null,editDirty=false;
 // startSession() when a workout begins — so nothing leaks into the next visit.
 let draft={groups:new Set(),deload:false};
 function resetDraft(){draft.groups=new Set();draft.deload=false;}
-let calMonth=new Date().getFullYear()*12+new Date().getMonth(),selDay=null;
+let calMonth=new Date().getFullYear()*12+new Date().getMonth(),selDay=null,histShown=30;   // History renders 30 at a time (#13)
 let libQuery='',libGroup='All';
-function setTab(t){vlog('tab '+t);currentTab=t;document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===t));render();window.scrollTo(0,0);}
+function setTab(t){vlog('tab '+t);if(t!==currentTab)histShown=30;currentTab=t;document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===t));render();window.scrollTo(0,0);}
 function render(){
   const v=$('#view');if(!v)return;
   // Error boundary: one malformed record must never white-screen the whole app. On failure, show a

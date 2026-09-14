@@ -24,7 +24,11 @@ function calendar(done){
 function sessionList(done){
   let list=selDay?done.filter(s=>startOfDay(s.date)===selDay):done;
   if(!list.length)return `<div class="card" style="padding:24px;text-align:center"><span class="dim">${selDay?'No workout logged this day.':'No workouts yet. Your logged sessions will appear here.'}</span></div>`;
-  return list.map(s=>sessCard(s)).join('');
+  // Render a page at a time — a year of history is 150+ cards, and building them all froze the tab (#13).
+  const shown=selDay?list.length:Math.min(histShown,list.length);
+  const cards=list.slice(0,shown).map(s=>sessCard(s)).join('');
+  const more=shown<list.length?`<button class="btn ghost block" id="btnHistMore" style="margin-top:4px">Show ${Math.min(30,list.length-shown)} more · ${list.length-shown} older</button>`:'';
+  return cards+more;
 }
 function sessCard(s){
   return `<div class="card sess" data-sess="${s.id}">
@@ -357,7 +361,7 @@ function pchips(field,opts){const c=(state.settings.profile&&state.settings.prof
   return `<div class="chips">${opts.map(([v,l])=>`<button class="chip ${(''+c)===v?'on':''}" data-pset="${field}" data-pv="${v}">${l}</button>`).join('')}</div>`;}
 function prow(label,inner){return `<div style="margin-bottom:18px"><div class="eyebrow" style="margin-bottom:8px">${label}</div>${inner}</div>`;}
 function profileBody(){const p=state.settings.profile||{},avoid=p.avoid||[],protect=new Set(p.protect||[]);
-  return `<div class="dim" style="font-size:13px;margin:-4px 2px 16px;line-height:1.5">All optional — anything left on <b>Balanced</b> works exactly like today. Changes save automatically; the workout builder starts using these in the next update.</div>
+  return `<div class="dim" style="font-size:13px;margin:-4px 2px 16px;line-height:1.5">All optional — anything left on <b>Balanced</b> works exactly like today. Changes save automatically; the workout builder and coach adapt to whatever you set here.</div>
     ${prow('Main goal',pchips('goal',[['auto','Balanced'],['size','Size'],['strength','Strength'],['general','General']]))}
     ${prow('Your gym',pchips('gym',[['auto','Balanced'],['full','Full gym'],['machine','Machine-focused'],['home','Home / minimal']]))}
     ${prow('Days per week',pchips('days',[['auto','Any'],['2','2'],['3','3'],['4','4'],['5','5'],['6','6']]))}

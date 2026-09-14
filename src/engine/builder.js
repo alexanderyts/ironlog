@@ -29,7 +29,7 @@ function shapeStyle(sets,style,ex,unit){
   if(style==='ramp'&&ex&&ex.tier===1){
     // reps come from the set that CARRIES the top weight — on a descending pattern (heavy opener,
     // lighter back-offs) the last set holds back-off reps, which must not land on the top set
-    const inc=unitIncrement(unit||'lb'),topR=(sets.find(s=>(+s.w||0)===w)||sets[sets.length-1]).r,grid=x=>Math.max(inc,Math.round(x/inc)*inc);
+    const inc=unitIncrement(unit||'lb',ex),topR=(sets.find(s=>(+s.w||0)===w)||sets[sets.length-1]).r,grid=x=>Math.max(inc,Math.round(x/inc)*inc);
     return[{w:grid(w*0.8),r:topR,done:false},{w:grid(w*0.9),r:topR,done:false},{w,r:topR,done:false}];
   }
   return sets;

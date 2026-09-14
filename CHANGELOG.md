@@ -2,6 +2,15 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.45.0 — 2026-09-13 · Faster, clearer, one tap to your plan (Roadmap v7, Phase D)
+The between-sets experience: less friction, easier to read, sized for a thumb.
+- **One tap to keep going.** Home now leads with **Continue your plan · [your muscles] · from [when]** — a single tap builds your next session with the weights carried forward. The full "what are you training?" picker is still there behind **Something else**. (It used to take four or five taps to get to the same place.)
+- **The rest timer no longer hides the Finish button.** While a rest countdown is up, the page reserves room for it, so the last set row and the **Finish** button stay tappable.
+- **Easier to read.** The muted text (set headers, sub-labels, tab names) and the green **Finish** button and set checkmarks now meet the standard contrast level in both light and dark — the old values were too faint. A few of the smallest labels were bumped up a point.
+- **Weights step by the right amount.** A dumbbell or an isolation move (curls, raises, extensions) now increases by 2.5 lb / 1 kg instead of a jarring 5 — a lateral raise no longer jumps from 15 to 20. On a wide rep range the reps reset one above the bottom instead of dropping several. The +/- buttons match.
+- **Small friction gone:** tapping **Build** with nothing selected now asks you to pick a muscle group instead of quietly building a chest-and-back day; the mode chip, toggles and "Keep last" have bigger touch targets; History loads 30 sessions at a time (a year of history no longer freezes the tab); and the warm-up tip only shows for your first couple of sessions.
+- Not verified on-device beyond this: the contrast values were computed to the WCAG AA threshold and the flows (one-tap continue, disabled Build, History paging, the new increments) have automated tests; the Home card, green button, rest-bar spacing and legibility were checked in the browser at phone width in both themes. Deferred: folding the per-exercise **Watch demo / Note** links into the ⓘ sheet (a larger card-density change) is left for the polish pass.
+
 ## v0.44.0 — 2026-09-13 · The coach knows your gym, your limits, and when you've heard it (Roadmap v7, Phase C)
 The coaching gets honest about your profile. If you don't set a profile, every note is exactly as before (the real-data check confirms it's unchanged).
 - **It only suggests things you can actually do.** At a machine or home gym, the coach no longer says "try an Incline Barbell Press" or "add a Face Pull" — it suggests a lift your gym has, or says nothing. The workout builder won't quietly add an off-equipment exercise either.

@@ -1,8 +1,8 @@
 :root{
   --bg:#eef1f5; --surface:#ffffff; --surface-2:#f5f7fa; --line:#dde3ea;
-  --ink:#141b24; --ink-2:#4a5967; --ink-3:#8695a4;
+  --ink:#141b24; --ink-2:#4a5967; --ink-3:#5f6c7b;   /* was #8695a4 — 2.7:1 on the off-white bg; now 4.7:1 (WCAG AA) (#10) */
   --accent:#f5511e; --accent-ink:#ffffff; --accent-soft:#fde7de;
-  --good:#12915c; --good-soft:#dcf1e7; --warn:#b8860b;
+  --good:#0f7d4e; --good-soft:#dcf1e7; --warn:#b8860b; --on-good:#ffffff;   /* darker green so white text on the Finish button clears 4.5:1 */
   --shadow:0 1px 2px rgba(20,27,36,.06),0 6px 20px rgba(20,27,36,.06);
   --radius:16px; --radius-sm:11px;
   --safe-b:env(safe-area-inset-bottom,0px);
@@ -15,17 +15,17 @@
 @media (prefers-color-scheme:dark){
   :root:not([data-theme="light"]){
     --bg:#0d1219; --surface:#161d27; --surface-2:#1d2632; --line:#2a3441;
-    --ink:#e9eef4; --ink-2:#a7b4c2; --ink-3:#6f7e8e;
+    --ink:#e9eef4; --ink-2:#a7b4c2; --ink-3:#7c8a99;   /* was #6f7e8e — 4.1:1 on cards; now 4.8:1 (#10) */
     --accent:#ff6337; --accent-ink:#160a05; --accent-soft:#3a1d12;
-    --good:#34c184; --good-soft:#123227; --warn:#e0a93a;
+    --good:#34c184; --good-soft:#123227; --warn:#e0a93a; --on-good:#0d1219;   /* dark ink on the bright green button (white was 2.3:1) */
     --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.35);
   }
 }
 :root[data-theme="dark"]{
   --bg:#0d1219; --surface:#161d27; --surface-2:#1d2632; --line:#2a3441;
-  --ink:#e9eef4; --ink-2:#a7b4c2; --ink-3:#6f7e8e;
+  --ink:#e9eef4; --ink-2:#a7b4c2; --ink-3:#7c8a99;
   --accent:#ff6337; --accent-ink:#160a05; --accent-soft:#3a1d12;
-  --good:#34c184; --good-soft:#123227; --warn:#e0a93a;
+  --good:#34c184; --good-soft:#123227; --warn:#e0a93a; --on-good:#0d1219;
   --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.35);
 }
 *{box-sizing:border-box}
@@ -65,6 +65,12 @@ html{background:var(--bg)}
 body{
   background:var(--bg); color:var(--ink);
   padding-bottom:calc(var(--tab-h) + var(--safe-b));
+}
+/* While the rest bar is up (~50px above the tab bar), reserve room so it never covers the last set
+   row or the Finish button (#8). :has is supported on the app's iOS Safari target; the base padding
+   above is the fallback where it isn't. No change to the tab bar / safe-area model. */
+body:has(.restbar.on){
+  padding-bottom:calc(var(--tab-h) + var(--safe-b) + 64px);
   font-family:"IBM Plex Sans",system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
   -webkit-font-smoothing:antialiased; line-height:1.5; font-size:14px;
 }
@@ -98,7 +104,7 @@ h1,h2,h3{margin:0; text-wrap:balance; font-family:"Archivo",system-ui,sans-serif
    on the frame the correction lands. (--deficit still drives the sheet/scrim/rest bar/toast.) */
 html.standalone .tabbar{bottom:auto;top:calc(var(--screen-h,100vh) - var(--tab-h) - var(--safe-b) - 1px)}
 .tabbar .row{max-width:520px;margin:0 auto;display:grid;grid-template-columns:repeat(4,1fr)}
-.tab{height:var(--tab-h);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:var(--ink-3);font-size:11px;font-weight:600;letter-spacing:.01em}
+.tab{height:var(--tab-h);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:var(--ink-3);font-size:12px;font-weight:600;letter-spacing:.01em}
 .tab svg{width:23px;height:23px}
 .tab.active{color:var(--accent)}
 
@@ -111,7 +117,7 @@ html.standalone .tabbar{bottom:auto;top:calc(var(--screen-h,100vh) - var(--tab-h
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:52px;padding:0 20px;border-radius:13px;font-weight:600;font-size:15px;background:var(--surface);border:1px solid var(--line);color:var(--ink);transition:transform .05s}
 .btn:active{transform:scale(.98)}
 .btn.primary{background:var(--accent);color:var(--accent-ink);border-color:transparent}
-.btn.good{background:var(--good);color:#fff;border-color:transparent}
+.btn.good{background:var(--good);color:var(--on-good);border-color:transparent}
 .btn.ghost{background:transparent;border-color:var(--line)}
 .btn.danger{background:#d33a26;color:#fff;border-color:transparent}
 .btn.block{display:flex;width:100%}
@@ -150,7 +156,7 @@ html.standalone .tabbar{bottom:auto;top:calc(var(--screen-h,100vh) - var(--tab-h
 .log-ex-head .ex-ic{width:38px;height:38px}
 .setgrid{padding:0 12px 6px}
 .set-hdr,.set-row{display:grid;grid-template-columns:30px 1fr 1fr 40px;gap:8px;align-items:center}
-.set-hdr{padding:2px 4px 8px;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
+.set-hdr{padding:2px 4px 8px;font-size:11.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-3)}
 .set-hdr div:nth-child(2),.set-hdr div:nth-child(3){text-align:center}
 .set-row{margin-bottom:9px}
 .set-no{width:30px;height:44px;border-radius:10px;background:var(--surface-2);display:grid;place-items:center;font-weight:700;color:var(--ink-2);font-family:"IBM Plex Mono";font-size:14px;position:relative}
@@ -174,19 +180,21 @@ html.standalone .tabbar{bottom:auto;top:calc(var(--screen-h,100vh) - var(--tab-h
 .set-check{width:40px;height:44px;border-radius:11px;border:1.5px solid var(--line);display:grid;place-items:center;color:var(--ink-3);position:relative}
 .set-check::after{content:"";position:absolute;inset:-4px}
 .set-check:active{transform:scale(.94)}
-.set-check.on{background:var(--good);border-color:transparent;color:#fff}
+.set-check.on{background:var(--good);border-color:transparent;color:var(--on-good)}
 .set-actions{display:flex;gap:8px;padding:4px 3px 12px;flex-wrap:wrap}
 .linkbtn{font-size:13px;font-weight:600;color:var(--accent);min-height:40px;padding:8px 6px;display:inline-flex;align-items:center;gap:5px;border-radius:9px}
 .linkbtn:active{background:var(--surface-2)}
 .linkbtn.dim{color:var(--ink-3)}
-.hint{font-size:11.5px;color:var(--ink-3);padding:0 4px 8px}
+.hint{font-size:12px;color:var(--ink-3);padding:0 4px 8px}
 
 /* suggestion banner */
 .sugg{display:flex;align-items:center;gap:10px;margin:0 12px 11px;padding:9px 12px;border-radius:11px;background:var(--accent-soft);font-size:13px;color:var(--accent);font-weight:500}
 .sugg.match{background:var(--surface-2);color:var(--ink-2)}
 .sugg .lastp{font-family:"IBM Plex Mono";font-weight:600}
-.sugg .apply{margin-left:auto;background:var(--accent);color:var(--accent-ink);height:30px;padding:0 12px;border-radius:9px;font-weight:600;font-size:12.5px;flex-shrink:0}
-.modechip{margin:0 12px 10px;padding:4px 11px;border-radius:9px;background:var(--surface-2);color:var(--ink-2);font-size:12px;font-weight:600;display:inline-flex;align-items:center;gap:4px}
+.sugg .apply{margin-left:auto;background:var(--accent);color:var(--accent-ink);height:30px;padding:0 12px;border-radius:9px;font-weight:600;font-size:12.5px;flex-shrink:0;position:relative}
+.sugg .apply::after{content:"";position:absolute;inset:-8px}   /* hit-slop → ≥44pt target (#27) */
+.modechip{margin:0 12px 10px;padding:4px 11px;border-radius:9px;background:var(--surface-2);color:var(--ink-2);font-size:12px;font-weight:600;display:inline-flex;align-items:center;gap:4px;position:relative}
+.modechip::after{content:"";position:absolute;inset:-10px -8px}   /* hit-slop → ≥44pt target (#27) */
 .modechip:active{background:var(--accent-soft);color:var(--accent)}
 .modelist{display:flex;flex-direction:column;gap:2px}
 .modeopt{display:flex;align-items:center;gap:10px;text-align:left;padding:12px 12px;border-radius:12px}
@@ -287,6 +295,7 @@ html.standalone .tabbar{bottom:auto;top:calc(var(--screen-h,100vh) - var(--tab-h
 .rest-btn:active{background:rgba(255,255,255,.28)}
 /* toggle switch + steppers */
 .sw{width:50px;height:30px;border-radius:15px;background:var(--line);position:relative;flex-shrink:0;transition:background .15s}
+.sw::after{content:"";position:absolute;inset:-7px}   /* hit-slop → ≥44pt target (#27) */
 .sw.on{background:var(--good)}
 .sw::after{content:"";position:absolute;top:3px;left:3px;width:24px;height:24px;border-radius:50%;background:#fff;transition:left .15s;box-shadow:0 1px 3px rgba(0,0,0,.3)}
 .sw.on::after{left:23px}
@@ -302,7 +311,8 @@ html.standalone .tabbar{bottom:auto;top:calc(var(--screen-h,100vh) - var(--tab-h
 .settingrow{display:flex;align-items:center;justify-content:space-between;padding:15px 2px;border-bottom:1px solid var(--line);gap:12px}
 .settingrow:last-child{border:none}
 .seg{display:inline-flex;background:var(--surface-2);border-radius:10px;padding:3px}
-.seg button{padding:7px 15px;border-radius:8px;font-weight:600;font-size:14px;color:var(--ink-2)}
+.seg button{padding:7px 15px;border-radius:8px;font-weight:600;font-size:14px;color:var(--ink-2);position:relative}
+.seg button::after{content:"";position:absolute;inset:-5px 0}   /* hit-slop → ≥44pt target (#27) */
 .seg button.on{background:var(--accent);color:var(--accent-ink)}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
