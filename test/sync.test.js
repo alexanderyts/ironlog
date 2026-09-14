@@ -92,10 +92,12 @@ test('applyTombstones removes locally what another device deleted, and merges th
   assert.equal(r.changed,true);
 });
 
-test('tombstones expire after 90 days',()=>{
+test('tombstones are kept ~13 months (longer than a phone left off a season) then expire',()=>{
   const now=Date.now();
-  const t=pruneTombstones({old:now-100*86400000,fresh:now-1000},now);
-  assert.deepEqual(Object.keys(t),['fresh']);
+  // 300 days ago: still remembered (a device coming back online can't resurrect the delete); 401 days: gone
+  const t=pruneTombstones({stale:now-401*86400000,inSeason:now-300*86400000,fresh:now-1000},now);
+  assert.deepEqual(Object.keys(t).sort(),['fresh','inSeason'],'a 300-day-old tombstone survives, a 401-day one is pruned');
+  assert.equal(IL.sync.TOMB_KEEP,400*86400000,'window is 400 days');
 });
 
 test('export/import payload round-trips and rejects junk',()=>{
@@ -105,4 +107,13 @@ test('export/import payload round-trips and rejects junk',()=>{
   const d=parseImport(JSON.stringify(p));
   assert.equal(d.sessions.length,1);assert.equal(d.routines[0].name,'Push');
   assert.throws(()=>parseImport('{"nope":1}'));
+});
+
+test('A5: cleanSession keeps a real endEstimated flag, drops a non-true one',()=>{
+  const kept=IL.sync.cleanSession({id:'x',date:1000,updatedAt:1000,endedAt:1000+40*60000,endEstimated:true,exercises:[]});
+  assert.equal(kept.endEstimated,true,'≈ estimated-end flag survives a sync/import round-trip');
+  const off=IL.sync.cleanSession({id:'y',date:1,updatedAt:1,endedAt:1+60000,endEstimated:'yes',exercises:[]});
+  assert.ok(!('endEstimated'in off),'a non-boolean flag is dropped');
+  const noEnd=IL.sync.cleanSession({id:'z',date:1,updatedAt:1,endEstimated:true,exercises:[]});
+  assert.ok(!('endEstimated'in noEnd),'no endEstimated without an endedAt to qualify');
 });

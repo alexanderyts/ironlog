@@ -6,10 +6,20 @@ var IL=globalThis.IL||(globalThis.IL={});
 const {mergeSessions,applyTombstones,pruneTombstones,exportPayload,parseImport,cleanSession,cleanRoutine,cleanSettings}=IL.sync;
 const CFG=IL.config||{};
 
-const LS={sessions:'il_sessions',active:'il_active',settings:'il_settings',dirty:'il_dirty',routines:'il_routines',deleted:'il_deleted',dbxRev:'il_dbx_rev',activeCleared:'il_active_cleared'};
+const LS={sessions:'il_sessions',active:'il_active',settings:'il_settings',dirty:'il_dirty',routines:'il_routines',deleted:'il_deleted',dbxRev:'il_dbx_rev',activeCleared:'il_active_cleared',pushPending:'il_push_pending'};
 function lsGet(k,f){try{const v=localStorage.getItem(k);return v?JSON.parse(v):f;}catch(e){return f;}}
-function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}
+// Returns false when the write is refused (private mode, or the ~5 MB quota is full). Callers that
+// hold the only copy of something (a finished workout) MUST check this and not discard it on false.
+function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v));return true;}catch(e){return false;}}
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+// One place that owns the defaults so a settings REBUILD (needed to let a removed key like a reset
+// profile propagate across devices) can't drift from the shape used at boot. Fresh nested rest each call.
+const defSettings=()=>({unit:'lb',theme:'system',bodyweight:0,settingsUpdatedAt:0,rest:{auto:true,sound:true,notify:false,compound:120,isolation:75}});
+// Approx bytes localStorage holds for this app (UTF-16, so ×2) — shown in Settings so a user sees the
+// ceiling coming before finding #1 bites.
+function storageBytes(){try{let n=0;for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);n+=((localStorage.getItem(k)||'').length+k.length)*2;}return n;}catch(e){return 0;}}
+// Semver a > b over three integer parts (for the sync version gate).
+function verGt(a,b){const pa=String(a||'').split('.').map(n=>+n||0),pb=String(b||'').split('.').map(n=>+n||0);for(let i=0;i<3;i++){if((pa[i]||0)>(pb[i]||0))return true;if((pa[i]||0)<(pb[i]||0))return false;}return false;}
 
 const state={
   sessions:lsGet(LS.sessions,[]),
@@ -19,7 +29,7 @@ const state={
   deleted:lsGet(LS.deleted,{}),
   dirty:new Set(lsGet(LS.dirty,[])),
   activeClearedAt:lsGet(LS.activeCleared,0),   // when this device last ended/discarded a workout (so a stale active on another device can't resurrect a finished one)
-  cloud:null, cloudName:'none', syncing:false, lastSync:0, cloudError:''
+  cloud:null, cloudName:'none', syncing:false, lastSync:0, cloudError:'', storageError:false
 };
 state.settings.rest=Object.assign({auto:true,sound:true,notify:false,compound:120,isolation:75},state.settings.rest||{});
 state.deleted=pruneTombstones(state.deleted);
@@ -32,7 +42,7 @@ if(CFG.DEMO&&IL.seed&&!state.sessions.length&&!lsGet('il_seeded',false)){
 }
 function resetDemo(){try{Object.values(LS).forEach(k=>localStorage.removeItem(k));localStorage.removeItem('il_seeded');}catch(e){}location.reload();}
 
-const saveSessions=()=>lsSet(LS.sessions,state.sessions);
+const saveSessions=()=>{const ok=lsSet(LS.sessions,state.sessions);state.storageError=!ok;return ok;};   // the big blob is where the quota bites; track it so the UI can warn
 const saveActive=()=>{lsSet(LS.active,state.active);lsSet(LS.activeCleared,state.activeClearedAt||0);};
 const saveSettings=()=>lsSet(LS.settings,state.settings);
 const saveRoutines=()=>lsSet(LS.routines,state.routines);
@@ -50,8 +60,9 @@ function upsertSession(s,fromCloud){
   if(i>=0){if(!fromCloud||s.updatedAt>=(state.sessions[i].updatedAt||0))state.sessions[i]=s;}
   else state.sessions.push(s);
   state.sessions.sort((a,b)=>b.date-a.date);
-  saveSessions();
+  const ok=saveSessions();
   if(!fromCloud){delete state.deleted[s.id];saveDeleted();state.dirty.add(s.id);saveDirty();if(state.cloud)state.cloud.pushSession(s);}
+  return ok;   // false = the on-disk sessions blob didn't save (quota); the caller must not discard its copy
 }
 function deleteSession(id){
   state.sessions=state.sessions.filter(s=>s.id!==id);saveSessions();
@@ -100,7 +111,9 @@ function absorbRemote(remote,opts){
   const rm=mergeSessions(rt,(remote.routines||[]).filter(r=>!state.deleted['r:'+r.id]),{});
   state.routines=rm.merged.sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));if(rm.changedLocal)changed=true;if(rm.pushNeeded)pushNeeded=true;
   if(remote.settings&&(remote.settings.settingsUpdatedAt||0)>(state.settings.settingsUpdatedAt||0)){
-    state.settings=Object.assign(state.settings,remote.settings);state.settings.rest=Object.assign({auto:true,sound:true,notify:false,compound:120,isolation:75},state.settings.rest||{});changed=true;
+    // REBUILD from defaults + the cleaned remote, don't merge — a merge keeps a key the remote dropped
+    // (e.g. a profile the user reset on the other phone), so the reset would never propagate.
+    state.settings=Object.assign(defSettings(),cleanSettings(remote.settings)||{});changed=true;
   }else if((state.settings.settingsUpdatedAt||0)>((remote.settings&&remote.settings.settingsUpdatedAt)||0))pushNeeded=true;
   if(!opts.skipActive){
     const r=IL.sync.resolveActive({active:state.active,activeClearedAt:state.activeClearedAt},{active:remote.active,activeClearedAt:remote.activeClearedAt});
@@ -138,7 +151,7 @@ function artifactAdapter(){
     async init(){
       db=await claude.use('db');if(!db)return false;
       try{const snap=await db.doc('settings/app').get();if(snap.exists){const rs=cleanSettings(snap.data())||{};
-        if((rs.settingsUpdatedAt||0)>(state.settings.settingsUpdatedAt||0)){state.settings=Object.assign(state.settings,rs);saveSettings();}
+        if((rs.settingsUpdatedAt||0)>(state.settings.settingsUpdatedAt||0)){state.settings=Object.assign(defSettings(),rs);saveSettings();}   // rebuild, not merge (see absorbRemote) so a reset propagates
         else if((state.settings.settingsUpdatedAt||0)>(rs.settingsUpdatedAt||0))A.pushSettings();}}catch(e){}
       try{const snap=await db.doc('active/current').get();
         if(snap.exists){const raw=snap.data();
@@ -177,8 +190,12 @@ function artifactAdapter(){
   return A;
 }
 function dropboxAdapter(){
-  const D=IL.dropbox;let timer=null,rev=lsGet(LS.dbxRev,null);
+  const D=IL.dropbox;let timer=null,rev=lsGet(LS.dbxRev,null),pushPending=lsGet(LS.pushPending,false);
   function schedule(){clearTimeout(timer);timer=setTimeout(()=>A.syncNow(),4000);}
+  // A change that doesn't dirty a session (a setting, a routine, a DELETE) still has to reach the one
+  // shared file. `dirty` only tracks sessions, so without this flag those changes upload only when the
+  // NEXT session happens to — the profile you set never reaches your other phone, the delete comes back.
+  function markPending(){pushPending=true;lsSet(LS.pushPending,true);schedule();}
   const A={name:'dropbox',
     async init(){
       try{await D.handleRedirect();}catch(e){state.cloudError=e.message;}
@@ -188,7 +205,7 @@ function dropboxAdapter(){
       await A.syncNow();
       return true;
     },
-    pushSession(){schedule();},deleteSession(){schedule();},pushSettings(){schedule();},pushRoutine(){schedule();},deleteRoutine(){schedule();},pushActive(){schedule();},
+    pushSession(){schedule();},deleteSession(){markPending();},pushSettings(){markPending();},pushRoutine(){markPending();},deleteRoutine(){markPending();},pushActive(){schedule();},
     flush(){return A.syncNow();},
     async syncNow(){
       if(state.syncing||!D.isConnected()){if(state.syncing)A._pending=true;return;}   // a sync requested mid-flight re-runs once
@@ -196,17 +213,22 @@ function dropboxAdapter(){
       const guard=setTimeout(()=>{state.syncing=false;emit();},30000);   // never wedge if a request hangs
       try{
         const meta=await D.getMetadata();
-        let pushNeeded=state.dirty.size>0;
+        let pushNeeded=state.dirty.size>0||pushPending,remoteNewer=false;
         if(meta&&meta.rev!==rev){
           const f=await D.download();
-          if(f){try{const remote=parseImport(f.text);const r=absorbRemote({sessions:remote.sessions,routines:remote.routines,deleted:remote.deleted,settings:remote.settings,active:remote.active,activeClearedAt:remote.activeClearedAt});
+          if(f){try{const remote=parseImport(f.text);
+            let rv='';try{rv=JSON.parse(f.text).version||'';}catch(_){}
+            if(rv&&verGt(rv,CFG.VERSION))remoteNewer=true;   // the file was written by a NEWER app; an older one must not strip its new fields back out
+            const r=absorbRemote({sessions:remote.sessions,routines:remote.routines,deleted:remote.deleted,settings:remote.settings,active:remote.active,activeClearedAt:remote.activeClearedAt});
             if(r.changed)emit();if(r.pushNeeded)pushNeeded=true;}catch(e){pushNeeded=true;}
             rev=f.rev;}
         }
-        if(!meta||pushNeeded||meta.rev!==rev){
+        if(remoteNewer){state.cloudError='Update Ironlog on this phone to sync — your backup is from a newer version.';}
+        else if(!meta||pushNeeded||meta.rev!==rev){
           const pushIds=[...state.dirty];   // snapshot BEFORE the await, so sessions logged mid-upload aren't wrongly cleared
           rev=await D.upload(JSON.stringify(exportPayload(state,CFG.VERSION)));
           pushIds.forEach(id=>state.dirty.delete(id));saveDirty();
+          pushPending=false;lsSet(LS.pushPending,false);   // everything that was pending is now in the file
         }
         lsSet(LS.dbxRev,rev);state.lastSync=Date.now();
       }catch(e){state.cloudError=e.message||'Sync failed';}
@@ -232,6 +254,6 @@ async function initCloud(){
 function connectDropbox(){return IL.dropbox.connect();}
 function disconnectDropbox(){IL.dropbox.disconnect();state.cloud=null;state.cloudName='none';emit();}
 
-IL.store={state,LS,uid,saveSessions,saveActive,saveSettings,saveRoutines,saveDirty,onChange,emit,
+IL.store={state,LS,uid,saveSessions,saveActive,saveSettings,saveRoutines,saveDirty,onChange,emit,storageBytes,
   upsertSession,deleteSession,restoreSession,saveRoutine,deleteRoutine,saveSettingsCloud,persistActive,setActive,
   absorbRemote,importBackup,initCloud,connectDropbox,disconnectDropbox,resetDemo,exportPayload:()=>exportPayload(state,CFG.VERSION)};

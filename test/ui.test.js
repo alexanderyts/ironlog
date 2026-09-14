@@ -22,6 +22,7 @@ test('UI: finishing saves ONLY the checked-off sets (the phantom-set regression)
     const active=h.state.active;
     const prefilled=active.exercises.reduce((n,e)=>n+e.sets.length,0);
     assert.ok(prefilled>=4,'a fresh chest build has several prefilled sets ('+prefilled+')');
+    h.type(h.$$('input[data-f="w"]')[0],'135');                // a loaded lift needs a weight before it can be ticked (#19)
     h.click(h.$$('[data-check]')[0]);                          // tick exactly one set
     assert.equal(active.exercises.reduce((n,e)=>n+e.sets.filter(s=>s.done).length,0),1,'one set checked');
     h.click('#btnFinish');
@@ -37,6 +38,7 @@ test('UI: editing a set without checking it prompts, and "Leave out" drops it',(
   try{
     buildWorkout(h,['Chest']);
     const active=h.state.active;
+    h.type(h.$$('input[data-f="w"]')[0],'135');               // weight before the tick (#19)
     h.click(h.$$('[data-check]')[0]);                          // one real done set (Finish needs it enabled)
     h.type(h.$$('input[data-f="w"]')[1],'150');               // edit a different set, leave it unchecked
     assert.equal(active.exercises[0].sets[1].t,1,'edited set flagged touched');
@@ -53,6 +55,7 @@ test('UI: "Save them as done" keeps the edited-but-unchecked sets',()=>{
   try{
     buildWorkout(h,['Chest']);
     const active=h.state.active;
+    h.type(h.$$('input[data-f="w"]')[0],'135');               // weight before the tick (#19)
     h.click(h.$$('[data-check]')[0]);
     h.type(h.$$('input[data-f="w"]')[1],'150');
     h.click('#btnFinish');
@@ -101,6 +104,7 @@ test('UI: T1 — checking a set stamps it, unchecking clears it, finishing recor
     const active=h.state.active,start=active.date;
     assert.ok(h.has('#elapsedLbl'),'editor header shows the elapsed span');
     assert.equal(h.text('#elapsedLbl'),'just started');
+    h.type(h.$$('input[data-f="w"]')[0],'135');               // weight before the tick (#19)
     h.click(h.$$('[data-check]')[0]);
     assert.ok(active.exercises[0].sets[0].at>=start,'checking stamps `at`');
     h.click(h.$$('[data-check]')[0]);
@@ -118,6 +122,7 @@ test('UI: T2 — a long-idle workout shows the banner and Finish offers the last
   try{
     buildWorkout(h,['Chest']);
     const active=h.state.active,now=Date.now();
+    h.type(h.$$('input[data-f="w"]')[0],'135');               // weight before the tick (#19)
     h.click(h.$$('[data-check]')[0]);
     // pretend the last set was 80 min ago and the workout started 140 min ago (Finish forgotten)
     active.exercises[0].sets[0].at=now-80*60000;active.date=now-140*60000;
@@ -140,6 +145,7 @@ test('UI: a workout with no set timestamps, finished two days later, is never lo
   try{
     buildWorkout(h,['Chest']);
     const active=h.state.active,now=Date.now();
+    h.type(h.$$('input[data-f="w"]')[0],'135');               // weight before the tick (#19)
     h.click(h.$$('[data-check]')[0]);
     // the real bug: a session that predates set timestamps (v0.35), left open for 50 hours
     delete active.exercises[0].sets[0].at;active.date=now-50*3600000;
@@ -153,7 +159,7 @@ test('UI: a workout with no set timestamps, finished two days later, is never lo
     assert.equal(h.IL.prog.sessionDuration(saved),null,'no length shown');
     // control: an ordinary stamped workout still records endedAt ≈ now without any sheet
     buildWorkout(h,['Back']);
-    const b=h.state.active;h.click(h.$$('[data-check]')[0]);h.click('#btnFinish');
+    const b=h.state.active;h.type(h.$$('input[data-f="w"]')[0],'185');h.click(h.$$('[data-check]')[0]);h.click('#btnFinish');
     const sb=h.state.sessions.filter(s=>s.id===b.id)[0];
     assert.ok(sb.endedAt>=now&&h.IL.prog.sessionDuration(sb)<=1,'control: fresh workout ends now');
   }finally{h.teardown();}
@@ -166,6 +172,7 @@ test('UI: Finish is in the top bar of the live editor — disabled with no set, 
     const active=h.state.active;
     assert.ok(h.has('#btnFinishTop'),'top-bar Finish present');
     assert.equal(h.$('#btnFinishTop').disabled,true,'disabled before any set is checked');
+    h.type(h.$$('input[data-f="w"]')[0],'135');               // weight before the tick (#19)
     h.click(h.$$('[data-check]')[0]);
     assert.equal(h.$('#btnFinishTop').disabled,false,'enabled once a set is done');
     h.click('#btnFinishTop');
@@ -180,6 +187,7 @@ test('UI: T2 — finishing a normal (not-idle) workout does NOT prompt for the e
   const h=launch();
   try{
     buildWorkout(h,['Chest']);
+    h.type(h.$$('input[data-f="w"]')[0],'135');   // weight before the tick (#19)
     h.click(h.$$('[data-check]')[0]);   // just checked → sinceLastSet ~0
     h.click('#btnFinish');
     assert.ok(!h.has('#endAtLast'),'no end-time sheet for a fresh finish');
@@ -330,5 +338,58 @@ test('UI: a preset selects its muscle groups and re-tapping clears them',()=>{
     assert.deepEqual(h.$$('#groupPick .chip.on').map(b=>b.dataset.g).sort(),['Chest','Shoulders','Triceps'],'Push selects its three groups');
     h.click(h.$$('[data-preset]').find(b=>b.dataset.preset==='Push'));
     assert.equal(h.$$('#groupPick .chip.on').length,0,'re-tapping Push clears the selection');
+  }finally{h.teardown();}
+});
+
+test('A3: ticking a loaded lift with no weight is refused with a nudge; it ticks once a weight is entered',()=>{
+  const h=launch();
+  try{
+    buildWorkout(h,['Chest']);                                   // fresh → blank weights
+    const active=h.state.active,ex0=active.exercises[0];
+    assert.notEqual(h.IL.data.EX[ex0.id].equip,'Bodyweight','precondition: the first pick is a loaded lift');
+    h.click(h.$$('[data-check]')[0]);                            // try to tick with no weight
+    assert.ok(!ex0.sets[0].done,'not marked done');
+    assert.ok(h.bodyText().includes('Add a weight'),'the user is nudged, not silently accepted');
+    h.type(h.$$('input[data-f="w"]')[0],'135');
+    h.click(h.$$('[data-check]')[0]);
+    assert.ok(ex0.sets[0].done,'ticks once a weight is entered');
+  }finally{h.teardown();}
+});
+
+test('A1: when storage is full, finishing keeps the workout instead of losing it',()=>{
+  const h=launch();
+  try{
+    buildWorkout(h,['Chest']);
+    const active=h.state.active;
+    h.type(h.$$('input[data-f="w"]')[0],'135');
+    h.click(h.$$('[data-check]')[0]);
+    // jsdom's localStorage is a Proxy (so `ls.foo=x` is a setItem), so patch the prototype method itself
+    const proto=h.win.Storage.prototype,orig=proto.setItem;
+    proto.setItem=function(k,v){if(k==='il_sessions')throw new Error('QuotaExceededError');return orig.call(this,k,v);};   // the big blob can't write
+    h.click('#btnFinish');
+    assert.ok(h.state.active&&h.state.active.id===active.id,'the workout is still the active session, not cleared');
+    assert.ok(h.state.active.exercises[0].sets.some(s=>s.done),'its ticked set is intact');
+    assert.equal(h.state.sessions.filter(s=>s.id===active.id).length,0,'not left half-saved in the sessions list');
+    assert.ok(h.bodyText().includes('Storage is full'),'the user is told, not left thinking it saved');
+    const onDisk=JSON.parse(h.win.localStorage.getItem('il_active'));
+    assert.ok(onDisk&&onDisk.id===active.id,'il_active still holds it → a reload resumes the workout, nothing lost');
+    // control: with storage working again, the same Finish saves and clears
+    proto.setItem=orig;
+    h.click('#btnFinish');
+    assert.equal(h.state.active,null,'now it finishes');
+    assert.ok(h.state.sessions.some(s=>s.id===active.id&&s.completed),'and is saved');
+  }finally{h.teardown();}
+});
+
+test('A5: a profile reset on another device propagates (settings rebuilt from the newer remote, not merged)',()=>{
+  const h=launch();
+  try{
+    h.state.settings.profile={goal:'size'};h.state.settings.settingsUpdatedAt=100;
+    h.S.absorbRemote({sessions:[],routines:[],deleted:{},settings:{unit:'lb',settingsUpdatedAt:200},active:null},{skipActive:true});   // newer, no profile
+    assert.ok(!h.state.settings.profile,'the removed profile is gone locally — a merge would have kept it');
+    // control: an OLDER remote leaves the local profile alone
+    h.state.settings.profile={goal:'strength'};h.state.settings.settingsUpdatedAt=300;
+    h.S.absorbRemote({sessions:[],routines:[],deleted:{},settings:{unit:'lb',settingsUpdatedAt:150},active:null},{skipActive:true});
+    assert.equal(h.state.settings.profile.goal,'strength','older remote does not wipe it');
   }finally{h.teardown();}
 });

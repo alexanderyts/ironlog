@@ -105,7 +105,16 @@ function commitFinish(s,endedAt,estimated){
   if(!s.exercises.length){toast('Log at least one set first');return;}
   const sm=workoutSummary(s);
   s.completed=true;s.updatedAt=Date.now();
-  S.upsertSession(s,false);state.active=null;S.persistActive();todayScreen='home';
+  if(!S.upsertSession(s,false)){
+    // Storage is full: the sessions blob didn't save. DON'T clear the active workout — it stays on
+    // this device (il_active still holds it) and, if cloud is on, was already pushed, so nothing is
+    // lost. Undo the finish in memory so the editor shows the workout exactly as it was.
+    const i=state.sessions.findIndex(x=>x.id===s.id);if(i>=0)state.sessions.splice(i,1);
+    s.completed=false;delete s.endedAt;delete s.endEstimated;
+    toast('Storage is full — your workout is safe but not saved yet. Export a backup from Settings, then finish again.');
+    render();return;
+  }
+  state.active=null;S.persistActive();todayScreen='home';
   render();showSummary(sm);
 }
 function discardActive(){showConfirm('Discard workout?','Nothing from this session will be saved.','Discard',()=>{
@@ -249,7 +258,12 @@ function bindLog(root){
     if(next)next.focus();else inp.blur();});
   root.addEventListener('click',e=>{
     const t=cur();if(!t)return;
-    const chk=e.target.closest('[data-check]');if(chk){const ei=+chk.dataset.check,si=+chk.dataset.s;const st=t.exercises[ei].sets[si];st.done=!st.done;
+    const chk=e.target.closest('[data-check]');if(chk){const ei=+chk.dataset.check,si=+chk.dataset.s;const st=t.exercises[ei].sets[si];
+      if(!st.done){const cex=EX[t.exercises[ei].id];
+        // Ticking a loaded lift with no weight would save a 0-volume "working" set and poison "last time".
+        // Point the user at the weight field instead of silently accepting it. Bodyweight moves are exempt.
+        if(cex&&cex.equip!=='Bodyweight'&&!(+st.w>0)){const wi=$(`input[data-f="w"][data-ei="${ei}"][data-s="${si}"]`);if(wi){wi.focus();if(wi.select)wi.select();}toast('Add a weight first');return;}}
+      st.done=!st.done;
       if(st.done)st.at=Date.now();else delete st.at;   // T1: stamp when the set was completed (cleared if un-ticked)
       if(st.done&&todayScreen==='active'&&state.settings.rest.auto&&!st.warm)startRest(restSecondsFor(t.exercises[ei].id));persistCur();render();return;}
     const wm=e.target.closest('[data-warm]');if(wm){const ei=+wm.dataset.warm,si=+wm.dataset.s;const st=t.exercises[ei].sets[si];st.warm=!st.warm;persistCur();render();toast(st.warm?'Marked as warm-up':'Counted as a working set');return;}

@@ -2,6 +2,15 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.42.0 — 2026-09-13 · Trust: nothing is lost silently (Roadmap v7, Phase A)
+The first phase after the big review. All about not losing data — none of your workouts or coaching change. Plan in `ROADMAP-v7.md`.
+- **A full phone can't swallow a finished workout any more.** If saving fails because storage is full, Ironlog keeps the workout open on your phone (a reload brings it right back) and tells you plainly, instead of showing "Workout complete" over nothing. The header shows "Storage full", and Settings now shows how much space Ironlog is using so you can see it coming.
+- **Dropbox now syncs the things it used to miss.** A profile change, a saved routine, or a deleted workout used to reach your other phone only the next time you finished a workout — now they upload on their own. A workout deleted on one phone stays deleted on the other.
+- **Ticking a set with no weight is caught.** On a barbell or dumbbell lift, Ironlog asks for the weight instead of quietly saving a set worth nothing (which skewed "last time"). Bodyweight moves are unaffected.
+- **Importing a backup saved in the other unit no longer disturbs your history.** It converts the weights for display without making the old file look newer than what's on your phone — so it can't undo a deletion or overwrite a more recent edit.
+- **Sync is sturdier for a phone left off a while:** deletions are remembered for about 13 months (was 3), a profile you reset on one device now clears on the others, the "≈ estimated end time" mark survives a backup, and an older copy of the app won't overwrite a backup written by a newer one.
+- Not verified on-device: everything here has automated tests through the real app — a simulated full disk on Finish, the Dropbox upload path with a stand-in server, the blank-weight catch, and the import/round-trip rules — each with an expected result and an off case. The Settings storage line was checked in the browser. Your coaching output is byte-for-byte unchanged (the real-data snapshot test confirms it).
+
 ## v0.41.0 — 2026-09-13 · Profile review tool + adversarial audit (Roadmap v6, Phase P4 — final)
 The last phase of the profile work: a way to *see* what a profile changes, and an audit that proves the levers hold under every combination. This is a developer/reviewer tool plus an internal safety net — nothing in the app screens changes.
 - **`review.js --profile '{…}'`** overlays a training profile on a real backup and prints, for each preset, the build with and without the profile side by side, marking (✎) every pick the profile changed; `--why` names the exact lever that dropped each one. It also shows the coach's notes auto vs. profile. The profile is validated through the same rules the app uses.

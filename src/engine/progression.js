@@ -48,8 +48,11 @@ function staleness(s,now){now=now||Date.now();const ls=lastSetAt(s),ref=ls||+s.d
 function finalizeSets(exercises){
   return (exercises||[]).map(e=>{
     // only checked-off sets, and never a junk set with zero reps (it would prefill as 0×0 next time)
+    // or a weighted lift ticked with no weight (it would save as 0-volume and skew "last time"). An
+    // unknown id is treated as bodyweight so a custom move isn't wrongly dropped.
     // Object.assign copies `at` (the check timestamp) through; only `t` (the transient touched flag) is stripped.
-    const sets=e.sets.filter(st=>st.done===true&&(+st.r||0)>0).map(st=>{const o=Object.assign({},st);delete o.t;o.done=true;return o;});
+    const ex=EX[e.id],allowBlank=!ex||ex.equip==='Bodyweight';
+    const sets=e.sets.filter(st=>st.done===true&&(+st.r||0)>0&&(allowBlank||(+st.w||0)>0)).map(st=>{const o=Object.assign({},st);delete o.t;o.done=true;return o;});
     return Object.assign({},e,{sets});
   }).filter(e=>e.sets.length);
 }
@@ -256,10 +259,13 @@ function convertWeight(n,from,to){
   const f=to==='kg'?0.45359237:2.2046226,res=to==='kg'?0.1:0.25;
   return +(Math.round(v*f/res)*res).toFixed(2);
 }
-// Converts every stored weight in place; returns ids of sessions touched
-function convertSessions(sessions,from,to,now){
+// Converts every stored weight in place; returns ids of sessions touched. `stamp` bumps updatedAt —
+// TRUE for the user's own unit toggle (their whole history genuinely changed, other devices should
+// take it), but FALSE when converting an IMPORTED backup: re-stamping there would make an old backup
+// look newer than your local edits and resurrect sessions you'd deleted (#20).
+function convertSessions(sessions,from,to,now,stamp){
   if(from===to)return [];const ids=[];
-  sessions.forEach(s=>{s.exercises.forEach(e=>e.sets.forEach(st=>{st.w=convertWeight(st.w,from,to);}));s.updatedAt=now||Date.now();ids.push(s.id);});
+  sessions.forEach(s=>{s.exercises.forEach(e=>e.sets.forEach(st=>{st.w=convertWeight(st.w,from,to);}));if(stamp)s.updatedAt=now||Date.now();ids.push(s.id);});
   return ids;
 }
 // Local calendar week, MONDAY start. weekStart(ts) = local-midnight timestamp of that week's Monday;

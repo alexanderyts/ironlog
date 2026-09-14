@@ -56,6 +56,7 @@ function closeSheet(){$('#sheet').classList.remove('on');$('#scrim').classList.r
 function applyTheme(){const t=state.settings.theme;if(t==='system')document.documentElement.removeAttribute('data-theme');else document.documentElement.setAttribute('data-theme',t);}
 function updateCloud(){
   const el=$('#cloudStatus'),t=$('#cloudText');if(!el)return;
+  if(state.storageError){el.className='cloud err';t.textContent='Storage full';return;}   // takes priority: the on-device save is failing, data is at risk
   if(CFG.DEMO){el.className='cloud';t.textContent='Demo · sample data';return;}
   if(state.cloudError&&state.cloudName!=='none'){el.className='cloud err';t.textContent='Sync problem';return;}
   if(state.cloudName==='artifact'||state.cloudName==='dropbox'){

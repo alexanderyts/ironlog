@@ -166,9 +166,14 @@ test('unit conversion: lb → kg → lb is exact; kg → lb → kg within a tent
   assert.equal(P.convertWeight('', 'lb','kg'),'');
   assert.equal(P.convertWeight(0,'lb','kg'),0);
   const hist=[session(1,[['back-squat',[set(225,5)]]])];
-  P.convertSessions(hist,'lb','kg',123);
-  assert.equal(hist[0].exercises[0].sets[0].w,102.1);
-  assert.equal(hist[0].updatedAt,123);
+  const orig=hist[0].updatedAt;
+  P.convertSessions(hist,'lb','kg',123);                 // no stamp arg → an IMPORT conversion
+  assert.equal(hist[0].exercises[0].sets[0].w,102.1,'weight converted');
+  assert.equal(hist[0].updatedAt,orig,'updatedAt NOT bumped on an import conversion (#20) — so an old backup cannot look newer than local edits');
+  // control: the user's own unit toggle passes stamp=true and DOES bump updatedAt
+  const hist2=[session(1,[['back-squat',[set(225,5)]]])];
+  P.convertSessions(hist2,'lb','kg',456,true);
+  assert.equal(hist2[0].updatedAt,456,'local toggle stamps so other devices take the converted values');
 });
 
 test('streak counts consecutive training weeks and tolerates an untrained current week',()=>{
@@ -244,4 +249,18 @@ test('bestE1rmBefore: all-time best for live PR detection, per mode, ignoring de
   assert.equal(best,Math.max(P.e1rm(185,5),P.e1rm(200,3)));
   // a heavier future set would beat it (PR); mode filter isolates a different modality
   assert.equal(P.bestE1rmBefore(hist,'barbell-bench-press',{mode:'dumbbell'}),0,'no dumbbell history → 0');
+});
+
+test('A3: finalizeSets drops a loaded lift ticked with no weight, keeps a bodyweight one',()=>{
+  // A ticked barbell set with w:'' would save as 0-volume and poison "last time" — drop it.
+  const r=IL.prog.finalizeSets([{id:'barbell-bench-press',sets:[{w:'',r:6,done:true},{w:135,r:6,done:true}]}]);
+  assert.equal(r.length,1,'the exercise survives (it has one real set)');
+  assert.equal(r[0].sets.length,1,'only the weighted set is kept');
+  assert.equal(r[0].sets[0].w,135);
+  // control: a bodyweight move ticked with no weight IS a real set
+  const bw=IL.prog.finalizeSets([{id:'push-up',sets:[{w:'',r:20,done:true}]}]);
+  assert.equal(bw.length,1);assert.equal(bw[0].sets.length,1,'push-up with no weight kept');
+  // control: an exercise left with only weightless loaded sets drops entirely (nothing to save)
+  const gone=IL.prog.finalizeSets([{id:'barbell-bench-press',sets:[{w:'',r:6,done:true}]}]);
+  assert.equal(gone.length,0,'a weightless-only loaded exercise is dropped');
 });
