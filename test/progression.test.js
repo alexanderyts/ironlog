@@ -318,3 +318,24 @@ test('D4: increment and rep-reset scale with the equipment (#11)',()=>{
   assert.equal(P.unitIncrement('lb',EX['barbell-bench-press']),5,'barbell step');
   assert.equal(P.unitIncrement('kg',EX['dumbbell-bench-press']),1,'dumbbell kg step');
 });
+
+test('checkpoint: a deload of an assist machine ADDS assist (easier), never cuts it (#16 regression)',()=>{
+  const {EX}=IL.data;
+  // assisted-pull-up: less weight = harder, so a deload must raise the assist, not drop it to 60% (harder!)
+  const d=P.deloadSets([set(40,12)],EX['assisted-pull-up'],'lb');
+  assert.ok(d[0].w>40,'deload adds assist for a recovery session ('+d[0].w+')');
+  // control: a normal barbell lift deloads to ~60%
+  assert.deepEqual(P.deloadSets([set(200,8)],EX['barbell-bench-press'],'lb').map(s=>s.w),[120]);
+});
+
+test('checkpoint: the "+Xlb" suggestion label equals the real bump on an off-grid (converted) top (#11/#29)',()=>{
+  const {EX}=IL.data;const {history,session,NOW}=require('./load.js');
+  // 102.1 lb (an artifact of a kg→lb conversion) snaps to 102.5 then +5 = 107.5 → real bump is +5.4, not +5
+  const h=history(session(3,[['barbell-bench-press',[set(102.1,8),set(102.1,8)]]],{now:NOW}));
+  const sg=P.suggestion(h,'barbell-bench-press',{unit:'lb'});
+  assert.equal(Math.max(...sg.next.map(s=>s.w)),107.5,'prescription is on-grid');
+  assert.match(sg.text,/\+5\.4lb/,'label matches the real delta, not the pre-snap increment');
+  // control: an on-grid top still reads +5
+  const h2=history(session(3,[['barbell-bench-press',[set(185,8),set(185,8)]]],{now:NOW}));
+  assert.match(P.suggestion(h2,'barbell-bench-press',{unit:'lb'}).text,/\+5lb/);
+});

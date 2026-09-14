@@ -46,5 +46,14 @@ test('A2/A5: settings + deletes upload to Dropbox, no-ops do not, and an older a
     await h.state.cloud.flush();
     assert.equal(uploads.length,before,'an older app does not overwrite a newer backup');
     assert.ok(/update ironlog/i.test(h.state.cloudError),'and it says to update the app');
+    // …and it must STAY blocked on the very next dirty sync, even though the file rev is now cached and
+    // no download happens (the regression: the block only held for the download cycle → clobbered next tick)
+    h.S.upsertSession({id:'q',schema:1,date:Date.now(),updatedAt:Date.now(),completed:true,exercises:[{id:'deadlift',sets:[{w:225,r:5,done:true}]}]},false);
+    await h.state.cloud.flush();
+    assert.equal(uploads.length,before,'still blocked on the next dirty sync — the newer backup is not clobbered');
+    // after the app updates past the backup's version, the latch clears and syncing resumes
+    h.win.IL.config.VERSION='9.9.9';
+    await h.state.cloud.flush();
+    assert.ok(uploads.length>before,'once this app is up to date, it uploads again');
   }finally{h.teardown();}
 });

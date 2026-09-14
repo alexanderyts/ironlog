@@ -126,7 +126,8 @@ function finishEdit(){
   confirmUnchecked(s,()=>{
     cleanSets(s);
     if(!s.exercises.length){toast('Keep at least one set, or delete the session instead');return;}
-    s.updatedAt=Date.now();S.upsertSession(s,false);
+    s.updatedAt=Date.now();
+    if(!S.upsertSession(s,false)){toast('Storage is full — the edit didn’t save. Export a backup from Settings.');render();return;}   // don't claim "Changes saved" on a failed write
     editSession=null;editDirty=false;todayScreen='home';toast('Changes saved');setTab('history');
   });
 }
@@ -170,7 +171,7 @@ const ACTIONS={
   resume:()=>{todayScreen='active';render();},
   goLibrary:()=>setTab('library'),
   backHome:()=>leaveEditor(),
-  build:()=>buildAndStart(false),
+  build:()=>{if(!draft.groups.size)return;buildAndStart(false);},   // belt for the disabled button (a synthetic click could otherwise build the old Chest+Back default)
   buildFresh:()=>buildAndStart(true),
   coachNudge:el=>{draft.groups=new Set(el.dataset.groups.split(','));render();},
   preset:el=>{const p=PRESETS.find(x=>x.label===el.dataset.preset);if(!p)return;

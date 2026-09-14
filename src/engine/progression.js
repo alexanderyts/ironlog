@@ -228,7 +228,12 @@ function nextSets(last,ex,unit,rr){
    this pulls from the last REAL session, and the deload itself never becomes a progression anchor. */
 function deloadSets(last,ex,unit){
   const hi=ex?ex.rr[1]:12,inc=unitIncrement(unit||'lb',ex);
-  return last.map(s=>{const w=+s.w||0;const dw=w>0?Math.max(inc,Math.round(w*0.6/inc)*inc):0;return{w:dw,r:hi};});
+  // On an assist machine (#16) less weight is HARDER, so a deload must ADD assist, not cut it —
+  // otherwise "recovery" prescribes a harder set than last time. ~40% MORE assist, on the grid.
+  const inverted=!!(ex&&INVERTED_LOAD&&INVERTED_LOAD.has(ex.id));
+  return last.map(s=>{const w=+s.w||0;
+    const dw=w>0?(inverted?Math.round(w*1.4/inc)*inc:Math.max(inc,Math.round(w*0.6/inc)*inc)):w;
+    return{w:dw,r:hi};});
 }
 // Progressive-overload suggestion for an exercise. kind: 'new' | 'weight' | 'match' | 'reps'
 // 'weight' means the prescription (`next`) already carries the bump; the text explains it.
@@ -255,9 +260,12 @@ function suggestion(sessions,exId,opts){
   const topLbl=n.pattern==='descending'?'opener':'top set';
   const inverted=!!(ex&&INVERTED_LOAD&&INVERTED_LOAD.has(ex.id));   // assist machine: a bump means LESS assist
   if(n.bumped){
-    const text=inverted?(n.newTop>0?`Hit top reps — prefilled ${inc}${unit} less assist`:'Hit top reps with no assist — try an unassisted rep next')
+    // the REAL bump can differ from `inc` when the last top was off-grid (after a unit conversion) and
+    // got snapped before adding — so report newTop − lastTop, not inc, or the label lies (#11/#29)
+    const lastTop=Math.max(...lp.sets.map(s=>+s.w||0)),bump=+(n.newTop-lastTop).toFixed(2);
+    const text=inverted?(n.newTop>0?`Hit top reps — prefilled ${+(lastTop-n.newTop).toFixed(2)}${unit} less assist`:'Hit top reps with no assist — try an unassisted rep next')
               :ramp?`${n.pattern==='descending'?'Opener':'Top set'} hit the range — ${topLbl} prefilled at ${n.newTop}${unit}, the rest shifted up`
-                   :`Hit top reps last time — prefilled +${inc}${unit}`;
+                   :`Hit top reps last time — prefilled +${bump}${unit}`;
     return{lp,kind:'weight',pattern:n.pattern,text,setsStr,next:n.sets};
   }
   if(!n.weighted)return{lp,kind:n.short===0?'reps':'match',pattern:n.pattern,text:n.short===0?'Hit top reps — add a rep or some load':'Beat last time',setsStr,next:n.sets};

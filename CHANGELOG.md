@@ -2,6 +2,16 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.45.3 — 2026-09-14 · Checkpoint: fix the bugs the review found before polishing
+A three-lane adversarial review of everything changed since the last checkpoint, to catch anything I'd introduced. It found a real one:
+- **Cross-device data loss, fixed.** The safeguard that stops an older copy of the app from overwriting a backup written by a newer one only worked for one sync — the very next set you logged could slip past it and clobber the newer backup. It now stays blocked until this phone is updated, then resumes on its own.
+- **A deload on an assisted machine was backwards.** On an assisted pull-up (less weight = harder), the deload was *cutting* the assist — making the "recovery" set harder than the last real one. It now adds assist, as a deload should.
+- **Editing a past workout when storage is full** no longer says "Changes saved" when it didn't save — same protection the Finish button already had.
+- **The Settings toggle switches** get their proper large tap area (a rule added last update was quietly overridden and doing nothing).
+- **The "+X lb" hint is honest after a unit switch** — when a converted weight lands off the plate grid, the label now shows the actual jump instead of a rounded-off number.
+- **A flaky test is fixed** — a hold-to-repeat test was asserting an exact number of timer fires and occasionally failed under load; the suite is now green on repeated runs (188 tests, 5/5 clean).
+- Two minor cosmetic items (an assisted-lift set order, a "Session N" counter resetting after a deload week) are noted and deferred rather than risk touching stall detection in a stabilisation pass.
+
 ## v0.45.2 — 2026-09-14 · Fix the font properly (it was falling back to Times)
 Found the real cause of the "off" font. In v0.45 a stray brace ended the page's base style one line too early, which knocked the body typeface, text size and smoothing out of effect **except while a rest timer was on screen** — so almost everywhere, text was silently rendering in the browser's default serif (Times) at the wrong size. My earlier tweaks couldn't fix it because they weren't the problem.
 - **Body text is IBM Plex Sans again, everywhere, at the right size.** Headings stay Archivo; weights and reps stay IBM Plex Mono.

@@ -302,7 +302,7 @@ html.standalone .tabbar{bottom:auto;top:calc(var(--screen-h,100vh) - var(--tab-h
 .rest-btn:active{background:rgba(255,255,255,.28)}
 /* toggle switch + steppers */
 .sw{width:50px;height:30px;border-radius:15px;background:var(--line);position:relative;flex-shrink:0;transition:background .15s}
-.sw::after{content:"";position:absolute;inset:-7px}   /* hit-slop → ≥44pt target (#27) */
+.sw::before{content:"";position:absolute;inset:-7px}   /* hit-slop → ≥44pt target (#27). ::before, because ::after is the knob below */
 .sw.on{background:var(--good)}
 .sw::after{content:"";position:absolute;top:3px;left:3px;width:24px;height:24px;border-radius:50%;background:#fff;transition:left .15s;box-shadow:0 1px 3px rgba(0,0,0,.3)}
 .sw.on::after{left:23px}

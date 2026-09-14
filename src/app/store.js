@@ -6,7 +6,7 @@ var IL=globalThis.IL||(globalThis.IL={});
 const {mergeSessions,applyTombstones,pruneTombstones,exportPayload,parseImport,cleanSession,cleanRoutine,cleanSettings}=IL.sync;
 const CFG=IL.config||{};
 
-const LS={sessions:'il_sessions',active:'il_active',settings:'il_settings',dirty:'il_dirty',routines:'il_routines',deleted:'il_deleted',dbxRev:'il_dbx_rev',activeCleared:'il_active_cleared',pushPending:'il_push_pending'};
+const LS={sessions:'il_sessions',active:'il_active',settings:'il_settings',dirty:'il_dirty',routines:'il_routines',deleted:'il_deleted',dbxRev:'il_dbx_rev',activeCleared:'il_active_cleared',pushPending:'il_push_pending',blockedVer:'il_blocked_ver'};
 function lsGet(k,f){try{const v=localStorage.getItem(k);return v?JSON.parse(v):f;}catch(e){return f;}}
 // Returns false when the write is refused (private mode, or the ~5 MB quota is full). Callers that
 // hold the only copy of something (a finished workout) MUST check this and not discard it on false.
@@ -190,7 +190,7 @@ function artifactAdapter(){
   return A;
 }
 function dropboxAdapter(){
-  const D=IL.dropbox;let timer=null,rev=lsGet(LS.dbxRev,null),pushPending=lsGet(LS.pushPending,false);
+  const D=IL.dropbox;let timer=null,rev=lsGet(LS.dbxRev,null),pushPending=lsGet(LS.pushPending,false),blockedVer=lsGet(LS.blockedVer,'');
   function schedule(){clearTimeout(timer);timer=setTimeout(()=>A.syncNow(),4000);}
   // A change that doesn't dirty a session (a setting, a routine, a DELETE) still has to reach the one
   // shared file. `dirty` only tracks sessions, so without this flag those changes upload only when the
@@ -213,12 +213,18 @@ function dropboxAdapter(){
       const guard=setTimeout(()=>{state.syncing=false;emit();},30000);   // never wedge if a request hangs
       try{
         const meta=await D.getMetadata();
-        let pushNeeded=state.dirty.size>0||pushPending,remoteNewer=false;
+        // The "remote is from a NEWER app" block must PERSIST across syncs, not just the download cycle.
+        // Once we've seen a newer file we cache its rev, so the next sync skips the download — if the
+        // block only lived in that branch, one more logged set would sail past it and clobber the newer
+        // backup. So latch it (blockedVer, persisted) and re-derive it whenever we DO read the file.
+        let pushNeeded=state.dirty.size>0||pushPending,remoteNewer=!!(blockedVer&&verGt(blockedVer,CFG.VERSION));
         if(meta&&meta.rev!==rev){
           const f=await D.download();
           if(f){try{const remote=parseImport(f.text);
             let rv='';try{rv=JSON.parse(f.text).version||'';}catch(_){}
-            if(rv&&verGt(rv,CFG.VERSION))remoteNewer=true;   // the file was written by a NEWER app; an older one must not strip its new fields back out
+            const nv=(rv&&verGt(rv,CFG.VERSION))?rv:'';   // is THIS file newer than us? (updates or clears the latch)
+            if(nv!==blockedVer){blockedVer=nv;lsSet(LS.blockedVer,nv);}
+            remoteNewer=!!nv;
             const r=absorbRemote({sessions:remote.sessions,routines:remote.routines,deleted:remote.deleted,settings:remote.settings,active:remote.active,activeClearedAt:remote.activeClearedAt});
             if(r.changed)emit();if(r.pushNeeded)pushNeeded=true;}catch(e){pushNeeded=true;}
             rev=f.rev;}
