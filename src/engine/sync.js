@@ -113,5 +113,5 @@ function resolveActive(local,remote){
   return {active:local.active,activeClearedAt:lc,changed:false,pushNeeded:remoteEvt<localEvt};
 }
 
-IL.sync={mergeSessions,applyTombstones,pruneTombstones,exportPayload,parseImport,resolveActive,cleanSession,cleanRoutine,cleanSettings,TOMB_KEEP};
+IL.sync={mergeSessions,applyTombstones,pruneTombstones,exportPayload,parseImport,resolveActive,cleanSession,cleanRoutine,cleanSettings,cleanProfile,PROFILE_ENUM,TOMB_KEEP};
 if(typeof module!=='undefined')module.exports=IL.sync;

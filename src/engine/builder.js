@@ -70,16 +70,30 @@ function orderByFatigue(ids,focus){
 }
 // Barbell squats/deadlifts/RDLs load the spine; a hip thrust loads the hips, so it's exempt
 const isHeavyAxial=e=>!!e&&e.type===C&&e.equip==='Barbell'&&(e.pat==='squat'||e.pat==='hinge')&&e.id!=='hip-thrust';
+// Does an exercise pass the profile's hard filters (avoid → gym → protect)? A STRICT per-exercise
+// test with no backoff — for callers where dropping the exercise is fine. profilePool applies the
+// same three rules but relaxes them rather than strand a group; this never relaxes. Same rule set,
+// so the two can't drift on what "machine excludes" or "protect drops" means.
+function profileAllows(e,g,profile,sessions){
+  if(!profile||!e)return true;
+  if(profile.avoid&&profile.avoid.indexOf(e.id)>=0)return false;
+  if(profile.gym==='machine'&&e.equip==='Barbell'&&lastModeFor(sessions,e.id)!=='smith')return false;
+  if(profile.gym==='home'&&!(e.equip==='Dumbbell'||e.equip==='Bodyweight'))return false;
+  if(profile.protect&&profile.protect.indexOf(g)>=0&&e.tier===1&&e.type==='compound'&&(e.equip==='Barbell'||e.equip==='Dumbbell'))return false;
+  return true;
+}
 // Safety: at most two heavy barbell squat/hinge lifts per session. Extras swap to a non-barbell
-// variant of the same pattern from the same muscle, else are dropped.
-function capHeavyAxial(ids){
+// variant of the same pattern from the same muscle, else are dropped. The alternative must clear the
+// profile too — an over-cap swap is the builder's own change, so it may not smuggle back an avoided /
+// off-equipment / protected lift (a real leak the P4 audit caught). No legal alt → drop the extra.
+function capHeavyAxial(ids,profile,sessions){
   const heavy=ids.filter(id=>isHeavyAxial(EX[id]));
   if(heavy.length<=2)return ids;
   const keep=new Set(orderByFatigue(heavy).slice(0,2));
   return ids.map(id=>{
     if(!isHeavyAxial(EX[id])||keep.has(id))return id;
     const e=EX[id];
-    const alt=EXERCISES.find(x=>x.group===e.group&&x.pat===e.pat&&!isHeavyAxial(x)&&ids.indexOf(x.id)<0);
+    const alt=EXERCISES.find(x=>x.group===e.group&&x.pat===e.pat&&!isHeavyAxial(x)&&ids.indexOf(x.id)<0&&profileAllows(x,x.group,profile,sessions));
     return alt?alt.id:null;
   }).filter(Boolean);
 }
@@ -100,13 +114,11 @@ function fillsGap(e,hints){
 function profilePool(list,g,profile,sessions){
   if(!profile)return list;
   const avoid=profile.avoid&&profile.avoid.length?new Set(profile.avoid):null;
-  let p=avoid?list.filter(e=>!avoid.has(e.id)):list;
-  const gymFilter=e=>profile.gym==='machine'?(e.equip!=='Barbell'||lastModeFor(sessions,e.id)==='smith')
-    :profile.gym==='home'?(e.equip==='Dumbbell'||e.equip==='Bodyweight')
-    :true;
-  const protectFilter=e=>(profile.protect&&profile.protect.indexOf(g)>=0)?!(e.tier===1&&e.type==='compound'&&(e.equip==='Barbell'||e.equip==='Dumbbell')):true;
-  const full=p.filter(e=>gymFilter(e)&&protectFilter(e));
+  const p=avoid?list.filter(e=>!avoid.has(e.id)):list;
+  const full=p.filter(e=>profileAllows(e,g,profile,sessions));   // avoid+gym+protect, the strict rule
   if(full.length)return full;              // best case: all levers satisfied
+  const gymFilter=e=>profile.gym==='machine'?(e.equip!=='Barbell'||lastModeFor(sessions,e.id)==='smith')
+    :profile.gym==='home'?(e.equip==='Dumbbell'||e.equip==='Bodyweight'):true;
   const gymOnly=p.filter(gymFilter);
   if(gymOnly.length)return gymOnly;        // protect emptied it → keep the gym constraint at least
   return p.length?p:list;                  // gym emptied it → avoid-only, else the untouched list
@@ -180,7 +192,7 @@ function buildRecommendation(groups,sessions,seed,hints,trace,profile){
   // Hard session ceiling: picking many groups (e.g. all 11) must not produce an 11-exercise workout.
   // orderByFatigue puts the highest-priority work first, so the slice drops the lowest-priority
   // isolation last. The 'long' length lever raises the ceiling to 8.
-  return orderByFatigue(capHeavyAxial(out),groups[0]).slice(0,Math.max(MAX_SESSION_EX,total));
+  return orderByFatigue(capHeavyAxial(out,profile,sessions),groups[0]).slice(0,Math.max(MAX_SESSION_EX,total));
 }
 // Suggest exercises that COMPLEMENT what's already chosen — always from a muscle group already in
 // the workout (a pull day should never get a press "to balance" it; that's a program-level,
@@ -356,7 +368,7 @@ function planWorkout(groups,sessions,seed,opts){
       if(to){reactions.push({type:'avoid-swap',from:id,to:to.id,why:'swapped '+(EX[id]?EX[id].name:id)+' — you asked to avoid it'});return to.id;}return id;});}
   // A deload CONTINUES the plan verbatim — same exercises, just lighter (seedExercise cuts load and
   // volume). Zero structural changes: no stall check, rotation, anchor swap, gap-add or volume bump.
-  if(deload)return{ids:orderByFatigue(capHeavyAxial(ids),groups[0]),mode:'continue',plan,rotation:null,streak:0,reactions,volumeBump,deload:true};
+  if(deload)return{ids:orderByFatigue(capHeavyAxial(ids,profile,sessions),groups[0]),mode:'continue',plan,rotation:null,streak:0,reactions,volumeBump,deload:true};
   const modeById={};plan.exercises.forEach(e=>{if(EX[e.id])modeById[e.id]=modeOf(e);});
   const anchors=new Set(groups.map(g=>planAnchor(ids,g)).filter(Boolean).map(e=>e.id));
   let rotation=null,structural=false;   // at most ONE structural change per session (swap OR gap-add)
@@ -394,7 +406,7 @@ function planWorkout(groups,sessions,seed,opts){
     });
   }
   const streak=Math.min(...ids.filter(id=>!rotation||id!==rotation.to).map(id=>exerciseStreak(sessions,id)));
-  return{ids:orderByFatigue(capHeavyAxial(ids),groups[0]),mode:'continue',plan,rotation,streak:isFinite(streak)?streak:0,reactions,volumeBump,deload:false};
+  return{ids:orderByFatigue(capHeavyAxial(ids,profile,sessions),groups[0]),mode:"continue",plan,rotation,streak:isFinite(streak)?streak:0,reactions,volumeBump,deload:false};
 }
 
 IL.builder={prescribedSets,seedExercise,lastSessionIds,perfPriority,orderByFatigue,isHeavyAxial,capHeavyAxial,pickForGroup,buildRecommendation,complementSuggestions,

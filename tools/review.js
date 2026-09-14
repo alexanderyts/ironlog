@@ -9,7 +9,17 @@ globalThis.IL={config:{BUILD:'review',VERSION:'review'}};
 const IL=globalThis.IL,{EX,GROUPS,PRESETS}=IL.data,P=IL.prog,B=IL.builder,A=IL.analysis;
 
 const file=process.argv[2],WHY=process.argv.includes('--why');
-if(!file){console.error('usage: node tools/review.js <backup.json> [--why]   (--why prints the score breakdown behind each fresh-build pick)');process.exit(1);}
+if(!file){console.error('usage: node tools/review.js <backup.json> [--why] [--profile \'{"gym":"machine","goal":"size"}\']\n  --why      prints the score breakdown behind each fresh-build pick\n  --profile  overlays a training profile and shows builds + coaching auto vs. profile');process.exit(1);}
+// --profile '<json>': overlay a training profile on this backup and show the before/after (P4). The
+// JSON is cleaned through the SAME validator the app uses, so the tool can never test a profile the
+// app would reject. Levers: goal, gym, days, length, sets, push, protect[], avoid[].
+const pIdx=process.argv.indexOf('--profile');let PROFILE=null;
+if(pIdx>=0){
+  const raw=process.argv[pIdx+1];
+  let parsed;try{parsed=JSON.parse(raw||'');}catch(e){console.error('--profile needs valid JSON, e.g. --profile \'{"gym":"machine","goal":"size"}\'');process.exit(1);}
+  PROFILE=IL.sync.cleanProfile(parsed);
+  if(!PROFILE){console.error('--profile had no recognized levers. Valid values: '+JSON.stringify(IL.sync.PROFILE_ENUM)+' plus days 2-6, protect[groups], avoid[exercise-ids]');process.exit(1);}
+}
 const d=IL.sync.parseImport(fs.readFileSync(file,'utf8'));
 const unit=(d.settings&&d.settings.unit)||'lb',bw=(d.settings&&d.settings.bodyweight)||0;
 const sessions=d.sessions.slice().sort((a,b)=>b.date-a.date);
@@ -88,6 +98,37 @@ targets.forEach((g,i)=>{
     tr.forEach(t=>line(`      ${EX[t.id].name.padEnd(30)} ${t.sc==null?'':'score '+t.sc+'  '}${t.why.join(', ')}`));}
 });
 if(!WHY)line('(add --why to see the score breakdown behind each fresh-build pick)');
+
+if(PROFILE){
+  H('PROFILE OVERLAY  '+JSON.stringify(PROFILE));
+  line('For each target: the AUTO build (no profile) vs. the same build WITH your profile. A ✎ marks a');
+  line('pick your profile changed; '+(WHY?'the lever that caused it is named.':'add --why to see which lever did it.'));
+  const avoid=new Set(PROFILE.avoid||[]),protect=new Set(PROFILE.protect||[]);
+  // Why did the profile drop the auto pick `id`? Attribute to a lever deterministically, in the fixed
+  // apply order (avoid → gym → protect). Mirrors profilePool's own rules so the reason is the real one.
+  const leverFor=id=>{const e=EX[id];if(!e)return'';
+    if(avoid.has(id))return'avoid';
+    if(PROFILE.gym==='machine'&&e.equip==='Barbell'&&P.lastModeFor(sessions,id)!=='smith')return'gym:machine (no barbell)';
+    if(PROFILE.gym==='home'&&!(e.equip==='Dumbbell'||e.equip==='Bodyweight'))return'gym:home (dumbbell/bodyweight only)';
+    if(protect.has(e.group)&&e.tier===1&&e.type==='compound'&&(e.equip==='Barbell'||e.equip==='Dumbbell'))return'protect:'+e.group;
+    return'length/goal ordering';};
+  const hintsP=A.buildHints(sessions,now,bw,PROFILE);
+  targets.forEach((g,i)=>{
+    const label=i===0?'repeat of last groups ('+g.join('+')+')':PRESETS[i-1].label;
+    const pa=B.planWorkout(g,sessions,1,{now,hints}),pp=B.planWorkout(g,sessions,1,{now,hints:hintsP,profile:PROFILE});
+    const setA=new Set(pa.ids),setP=new Set(pp.ids);
+    line('');line(label+'  ['+pp.mode.toUpperCase()+(pp.reactions.length?'  '+pp.reactions.map(r=>r.type).join(','):'')+']');
+    line('  auto:    '+pa.ids.map(id=>EX[id].name).join(' · '));
+    line('  profile: '+pp.ids.map(id=>{const changed=!setA.has(id);return (changed?'✎':'')+EX[id].name;}).join(' · '));
+    const dropped=pa.ids.filter(id=>!setP.has(id));
+    if(dropped.length&&WHY)dropped.forEach(id=>line('    ✎ '+EX[id].name.padEnd(28)+' dropped — '+leverFor(id)));
+  });
+  H('PROFILE OVERLAY — COACH (auto vs profile)');
+  const tipsA=A.buildTips(a,sessions,now,bw),tipsP=A.buildTips(a,sessions,now,bw,PROFILE);
+  const setTips=new Set(tipsA.map(t=>strip(t.x)));
+  line('auto:');tipsA.forEach(t=>line(`  [${t.lv}] ${strip(t.x)}`));
+  line('profile:');tipsP.forEach(t=>{const changed=!setTips.has(strip(t.x));line(`  ${changed?'✎':' '}[${t.lv}] ${strip(t.x)}`);});
+}
 
 H('SANITY FLAGS');
 let flags=0;

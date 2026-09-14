@@ -129,3 +129,57 @@ test('P2 audit: a combined machine + protect Shoulders + short profile keeps CHU
   // a continued barbell anchor the user already trains is NOT retroactively swapped by gym/protect
   assert.ok(base.ids.includes('overhead-press'),'a continued barbell anchor is retained, not force-swapped (no retroactive churn)');
 });
+
+// ── Phase P4: adversarial combinatorial audit ────────────────────────────────────────────────────
+// Every profile the app can produce, crossed against every preset, on a FRESH build (empty history,
+// so the pool levers fully govern — a continued plan deliberately keeps anchors and is exempt). The
+// audit asserts INVARIANTS, not "it ran": each build covers its groups; gym excludes what it must;
+// avoid/protect are honoured; and no combination throws. If one fails it's a real bug.
+{
+const {GROUPS,EXERCISES,PRESETS}=IL.data;
+const groupOf=id=>EX[id]&&EX[id].group;
+const GOALS=[undefined,'size','strength','general'],GYMS=[undefined,'full','machine','home'],
+      LENS=[undefined,'short','standard','long'],PUSHES=[undefined,'guide','quiet'];
+
+test('P4 audit: every profile × preset builds a covered session and never throws',()=>{
+  let combos=0;
+  for(const goal of GOALS)for(const gym of GYMS)for(const length of LENS)for(const push of PUSHES){
+    const profile={};if(goal)profile.goal=goal;if(gym)profile.gym=gym;if(length)profile.length=length;if(push)profile.push=push;
+    combos++;
+    for(const preset of PRESETS){
+      const ids=br(preset.groups,7,profile);
+      assert.ok(Array.isArray(ids)&&ids.length>=1,`empty build: ${preset.label} · ${JSON.stringify(profile)}`);
+      ids.forEach(id=>assert.ok(EX[id],`unknown id ${id} in ${preset.label} · ${JSON.stringify(profile)}`));
+      // covers its groups: profilePool never empties a group, so each requested group gets ≥1 pick
+      const got=new Set(ids.map(groupOf));
+      preset.groups.forEach(g=>assert.ok(got.has(g),`${preset.label} · ${JSON.stringify(profile)} dropped ${g}: ${ids.join(',')}`));
+      if(gym==='machine')ids.forEach(id=>assert.notEqual(EX[id].equip,'Barbell',`machine kept a barbell (${id}) in ${preset.label}`));
+      if(gym==='home')ids.forEach(id=>assert.ok(EX[id].equip==='Dumbbell'||EX[id].equip==='Bodyweight',`home kept ${EX[id].equip} (${id}) in ${preset.label}`));
+    }
+  }
+  assert.equal(combos,4*4*4*3,'swept the full lever cross-product');   // 192 profiles × 6 presets = 1152 builds
+});
+
+test('P4 audit: protect never yields a tier-1 free-weight compound for that group; avoid is always dropped',()=>{
+  const heavy=e=>e.tier===1&&e.type==='compound'&&(e.equip==='Barbell'||e.equip==='Dumbbell');
+  for(const g of GROUPS){
+    // a preset that actually trains g, else skip (protect only speaks about trained groups)
+    const preset=PRESETS.find(p=>p.groups.indexOf(g)>=0);if(!preset)continue;
+    for(const gym of GYMS){
+      const profile={protect:[g]};if(gym)profile.gym=gym;
+      const ids=br(preset.groups,7,profile);
+      ids.filter(id=>EX[id].group===g).forEach(id=>assert.ok(!heavy(EX[id]),`protect:${g} kept heavy ${id} (${gym||'full'})`));
+      assert.ok(ids.some(id=>EX[id].group===g),`protect:${g} still covers ${g}`);   // protected, not abandoned
+    }
+  }
+  // avoid: take each preset's would-be picks and forbid them one at a time; none may return
+  for(const preset of PRESETS){
+    const base=br(preset.groups,7,{});
+    for(const victim of base){
+      const ids=br(preset.groups,7,{avoid:[victim]});
+      assert.ok(ids.indexOf(victim)<0,`avoid ${victim} but it came back in ${preset.label}: ${ids.join(',')}`);
+      assert.ok(ids.some(id=>groupOf(id)===groupOf(victim)),`avoid ${victim} abandoned ${groupOf(victim)}`);   // swapped, not dropped
+    }
+  }
+});
+}

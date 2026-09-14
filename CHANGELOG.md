@@ -2,6 +2,13 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.41.0 — 2026-09-13 · Profile review tool + adversarial audit (Roadmap v6, Phase P4 — final)
+The last phase of the profile work: a way to *see* what a profile changes, and an audit that proves the levers hold under every combination. This is a developer/reviewer tool plus an internal safety net — nothing in the app screens changes.
+- **`review.js --profile '{…}'`** overlays a training profile on a real backup and prints, for each preset, the build with and without the profile side by side, marking (✎) every pick the profile changed; `--why` names the exact lever that dropped each one. It also shows the coach's notes auto vs. profile. The profile is validated through the same rules the app uses.
+- **A combinatorial audit** now builds every profile the app can produce (goal × gym × length × push, plus protect and avoid) against all six presets — 1,000+ builds — and asserts each one covers its groups, excludes what the gym setting forbids, never keeps an avoided lift, and never puts a heavy free-weight compound on a protected muscle.
+- **Bug the audit caught and fixed:** the "no more than two heavy barbell squat/hinge lifts per session" safety swap picked its replacement without consulting the profile, so it could quietly bring back a lift you'd avoided, a barbell under a machine-only gym, or a heavy lift on a protected muscle. The replacement now clears the profile too, or the extra lift is simply dropped. The avoid/gym/protect rule now lives in one place both the pool and this swap read from.
+- Not verified on-device: this phase is tooling and engine-internal; the overlay was exercised on a synthetic backup and every invariant has an assertion. Full suite 161 tests.
+
 ## v0.40.1 — 2026-09-13 · The 50-hour workout, and a Finish you can find
 A real bug report: a workout started before Ironlog timed sets, finished two days later, was logged as 50 hours long. Plan in `PLAN-finish-and-duration.md`.
 - **Finish now asks when the sets have no timestamps.** If a workout was started a while ago and none of its sets carry a time, Finish offers *End now*, *About an hour after I started* (shown as ≈), or *Don't record a length* — instead of silently logging the whole gap as training time.
