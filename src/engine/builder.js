@@ -368,9 +368,11 @@ function anchorVariation(exId,planIds,seed,profile,sessions){
 }
 // An exercise id to cover a flagged gap that isn't already in the plan (Phase C reaction 4).
 function gapFillExercise(gp,ids,profile,sessions){
-  const avoided=id=>profile&&profile.avoid&&profile.avoid.indexOf(id)>=0;
-  if(gp.type==='pattern-gap'&&gp.exId&&ids.indexOf(gp.exId)<0&&!avoided(gp.exId))return gp.exId;
-  const cands=profilePool(EXERCISES.filter(x=>x.group===gp.group&&ids.indexOf(x.id)<0&&(gp.reg?x.reg===gp.reg:x.pat===gp.pat)),gp.group,profile,sessions);
+  // A gap-add is OPTIONAL, so filter STRICTLY through profileAllows (drop, never back off): a machine
+  // gym must not get a barbell RDL added, a home gym a cable face-pull, etc. (#5). profilePool's backoff
+  // is right for a group that MUST be covered; wrong here, where skipping the add is fine.
+  if(gp.type==='pattern-gap'&&gp.exId&&ids.indexOf(gp.exId)<0&&profileAllows(EX[gp.exId],gp.group,profile,sessions))return gp.exId;
+  const cands=EXERCISES.filter(x=>x.group===gp.group&&ids.indexOf(x.id)<0&&(gp.reg?x.reg===gp.reg:x.pat===gp.pat)&&profileAllows(x,gp.group,profile,sessions));
   return cands.sort((a,b)=>(a.tier-b.tier)||(perfPriority(b)-perfPriority(a)))[0]?.id||null;
 }
 // What to train for these groups today. Returns {ids, mode:'continue'|'fresh', plan, rotation, streak,
@@ -431,18 +433,20 @@ function planWorkout(groups,sessions,seed,opts){
     const gp=hints.gaps.filter(g=>groups.indexOf(g.group)>=0&&!protect.has(g.group)&&!covered(g)).sort((a,b)=>b.prio-a.prio)[0];
     if(gp){const add=gapFillExercise(gp,ids,profile,sessions);if(add&&EX[add]){ids.push(add);structural=true;reactions.push({type:'gap-add',exId:add,group:gp.group,why:'covers '+(gp.reg?regLabel(gp.group,gp.reg):patLabel(gp.pat))});}}
   }
-  // 4. Volume bump (+1 set) for an undertrained group — one exercise each, self-limiting (the finding
-  //    clears once weekly volume is adequate). seedExercise enforces the per-exercise set ceiling.
-  if(hints&&hints.undertrained){
-    hints.undertrained.forEach(g=>{if(groups.indexOf(g)<0||protect.has(g))return;   // never add volume to a protected muscle
-      const target=ids.find(id=>EX[id]&&EX[id].group===g&&anchors.has(id))||ids.find(id=>EX[id]&&EX[id].group===g);
-      if(target&&volumeBump.indexOf(target)<0){volumeBump.push(target);reactions.push({type:'volume',exId:target,group:g,why:g.toLowerCase()+' volume is low — added a set'});}
-    });
+  // 4. Volume bump (+1 set) for the ONE most-undertrained group this session (the lowest sets/week),
+  //    not every low group at once — adding five sets while the toast says "+1 set" was dishonest, and
+  //    piling volume onto a returning/low-volume lifter is wrong (#23). Self-limiting: as each session
+  //    lifts a group over its landmark, the next session moves to the next-lowest.
+  const undByVol=hints&&(hints.undertrainedByVolume||(hints.undertrained||[]).map(g=>({group:g,perWeek:0})));   // accept the old {undertrained:[names]} shape too
+  if(undByVol&&undByVol.length){
+    const pick=undByVol.filter(u=>groups.indexOf(u.group)>=0&&!protect.has(u.group))[0];
+    if(pick){const g=pick.group,target=ids.find(id=>EX[id]&&EX[id].group===g&&anchors.has(id))||ids.find(id=>EX[id]&&EX[id].group===g);
+      if(target&&volumeBump.indexOf(target)<0){volumeBump.push(target);reactions.push({type:'volume',exId:target,group:g,why:g.toLowerCase()+' volume is low — added a set'});}}
   }
   const streak=Math.min(...ids.filter(id=>!rotation||id!==rotation.to).map(id=>exerciseStreak(sessions,id)));
   return{ids:orderByFatigue(capHeavyAxial(ids,profile,sessions),groups[0]),mode:"continue",plan,rotation,streak:isFinite(streak)?streak:0,reactions,volumeBump,deload:false};
 }
 
 IL.builder={prescribedSets,seedExercise,lastSessionIds,perfPriority,orderByFatigue,isHeavyAxial,capHeavyAxial,pickForGroup,buildRecommendation,complementSuggestions,
-  CONTINUE_DAYS,STALL_MIN_DAYS,ANCHOR_STALL_WEEKS,ANCHOR_DELOAD_DAYS,MAX_SESSION_EX,MAX_SETS_PER_EX,findPlan,exerciseTenure,exerciseStreak,isStalled,recentDeload,planAnchor,replacementFor,anchorVariation,fillsGap,gapFillExercise,planWorkout};
+  CONTINUE_DAYS,STALL_MIN_DAYS,ANCHOR_STALL_WEEKS,ANCHOR_DELOAD_DAYS,MAX_SESSION_EX,MAX_SETS_PER_EX,findPlan,exerciseTenure,exerciseStreak,isStalled,recentDeload,planAnchor,replacementFor,anchorVariation,fillsGap,gapFillExercise,profileAllows,planWorkout};
 if(typeof module!=='undefined')module.exports=IL.builder;

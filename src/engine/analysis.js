@@ -21,18 +21,23 @@ function analyze(sessions,now){
   // (withStatus); for the normal call it's a no-op since there are no future-dated sessions.
   const done=completed(sessions).filter(s=>s.date>=now-winDays*DAY&&s.date<now);
   const groupSets={},effSets={},pat={hpush:0,vpush:0,hpull:0,vpull:0,hinge:0,squat:0,lunge:0,iso:0},regSeen={},patSeen={},groupDays={};
-  let totalSets=0;
+  let totalSets=0,backHinge=0;
   done.forEach(s=>{const day=startOfDay(s.date),dayGroups=new Set();
     s.exercises.forEach(e=>{const ex=EX[e.id];if(!ex)return;const n=e.sets.filter(isWorking).length;if(!n)return;
     totalSets+=n;groupSets[ex.group]=(groupSets[ex.group]||0)+n;pat[ex.pat]=(pat[ex.pat]||0)+n;dayGroups.add(ex.group);
+    if(ex.pat==='hinge'&&ex.muscles.indexOf('Back')>=0)backHinge+=n;   // a deadlift is a posterior-chain PULL, not "neither" (#22)
     // effective volume: a press also trains triceps/shoulders — secondary muscles get half credit
     ex.muscles.forEach((m,i)=>{effSets[m]=(effSets[m]||0)+(i===0||m===ex.group?n:n*0.5);});
     (regSeen[ex.group]=regSeen[ex.group]||new Set()).add(ex.reg);(patSeen[ex.group]=patSeen[ex.group]||new Set()).add(ex.pat);});
     // how many distinct training DAYS hit each group — for weekly frequency (≥2×/week is better per unit volume)
     dayGroups.forEach(g=>{(groupDays[g]=groupDays[g]||new Set()).add(day);});});
   const groupFreq={};Object.keys(groupDays).forEach(g=>groupFreq[g]=groupDays[g].size);
-  const push=pat.hpush+pat.vpush,pull=pat.hpull+pat.vpull;
+  const push=pat.hpush+pat.vpush,pull=pat.hpull+pat.vpull+0.5*backHinge;   // half a deadlift's sets count toward pulling (#22)
   let upperSets=0,lowerSets=0;Object.entries(groupSets).forEach(([g,n])=>{LOWER_GROUPS.indexOf(g)>=0?lowerSets+=n:upperSets+=n;});
+  // Sustained weekly volume = sets / calendar weeks (the landmarks 8–20 are per-CALENDAR-week: training
+  // a muscle 12 sets every OTHER week is 6/week of stimulus, not 12). NOTE #14 (a layoff makes the first
+  // sessions back read "low") is deferred — dividing by active weeks OVERSTATES an intermittent trainer's
+  // volume, which is worse for this app's users; it needs targeted layoff detection, not a divisor swap.
   const perWeek={};Object.entries(groupSets).forEach(([g,n])=>perWeek[g]=(effSets[g]||n)/weeks);
   const dates=done.map(s=>s.date);
   const daySpan=dates.length?Math.round((Math.max(...dates)-Math.min(...dates))/DAY):0;
@@ -67,13 +72,24 @@ const VOL_LANDMARKS={size:[10,20],strength:[6,12],general:[8,15]};
 function findings(a,sessions,now,bw,profile){
   now=now||Date.now();profile=profile||{};
   const F=[],trained=Object.keys(a.groupSets).filter(g=>a.groupSets[g]>=2);
+  const protect=new Set(profile.protect||[]);
+  // A suggested example must fit the gym (and not be avoided). Protect is handled by its own block
+  // below (which DROPS a protected muscle's heavy gap rather than substitute a lighter lift), so strip
+  // protect here — else a protected muscle would get a light alternative instead of the "keeping it light" credit.
+  const allow=(x,g)=>IL.builder.profileAllows(x,g,Object.assign({},profile,{protect:undefined}),sessions);   // gym/avoid-legal only (#5)
   if(a.readyForComparative){
+    // Don't nag toward a side you're deliberately keeping light: if the fix would be pulling and both
+    // pull muscles are protected (or pressing and all press muscles are), stay quiet (#6).
+    const pullProt=['Back','Biceps'].every(g=>protect.has(g)),pushProt=['Chest','Shoulders','Triceps'].every(g=>protect.has(g));
+    const pu=Math.round(a.push),pl=Math.round(a.pull);   // pull can be fractional now (half-credit hinge) — round for display
     if(a.push+a.pull>=6){
-      if(a.push>=a.pull*1.5&&a.push-a.pull>=3)F.push({type:'balance',lv:'warn',dir:'push',push:a.push,pull:a.pull});
-      else if(a.pull>=a.push*1.5&&a.pull-a.push>=3)F.push({type:'balance',lv:'warn',dir:'pull',push:a.push,pull:a.pull});
-      else F.push({type:'balance',lv:'good',dir:'even',push:a.push,pull:a.pull});
+      if(a.push>=a.pull*1.5&&a.push-a.pull>=3){if(!pullProt)F.push({type:'balance',lv:'warn',dir:'push',push:pu,pull:pl});}
+      else if(a.pull>=a.push*1.5&&a.pull-a.push>=3){if(!pushProt)F.push({type:'balance',lv:'warn',dir:'pull',push:pu,pull:pl});}
+      else F.push({type:'balance',lv:'good',dir:'even',push:pu,pull:pl});
     }
-    if(a.upperSets+a.lowerSets>=8&&a.lowerSets*3<=a.upperSets)F.push({type:'legs-low',lv:'warn',lower:a.lowerSets,upper:a.upperSets});
+    // Don't tell someone protecting their legs that legs are undertrained (#6).
+    const legsProt=['Quads','Hamstrings','Glutes'].some(g=>protect.has(g));
+    if(a.upperSets+a.lowerSets>=8&&a.lowerSets*3<=a.upperSets&&!legsProt)F.push({type:'legs-low',lv:'warn',lower:a.lowerSets,upper:a.upperSets});
   }
   const lastDeload=completed(sessions).filter(s=>s.deload&&s.date<now).sort((x,y)=>y.date-x.date)[0];
   const sinceDeload=lastDeload?Math.round((now-lastDeload.date)/DAY):Infinity;
@@ -84,13 +100,18 @@ function findings(a,sessions,now,bw,profile){
     // not every week (#7).
     const weeks=Math.min(streakWk,weeksSince);
     if(weeks>=6&&weeks%6<2)F.push({type:'deload-due',lv:'info',weeks});}
-  trained.forEach(g=>{const seen=a.regSeen[g]||new Set();(REGIONS[g]||[]).forEach(r=>{if(!seen.has(r)){const ex=exampleFor(g,r);if(ex)F.push({type:'region-gap',lv:'info',group:g,reg:r,ex,prio:gapPrio(g,r)});}});});
-  trained.forEach(g=>{const seen=a.patSeen[g]||new Set();(IDEAL_PATS[g]||[]).forEach(p=>{if(!seen.has(p)){const ex=EXERCISES.find(x=>x.group===g&&x.pat===p&&x.tier<=2)||EXERCISES.find(x=>x.group===g&&x.pat===p);if(ex)F.push({type:'pattern-gap',lv:'info',group:g,pat:p,exId:ex.id,exName:ex.name,prio:patPrio(g,p)});}});});
+  // Region / pattern gaps: the suggested example must be doable at the user's gym — no "try an Incline
+  // Barbell Press" at a home gym. If nothing legal covers the gap there, it isn't a gap worth raising (#5).
+  trained.forEach(g=>{const seen=a.regSeen[g]||new Set();(REGIONS[g]||[]).forEach(r=>{if(!seen.has(r)){
+    const pick=EXERCISES.find(x=>x.group===g&&x.reg===r&&x.type==='compound'&&allow(x,g))||EXERCISES.find(x=>x.group===g&&x.reg===r&&allow(x,g));
+    if(pick)F.push({type:'region-gap',lv:'info',group:g,reg:r,ex:pick.name,prio:gapPrio(g,r)});}});});
+  trained.forEach(g=>{const seen=a.patSeen[g]||new Set();(IDEAL_PATS[g]||[]).forEach(p=>{if(!seen.has(p)){
+    const pick=EXERCISES.find(x=>x.group===g&&x.pat===p&&x.tier<=2&&allow(x,g))||EXERCISES.find(x=>x.group===g&&x.pat===p&&allow(x,g));
+    if(pick)F.push({type:'pattern-gap',lv:'info',group:g,pat:p,exId:pick.id,exName:pick.name,prio:patPrio(g,p)});}});});
   // 'protect': a muscle you're keeping light must not be nagged toward heavy compounds. Gap findings
   // there whose suggested fix is a tier-1 compound are dropped and replaced by ONE 'protect' finding
   // that credits what's covering it; isolation gaps (light, safe) stay. The builder reads the same
   // list, so it stops gap-adding heavy work there too — coach and builder agree by construction.
-  const protect=new Set(profile.protect||[]);
   if(protect.size){
     const heavy=f=>{const x=f.exId?EX[f.exId]:EXERCISES.find(e=>e.name===f.ex);return !!x&&x.tier===1&&x.type==='compound';};
     for(let i=F.length-1;i>=0;i--){const f=F[i];if((f.type==='region-gap'||f.type==='pattern-gap')&&protect.has(f.group)&&heavy(f))F.splice(i,1);}
@@ -101,8 +122,11 @@ function findings(a,sessions,now,bw,profile){
   }
   if(a.readyForComparative){
     // 'goal' moves the volume landmark; the finding carries the target only when it differs from Balanced
-    const goalVol=profile.goal==='size'||profile.goal==='strength'?profile.goal:null,volLo=(VOL_LANDMARKS[goalVol]||VOL_LANDMARKS.general)[0];
-    trained.filter(g=>a.groupSets[g]>=4&&g!=='Core'&&g!=='Calves').forEach(g=>{if(a.perWeek[g]<volLo)F.push(Object.assign({type:'volume-low',lv:'warn',group:g,perWeek:a.perWeek[g]},goalVol?{goal:goalVol,target:volLo}:{}));});
+    const goalVol=profile.goal==='size'||profile.goal==='strength'?profile.goal:null;
+    let volLo=(VOL_LANDMARKS[goalVol]||VOL_LANDMARKS.general)[0];
+    if(profile.days&&profile.days<=2)volLo=Math.min(volLo,6);   // a 2-day lifter can't hit 10 sets/muscle/week; don't call it "low" (#23)
+    const volTarget=(goalVol||(profile.days&&profile.days<=2))?volLo:undefined;   // carry the number only when it differs from the Balanced threshold
+    trained.filter(g=>a.groupSets[g]>=4&&g!=='Core'&&g!=='Calves').forEach(g=>{if(a.perWeek[g]<volLo)F.push(Object.assign({type:'volume-low',lv:'warn',group:g,perWeek:a.perWeek[g]},volTarget!==undefined?{target:volTarget,goal:goalVol||'general'}:{}));});
     // 'days': on a 2-day week most muscles only fit once — a 1×/week frequency isn't a gap, it's the plan
     if(!(profile.days&&profile.days<=2))
       trained.filter(g=>g!=='Core'&&g!=='Calves'&&a.groupSets[g]/a.weeks>=6&&(a.groupFreq[g]||0)/a.weeks<1.5).forEach(g=>F.push({type:'freq-low',lv:'info',group:g,sets:a.groupSets[g]/a.weeks}));
@@ -204,13 +228,14 @@ function renderFinding(f,week){
     case 'volume-low':{
       if(st==='resolved')return {lv:'good',x:`${G} volume is back up where it should be — nice work.`};
       const pw=f.perWeek.toFixed(1),trend=(st==='persisting'&&f.prev&&f.perWeek>f.prev.perWeek)?` (up from ~${f.prev.perWeek.toFixed(1)}, keep climbing)`:'';
-      if(f.goal){const why=f.goal==='size'?'reliably grows it':'builds strength there';   // goal-aware landmark (P3)
+      const tgt=f.target||8;   // the finding carries a goal/days-adjusted landmark; else the Balanced threshold (8, matching the trigger — was miswritten as "10+")
+      if(f.goal==='size'||f.goal==='strength'){const why=f.goal==='size'?'reliably grows it':'builds strength there';
         return {lv:'warn',x:pickVariant(f,week,[
-          `For ${f.goal}, ${g} at ~<b>${pw}</b> sets/week${trend} is below the <b>~${f.target}</b> that ${why}.`,
-          `${G} is at ~<b>${pw}</b> sets/week${trend} — for ${f.goal} you want <b>${f.target}+</b>.`])};}
+          `For ${f.goal}, ${g} at ~<b>${pw}</b> sets/week${trend} is below the <b>~${tgt}</b> that ${why}.`,
+          `${G} is at ~<b>${pw}</b> sets/week${trend} — for ${f.goal} you want <b>${tgt}+</b>.`])};}
       return {lv:'warn',x:pickVariant(f,week,[
-        `Only ~<b>${pw}</b> sets/week of ${g}${trend} — aim for <b>10+</b> to drive growth.`,
-        `${G} is light at ~<b>${pw}</b> sets/week${trend}. Push toward <b>10+</b> weekly.`])};
+        `Only ~<b>${pw}</b> sets/week of ${g}${trend} — aim for <b>${tgt}+</b> to keep it growing.`,
+        `${G} is light at ~<b>${pw}</b> sets/week${trend}. Push toward <b>${tgt}+</b> weekly.`])};
     }
     case 'freq-low':{
       if(st==='resolved')return {lv:'good',x:`${G} is spread across the week better now — good.`};
@@ -232,19 +257,25 @@ function renderFinding(f,week){
 }
 // Coaching tips: status-aware and varied (Phase E). One resolved "win" is shown first as a positive
 // opener when something's been fixed; then the active guidance in the established priority order.
-function buildTips(a,sessions,now,bw,profile){
+// Findings a user can silence with "Got it" (a warning they've heard). Positive/transient ones
+// (protect/progression/deload) aren't mutable. `seen` is settings.seen; a mute key is 'mute:'+findingKey.
+const MUTABLE=new Set(['balance','legs-low','region-gap','pattern-gap','volume-low','freq-low']);
+function buildTips(a,sessions,now,bw,profile,seen){
+  seen=seen||{};
   const week=isoWeek(now),ann=withStatus(sessions,now,bw,profile),t=[];
-  const active=ann.filter(f=>f.status!=='resolved'),pick=ty=>active.filter(f=>f.type===ty);
+  const muted=f=>MUTABLE.has(f.type)&&seen['mute:'+findingKey(f)]===true;
+  const active=ann.filter(f=>f.status!=='resolved'&&!muted(f)),pick=ty=>active.filter(f=>f.type===ty);
+  const add=f=>{const r=renderFinding(f,week);if(MUTABLE.has(f.type))r.key=findingKey(f);t.push(r);};   // key lets the UI show a "Got it" mute
   const resolved=ann.filter(f=>f.status==='resolved'&&RESOLVABLE.has(f.type)).sort((x,y)=>(y.prio||1)-(x.prio||1));
-  if(resolved.length)t.push(renderFinding(resolved[0],week));
-  pick('balance').forEach(f=>t.push(renderFinding(f,week)));
-  pick('legs-low').forEach(f=>t.push(renderFinding(f,week)));
-  pick('deload-taken').concat(pick('deload-due')).forEach(f=>t.push(renderFinding(f,week)));
-  active.filter(f=>f.type==='region-gap'||f.type==='pattern-gap').sort((x,y)=>y.prio-x.prio).slice(0,2).forEach(f=>t.push(renderFinding(f,week)));
-  const vol=pick('volume-low').sort((x,y)=>x.perWeek-y.perWeek)[0];if(vol)t.push(renderFinding(vol,week));
-  const freq=pick('freq-low').sort((x,y)=>y.sets-x.sets)[0];if(freq)t.push(renderFinding(freq,week));
-  pick('protect').forEach(f=>t.push(renderFinding(f,week)));   // good news goes AFTER the warnings so the 5-tip cap never drops a warning for it
-  pick('progression').forEach(f=>t.push(renderFinding(f,week)));
+  if(resolved.length)add(resolved[0]);
+  pick('balance').forEach(add);
+  pick('legs-low').forEach(add);
+  pick('deload-taken').concat(pick('deload-due')).forEach(add);
+  active.filter(f=>f.type==='region-gap'||f.type==='pattern-gap').sort((x,y)=>y.prio-x.prio).slice(0,2).forEach(add);
+  const vol=pick('volume-low').sort((x,y)=>x.perWeek-y.perWeek)[0];if(vol)add(vol);
+  const freq=pick('freq-low').sort((x,y)=>y.sets-x.sets)[0];if(freq)add(freq);
+  pick('protect').forEach(add);   // good news goes AFTER the warnings so the 5-tip cap never drops a warning for it
+  pick('progression').forEach(add);
   return t.slice(0,5);   // may be empty — the caller owns empty-state copy (too little history vs. nothing to flag)
 }
 /* buildHints (Roadmap v4 Phase C): turn findings into inputs the WORKOUT BUILDER can act on — the
@@ -259,13 +290,17 @@ function buildHints(sessions,now,bw,profile){
   const a=analyze(sessions,now);
   const F=findings(a,sessions,now,bw,profile);
   const gaps=F.filter(f=>f.type==='region-gap'||f.type==='pattern-gap');
-  const undertrained=F.filter(f=>f.type==='volume-low').map(f=>f.group);
+  const volLow=F.filter(f=>f.type==='volume-low');
+  const undertrained=volLow.map(f=>f.group);                                   // group names (kept for suggestGroups)
+  const undertrainedByVolume=volLow.map(f=>({group:f.group,perWeek:f.perWeek})).sort((x,y)=>x.perWeek-y.perWeek);   // lowest first — the builder bumps just the neediest group per session (#23)
   const imbalance=F.find(f=>f.type==='balance'&&f.lv==='warn')||null;
   const legsLow=F.some(f=>f.type==='legs-low');
+  const protect=new Set((profile&&profile.protect)||[]);
   const suggest=new Set(undertrained);
   if(legsLow)['Quads','Hamstrings','Glutes'].forEach(g=>suggest.add(g));
   if(imbalance)(imbalance.dir==='push'?['Back']:['Chest','Shoulders']).forEach(g=>suggest.add(g));
-  return {gaps,undertrained,imbalance,legsLow,suggestGroups:[...suggest].slice(0,3)};
+  const suggestGroups=[...suggest].filter(g=>!protect.has(g)).slice(0,3);      // never nudge toward a muscle you're keeping light (#6)
+  return {gaps,undertrained,undertrainedByVolume,imbalance,legsLow,suggestGroups};
 }
 // Best set per exercise BY MODALITY (a Smith and a dumbbell overhead press are separate PRs) by
 // estimated 1RM. `showEst` is true only for compound lifts done with equipment whose 1RM estimate

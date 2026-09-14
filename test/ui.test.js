@@ -393,3 +393,26 @@ test('A5: a profile reset on another device propagates (settings rebuilt from th
     assert.equal(h.state.settings.profile.goal,'strength','older remote does not wipe it');
   }finally{h.teardown();}
 });
+
+test('C2: "Got it" hides a coaching note and Settings can bring it back',()=>{
+  const h=launch();
+  try{
+    // press-heavy multi-week history → a push/pull balance warning on the Progress tab
+    const now=Date.now();
+    h.state.sessions=[];for(let w=0;w<5;w++)h.state.sessions.push({id:'w'+w,schema:1,date:now-(3+w*7)*86400000,updatedAt:now,completed:true,
+      exercises:[{id:'barbell-bench-press',name:'B',sets:[{w:135,r:8,done:true},{w:135,r:8,done:true},{w:135,r:8,done:true}]},
+                 {id:'overhead-press',name:'O',sets:[{w:75,r:8,done:true},{w:75,r:8,done:true}]}]});
+    h.IL.ui.setTab('progress');h.IL.ui.render();
+    assert.ok(h.bodyText().includes('outrunning your pulling'),'the balance note is shown');
+    const got=h.$$('[data-mute]').find(b=>b.dataset.mute==='balance');
+    assert.ok(got,'a "Got it" control is offered on the note');
+    h.click(got);
+    assert.ok(!h.bodyText().includes('outrunning your pulling'),'the note is hidden after Got it');
+    assert.equal(h.state.settings.seen['mute:balance'],true,'the mute is stored (and syncs)');
+    // Settings offers to bring it back
+    h.IL.ui.openSettings();
+    assert.ok(h.has('#btnUnmute'),'Settings shows an un-mute control');
+    h.click('#btnUnmute');
+    assert.ok(!h.state.settings.seen['mute:balance'],'un-mute clears it');
+  }finally{h.teardown();}
+});

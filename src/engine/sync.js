@@ -13,7 +13,8 @@ function cleanProfile(p){if(!p||typeof p!=='object')return undefined;const o={};
   return Object.keys(o).length?o:undefined;}
 // "Seen this announcement once" flags (e.g. the profile intro), synced so a dismissal sticks everywhere.
 function cleanSeen(v){if(!v||typeof v!=='object')return undefined;const o={};
-  Object.keys(v).forEach(k=>{if(v[k]===true&&/^[A-Za-z0-9_]{1,40}$/.test(k))o[k]=true;});
+  // keys are one-time flags (e.g. 'profileIntro') and coaching mutes ('mute:volume-low:Chest') — allow ':' and '-'
+  Object.keys(v).forEach(k=>{if(v[k]===true&&/^[A-Za-z0-9_:-]{1,60}$/.test(k))o[k]=true;});
   return Object.keys(o).length?o:undefined;}
 
 const TOMB_KEEP=400*86400000;   // remember deletions ~13 months — longer than a phone left off for a season, so a device coming back online can't resurrect a delete (a tombstone is ~30 B; 500 of them is 15 KB)

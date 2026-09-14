@@ -2,6 +2,16 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.44.0 — 2026-09-13 · The coach knows your gym, your limits, and when you've heard it (Roadmap v7, Phase C)
+The coaching gets honest about your profile. If you don't set a profile, every note is exactly as before (the real-data check confirms it's unchanged).
+- **It only suggests things you can actually do.** At a machine or home gym, the coach no longer says "try an Incline Barbell Press" or "add a Face Pull" — it suggests a lift your gym has, or says nothing. The workout builder won't quietly add an off-equipment exercise either.
+- **It respects what you're protecting.** Keeping your legs light for a knee? It stops telling you "legs are undertrained" and stops nudging you toward squats. Rehabbing one side? It won't push you to train it more.
+- **You can tell it "Got it."** Any coaching note now has a small **Got it** to hide it — useful when you already know and don't want the reminder. You can bring them all back from Settings. (The builder still quietly acts on what it knows; you've just muted the words.)
+- **A deadlift finally counts as pulling.** A balanced full-body program (squat, bench, row, press, deadlift) is no longer flagged "too much pressing" forever — the deadlift is counted as posterior-chain pull work.
+- **Volume advice matches reality.** The "volume is low" note now says the number it actually checks against (8+ sets/week, not a mismatched 10+), and a 2-day-a-week lifter is held to a realistic 6, not 10. And when the builder adds a set for low volume, it adds it to **one** muscle per session and the message names it — instead of quietly adding five and saying "+1 set".
+- **Deferred, on purpose:** the "don't flag everything low right after a two-week layoff" idea (review #14) was tried and pulled — dividing volume by active weeks *overstates* an intermittent lifter's real weekly volume, which is worse for the people this app is for. It needs proper layoff detection, so it's left for a later pass. The "notice when you ignore a suggestion" item (#12) is likewise deferred to its own careful change.
+- Not verified on-device: every lever has automated tests with hand-computed expected findings and Balanced/off-lever controls, the "Got it" mute was driven through the real Progress tab, and the real-data review snapshot is byte-for-byte unchanged.
+
 ## v0.43.0 — 2026-09-13 · Continuity: the plan survives real life (Roadmap v7, Phase B)
 Ten fixes so the builder and the numbers hold up over months of normal training — missed weeks, deloads, long histories, unit switches. Balanced coaching output on real data is unchanged (the snapshot test confirms it).
 - **A deload week or a missed week no longer wipes your plan.** Coming back, Ironlog continues the same session with your weights where you left off (up to about six weeks away — it says "welcome back, continued from…"), instead of shuffling in random exercises. A deload block bridges the gap rather than resetting it.

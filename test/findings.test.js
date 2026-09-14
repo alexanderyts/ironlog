@@ -153,3 +153,67 @@ test('B-continuity: deload-due counts from the last deload and fires once per bl
   const withDeload=history(...[3,10,17,24,31,38,45,52].map((d,i)=>session(d,[['barbell-bench-press',[set(185,6),set(185,6)]]],{now:NOW,deload:d===17})));
   assert.equal(dd(withDeload),undefined,'3 weeks after a deload, no "you never deload" nag');
 });
+
+// ── Roadmap v7 Phase C: coach honesty ────────────────────────────────────────────────────────────
+{
+const {weekly,history,session,set,NOW}=require('./load.js');
+const B=IL.builder,{EX}=IL.data;
+const Fc=(h,p,ty)=>A.findings(A.analyze(h,NOW),h,NOW,0,p).filter(f=>!ty||f.type===ty);
+const tipsC=(h,p,seen)=>A.buildTips(A.analyze(h,NOW),h,NOW,0,p,seen).map(t=>t.x.replace(/<[^>]+>/g,''));
+
+test('C1: coach gap examples fit the gym; a gap with no gym-legal cover is not raised (#5)',()=>{
+  const EXof=f=>f.exId?EX[f.exId]:IL.data.EXERCISES.find(e=>e.name===f.ex);
+  const home=weekly([['pull-up',[set(0,8),set(0,8)]],['dumbbell-row',[set(60,10),set(60,10)]]],5);
+  // every back-gap example raised at a HOME gym must be a dumbbell or bodyweight move — never a cable/barbell
+  Fc(home,{gym:'home'}).filter(f=>/gap$/.test(f.type)&&f.group==='Back').forEach(f=>{
+    const e=EXof(f);assert.ok(e&&(e.equip==='Dumbbell'||e.equip==='Bodyweight'),'home back-gap example '+(f.ex||f.exName)+' is off-gym');});
+  // control: at a full gym the same coverage suggests Face Pull (a cable)
+  assert.ok(Fc(home,undefined).some(f=>f.ex==='Face Pull'||f.exName==='Face Pull'),'full gym suggests the cable Face Pull');
+});
+
+test('C1: the builder never gap-ADDS an off-gym lift (#5)',()=>{
+  const mh=history(...[3,10,17,24,31,38].map(d=>session(d,[['leg-curl',[set(90,10),set(90,10)]],['leg-press',[set(300,10)]]],{now:NOW})));
+  const hints=A.buildHints(mh,NOW,0,{gym:'machine'});
+  const p=B.planWorkout(['Quads','Hamstrings'],mh,1,{now:NOW,hints,profile:{gym:'machine'}});
+  (p.reactions||[]).filter(r=>r.type==='gap-add').forEach(r=>assert.notEqual(EX[r.exId].equip,'Barbell','machine gym: no barbell gap-add'));
+});
+
+test('C2: protect silences legs-low and the push/pull nudge; a "Got it" mute hides a note (#6)',()=>{
+  // knee protected → legs-low must not fire even with legs undertrained
+  const upperHeavy=weekly([['barbell-bench-press',[set(185,8),set(185,8),set(185,8)]],['barbell-row',[set(155,8),set(155,8),set(155,8)]],['leg-extension',[set(100,12)]]],5);
+  assert.ok(Fc(upperHeavy,undefined,'legs-low').length>0,'control: legs-low fires without a profile');
+  assert.equal(Fc(upperHeavy,{protect:['Quads','Hamstrings','Glutes']},'legs-low').length,0,'protecting legs silences it');
+  assert.deepEqual(A.buildHints(upperHeavy,NOW,0,{protect:['Quads','Hamstrings','Glutes']}).suggestGroups.filter(g=>['Quads','Hamstrings','Glutes'].includes(g)),[],'nudge excludes protected legs');
+  // mute: a balance warning disappears once muted, and comes back when unmuted
+  const h=weekly([['barbell-bench-press',[set(135,8),set(135,8)]],['overhead-press',[set(75,8),set(75,8)]]],5);
+  assert.ok(tipsC(h,undefined).some(t=>/pressing is outrunning/.test(t)),'balance shown by default');
+  assert.ok(!tipsC(h,undefined,{'mute:balance':true}).some(t=>/pressing is outrunning/.test(t)),'muted balance is hidden');
+  // …but the builder still SEES it (mute is display-only)
+  assert.ok(A.findings(A.analyze(h,NOW),h,NOW,0).some(f=>f.type==='balance'),'findings still contain the muted concern');
+});
+
+test('C3: a deadlift counts as pulling — a textbook full-body program reads as balanced (#22)',()=>{
+  const fb=weekly([['back-squat',[set(225,5)]],['barbell-bench-press',[set(185,8),set(185,8)]],['barbell-row',[set(155,8),set(155,8)]],['overhead-press',[set(95,8),set(95,8)]],['deadlift',[set(315,5),set(315,5)]]],5);
+  assert.equal((Fc(fb,undefined,'balance')[0]||{}).dir,'even','deadlift pulls, so push and pull are even');
+  // control: press-only day is still flagged push-heavy
+  const press=weekly([['barbell-bench-press',[set(185,8),set(185,8)]],['overhead-press',[set(95,8),set(95,8)]],['tricep-pushdown',[set(50,12),set(50,12)]]],5);
+  assert.equal((Fc(press,undefined,'balance')[0]||{}).dir,'push');
+});
+
+test('C4: volume-low copy matches the 8-set trigger; a 2-day week uses a 6-set landmark (#23)',()=>{
+  const seven=weekly([['barbell-bench-press',[set(135,8),set(135,8),set(135,8),set(135,8)]],['cable-crossover',[set(30,12),set(30,12)]]],5);
+  const line=tipsC(seven,undefined).find(t=>/sets\/week/.test(t));
+  assert.match(line,/8\+/,'Balanced copy says 8+ (matching the trigger), not the old 10+');
+  assert.doesNotMatch(line,/10\+/);
+  // a 2-day lifter: the landmark drops to 6, so ~7/week chest is not "low"
+  assert.equal(Fc(seven,{days:2},'volume-low').length,0,'days:2 → 6-set landmark, 7/wk passes');
+  assert.ok(Fc(seven,undefined,'volume-low').length>0,'control: Balanced (8) still flags 7/wk');
+});
+
+test('C4: the builder bumps volume for ONE group per session, not all of them (#23)',()=>{
+  const h=history(...[3,10,17,24,31,38].map(d=>session(d,[['barbell-bench-press',[set(135,8)]],['overhead-press',[set(75,8)]],['tricep-pushdown',[set(40,10)]]],{now:NOW})));
+  const p=B.planWorkout(['Chest','Shoulders','Triceps'],h,1,{now:NOW,hints:A.buildHints(h,NOW,0)});
+  assert.ok(p.volumeBump.length<=1,'at most one exercise gets a set added ('+p.volumeBump.length+')');
+  assert.equal((p.reactions||[]).filter(r=>r.type==='volume').length,p.volumeBump.length,'the toast reaction matches what was added');
+});
+}

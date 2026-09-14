@@ -174,7 +174,7 @@ function buildAndStart(fresh){
     else if(p.rotation&&p.rotation.anchor)msg=`Swapped ${EX[p.rotation.from].name} → ${EX[p.rotation.to].name} — it stalled through a deload`;
     else if(p.rotation)msg=`Plan continued · swapped ${EX[p.rotation.from].name} → ${EX[p.rotation.to].name} (it stalled)`;
     else if(gapAdd)msg=`Plan continued · added ${EX[gapAdd.exId].name} — ${gapAdd.why}`;
-    else if(p.volumeBump&&p.volumeBump.length)msg='Plan continued · +1 set where your volume was low';
+    else if(p.volumeBump&&p.volumeBump.length){const vr=(p.reactions||[]).find(r=>r.type==='volume');msg='Plan continued · +1 set on '+((vr&&EX[vr.exId]&&EX[vr.exId].name)||(vr&&vr.group)||'a lift where volume was low');}
     else msg='Plan continued — weights progressed from last time';
   }
   startSession({ids:p.ids,msg,deload:p.deload,volumeBump:p.volumeBump,source:'build'});

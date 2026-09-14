@@ -112,12 +112,12 @@ function buildupMessage(a){
 }
 function tipsCard(tips){
   const dot={warn:'var(--warn)',good:'var(--good)',info:'var(--ink-3)'};
-  return `<div class="card" style="padding:4px 16px">${tips.map((t,i)=>`<div style="display:flex;gap:11px;padding:12px 0;${i?'border-top:1px solid var(--line)':''}"><span style="width:9px;height:9px;border-radius:50%;background:${dot[t.lv]};flex-shrink:0;margin-top:5px"></span><div style="font-size:13.5px;line-height:1.5">${t.x}</div></div>`).join('')}</div>`;
+  return `<div class="card" style="padding:4px 16px">${tips.map((t,i)=>`<div style="display:flex;gap:11px;padding:12px 0;${i?'border-top:1px solid var(--line)':''}"><span style="width:9px;height:9px;border-radius:50%;background:${dot[t.lv]};flex-shrink:0;margin-top:5px"></span><div style="font-size:13.5px;line-height:1.5">${t.x}${t.key?` <button class="linkbtn dim" data-mute="${esc(t.key)}" style="font-size:12px;padding:2px 4px" aria-label="Stop showing this note">Got it</button>`:''}</div></div>`).join('')}</div>`;
 }
 function coachCard(done){
   if(!done.length)return '';
   const a=A.analyze(state.sessions,Date.now());
-  const tips=A.buildTips(a,state.sessions,Date.now(),bw(),state.settings.profile);
+  const tips=A.buildTips(a,state.sessions,Date.now(),bw(),state.settings.profile,state.settings.seen);
   if(!a.readyForComparative){
     // early on: encouragement + whatever per-muscle tips (region/pattern gaps, progression) are
     // already individually meaningful — no full balance analysis yet, so no "Effectiveness" bars
@@ -126,7 +126,7 @@ function coachCard(done){
       ${tips.length?tipsCard(tips):''}`;
   }
   return `<div class="eyebrow" style="margin:24px 2px 10px">Effectiveness · last 4 weeks</div>
-    <div class="card" style="padding:16px 16px 6px">${balBar('Push',a.push,'Pull',a.pull)}${balBar('Upper body',a.upperSets,'Lower body',a.lowerSets)}</div>
+    <div class="card" style="padding:16px 16px 6px">${balBar('Push',Math.round(a.push),'Pull',Math.round(a.pull))}${balBar('Upper body',a.upperSets,'Lower body',a.lowerSets)}</div>
     <div class="eyebrow" style="margin:18px 2px 10px">Coach's notes</div>
     ${tips.length?tipsCard(tips):`<div class="card" style="padding:20px;text-align:center"><div class="dim">Nothing to flag — your training looks well-rounded right now.</div></div>`}`;
 }
@@ -408,6 +408,8 @@ function openSettings(){
       <div class="stepper"><button data-rest="compound" data-d="-15">−</button><span class="val mono" id="rvC">${fmtSec(R.compound)}</span><button data-rest="compound" data-d="15">＋</button></div></div>
     <div class="settingrow"><div><div style="font-weight:600">Rest after isolation</div><div class="dim" style="font-size:13px">Curls, raises, extensions…</div></div>
       <div class="stepper"><button data-rest="isolation" data-d="-15">−</button><span class="val mono" id="rvI">${fmtSec(R.isolation)}</span><button data-rest="isolation" data-d="15">＋</button></div></div>
+    ${Object.keys(state.settings.seen||{}).some(k=>k.indexOf('mute:')===0)?`<div style="height:18px"></div>
+    <button class="btn ghost block" id="btnUnmute">Show hidden coaching notes again</button>`:''}
     ${CFG.DEMO?'':`<div style="height:18px"></div>
     <div class="eyebrow" style="margin-bottom:10px">Your data</div>
     <button class="btn ghost block" id="btnExport" style="margin-bottom:10px">⬇ Export a backup file</button>
@@ -425,6 +427,7 @@ function openSettings(){
   $('#bwVal').addEventListener('click',()=>openNumberSheet('Your bodyweight ('+U()+')',bw()||'',v=>{state.settings.bodyweight=Math.max(0,v);S.saveSettingsCloud();openSettings();}));
   const on=(sel,fn)=>{const el=$(sel);if(el)el.addEventListener('click',fn);};
   on('#btnProfile',openProfile);
+  on('#btnUnmute',()=>{const seen=state.settings.seen||{};Object.keys(seen).forEach(k=>{if(k.indexOf('mute:')===0)delete seen[k];});S.saveSettingsCloud();openSettings();render();toast('Coaching notes are back on');});
   on('#btnExport',exportData);
   const fi=$('#fileImport');if(fi)fi.addEventListener('change',importData);
   on('#btnResetDemo',()=>showConfirm('Reset the demo?','Reloads the original sample data and discards your changes.','Reset',()=>S.resetDemo()));
