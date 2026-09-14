@@ -9,7 +9,7 @@ function viewToday(){
 }
 function homeView(){
   const done=completedSessions(),now=Date.now();
-  const wk=done.filter(s=>s.date>=now-7*DAY);
+  const wk=done.filter(s=>s.date>=P.weekStart(now));   // calendar week (Mon–Sun), not a rolling 7 days
   const wkVol=wk.reduce((a,s)=>a+volOf(s),0);
   const streak=P.calcStreak(done,now);
   const hr=new Date().getHours();const greet=hr<12?'Good morning':hr<18?'Good afternoon':'Good evening';
@@ -251,7 +251,7 @@ function logExercise(s,e,ei,mode){
       if(bs&&best>histBest)prLine=`<div class="sugg" style="color:var(--good);background:var(--good-soft)"><span>★ New PR — ${bs.w}${U()}${MODES[emode]&&MODES[emode].perHand?'/ea':''} × ${bs.r} <span class="dim">est ${Math.round(best)}${U()}</span></span></div>`;}
   }
   if(mode==='active'&&s.deload){
-    sugg=`<div class="sugg match" style="color:var(--good);background:var(--good-soft)"><span>🌿 Recovery — lighter on purpose, own the stretch</span></div>`;
+    sugg=`<div class="sugg match" style="color:var(--good);background:var(--good-soft)"><span>🌿 Recovery set — easy load, full range</span></div>`;
   }else if(mode==='active'){
     const pf=state.settings.profile||{},sgRr=pf.goal?P.repRange(EX[e.id],pf.goal):undefined;
     const sg=P.suggestion(state.sessions,e.id,{unit:U(),activeDate:s.date,activeId:s.id,mode:emode,push:pf.push,rr:sgRr});

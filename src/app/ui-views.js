@@ -64,7 +64,7 @@ function libRow(e,attr){
 /* ---------------- PROGRESS ---------------- */
 function viewProgress(){
   const done=completedSessions(),now=Date.now();
-  const wk=done.filter(s=>s.date>=now-7*DAY),mo=done.filter(s=>s.date>=now-30*DAY);
+  const wk=done.filter(s=>s.date>=P.weekStart(now)),mo=done.filter(s=>s.date>=now-30*DAY);   // this week = calendar Mon–Sun
   const wkVol=wk.reduce((a,s)=>a+volOf(s),0);
   return `<div class="section">
     <div class="view-title" style="margin:0 2px 14px;font-size:22px">Progress</div>
@@ -86,8 +86,17 @@ function viewProgress(){
 }
 function volumeChart(){
   const cols=A.weeklyVolumes(state.sessions,Date.now(),bw(),8);
-  const max=Math.max(1,...cols.map(c=>c.v));
-  return `<div class="chart">${cols.map((c,i)=>`<div class="bar-col"><div class="bar ${c.v===0?'z':''}" style="height:${c.v===0?3:Math.max(6,c.v/max*112)}px"></div><div class="bar-lb">${i===cols.length-1?'Now':new Date(c.start).toLocaleDateString(undefined,{month:'numeric',day:'numeric'})}</div></div>`).join('')}</div>`;
+  const max=Math.max(1,...cols.map(c=>c.v)),u=U();
+  // The tallest bar is always labelled (gives the scale a number); any other non-empty bar reveals
+  // its value on tap. Empty weeks aren't tappable. Screen readers get the value from aria-label.
+  return `<div class="chart">${cols.map((c,i)=>{
+    const now=i===cols.length-1,lb=now?'Now':new Date(c.start).toLocaleDateString(undefined,{month:'numeric',day:'numeric'}),
+      val=fmtVol(c.v),peak=c.v>0&&c.v===max;
+    return `<div class="bar-col${peak?' peak':''}"${c.v>0?` role="button" tabindex="0" data-barval aria-label="Week of ${now?'this week':lb}: ${val} ${u} volume"`:''}>`
+      +`<div class="bar-val">${val}</div>`
+      +`<div class="bar ${c.v===0?'z':''}" style="height:${c.v===0?3:Math.max(6,c.v/max*112)}px"></div>`
+      +`<div class="bar-lb">${lb}</div></div>`;
+  }).join('')}</div>`;
 }
 function prList(){
   const arr=A.personalRecords(state.sessions,bw(),8);
@@ -118,21 +127,34 @@ function tipsCard(tips){
   const dot={warn:'var(--warn)',good:'var(--good)',info:'var(--ink-3)'};
   return `<div class="card" style="padding:4px 16px">${tips.map((t,i)=>`<div style="display:flex;gap:11px;padding:12px 0;${i?'border-top:1px solid var(--line)':''}"><span style="width:9px;height:9px;border-radius:50%;background:${dot[t.lv]};flex-shrink:0;margin-top:5px"></span><div style="font-size:13.5px;line-height:1.5">${t.x}${t.key?` <button class="linkbtn dim" data-mute="${esc(t.key)}" style="font-size:12px;padding:2px 4px" aria-label="Stop showing this note">Got it</button>`:''}</div></div>`).join('')}</div>`;
 }
+// Collapsible section (Coach's notes / Recovery / Time). Default open; the user's open/closed choice
+// per panel rides the synced `seen` map as 'collapse:<key>' (absent = open), so it persists and syncs
+// with no new sanitizer surface. `summary` shows a one-line gist while collapsed.
+function panelOpen(k){return !seenFlag('collapse:'+k);}
+function collapsible(key,title,summary,body,margin){
+  const open=panelOpen(key);
+  const chev=`<svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>`;
+  return `<div class="eyebrow collapse-head${open?' open':''}" role="button" tabindex="0" aria-expanded="${open}" data-collapse="${esc(key)}" style="margin:${margin||'24px 2px 10px'}">
+    <span>${title}</span>
+    <span class="collapse-r">${open||!summary?'':`<span class="collapse-sum">${summary}</span>`}${chev}</span></div>
+    ${open?body:''}`;
+}
 function coachCard(done){
   if(!done.length)return '';
   const a=A.analyze(state.sessions,Date.now());
   const tips=A.buildTips(a,state.sessions,Date.now(),bw(),state.settings.profile,state.settings.seen);
+  const sum=tips.length?`${tips.length} note${tips.length!==1?'s':''}`:'all clear';
   if(!a.readyForComparative){
     // early on: encouragement + whatever per-muscle tips (region/pattern gaps, progression) are
     // already individually meaningful — no full balance analysis yet, so no "Effectiveness" bars
-    return `<div class="eyebrow" style="margin:24px 2px 10px">Coach's notes</div>
-      <div class="card" style="padding:16px;margin-bottom:${tips.length?'12':'0'}px"><div class="dim" style="font-size:13.5px;line-height:1.5">${buildupMessage(a)}</div></div>
+    const body=`<div class="card" style="padding:16px;margin-bottom:${tips.length?'12':'0'}px"><div class="dim" style="font-size:13.5px;line-height:1.5">${buildupMessage(a)}</div></div>
       ${tips.length?tipsCard(tips):''}`;
+    return collapsible('coach',"Coach's notes",tips.length?sum:'warming up',body);
   }
+  const body=tips.length?tipsCard(tips):`<div class="card" style="padding:20px;text-align:center"><div class="dim">Nothing to flag — your training looks well-rounded right now.</div></div>`;
   return `<div class="eyebrow" style="margin:24px 2px 10px">Effectiveness · last 4 weeks</div>
     <div class="card" style="padding:16px 16px 6px">${balBar('Push',Math.round(a.push),'Pull',Math.round(a.pull))}${balBar('Upper body',a.upperSets,'Lower body',a.lowerSets)}</div>
-    <div class="eyebrow" style="margin:18px 2px 10px">Coach's notes</div>
-    ${tips.length?tipsCard(tips):`<div class="card" style="padding:20px;text-align:center"><div class="dim">Nothing to flag — your training looks well-rounded right now.</div></div>`}`;
+    ${collapsible('coach',"Coach's notes",sum,body,'18px 2px 10px')}`;
 }
 // Read-only view of HOW the user deloads. Deliberately makes no judgment and never touches
 // progression — a deload is theirs, at any load, for any reason. See analysis.deloadStats.
@@ -144,9 +166,10 @@ function recoveryCard(){
   if(d.avgGapDays!=null)rows.push(`You've been taking one about every <b>${d.avgGapDays} day${d.avgGapDays===1?'':'s'}</b>.`);
   if(d.loadPct!=null)rows.push(`On the ${d.sharedLifts} lift${d.sharedLifts!==1?'s':''} you also train hard, your deload loads run about <b>${d.loadPct}%</b> of your working loads.`);
   if(d.onlyOnDeload.length)rows.push(`${d.onlyOnDeload.length} exercise${d.onlyOnDeload.length!==1?'s have':' has'} only ever appeared on a deload (${esc(d.onlyOnDeload.slice(0,3).join(', '))}${d.onlyOnDeload.length>3?', …':''}) — the builder has no full-effort numbers for ${d.onlyOnDeload.length!==1?'them':'it'} yet.`);
-  return `<div class="eyebrow" style="margin:24px 2px 10px">Recovery · how you deload</div>
-    <div class="card" style="padding:14px 16px"><div style="font-size:13.5px;line-height:1.55">${rows.map(r=>`<div style="padding:4px 0">${r}</div>`).join('')}</div>
+  const sum=d.lastDaysAgo==null?`${d.deloads} logged`:d.lastDaysAgo===0?'last one today':`last one ${d.lastDaysAgo}d ago`;
+  const body=`<div class="card" style="padding:14px 16px"><div style="font-size:13.5px;line-height:1.55">${rows.map(r=>`<div style="padding:4px 0">${r}</div>`).join('')}</div>
     <div class="dim" style="font-size:12px;margin-top:8px">Deloads never affect your progression, PRs or the builder — this is just so you can see your own pattern.</div></div>`;
+  return collapsible('recovery','Recovery · how you deload',sum,body);
 }
 // Time card (T3): how long you train, how dense, how long you rest, and where the time goes — all
 // from the per-set stamps. Shows nothing until at least one timed workout exists.
@@ -155,8 +178,7 @@ function timeCard(){
   if(!t.n)return '';
   const rest=[];if(t.restCompound!=null)rest.push('compounds ~'+fmtSec(t.restCompound));if(t.restIsolation!=null)rest.push('isolation ~'+fmtSec(t.restIsolation));
   const maxG=Math.max(1,...t.byGroup.map(g=>g[1]));
-  return `<div class="eyebrow" style="margin:24px 2px 10px">Time · last 4 weeks</div>
-    <div class="card" style="padding:15px 16px">
+  const body=`<div class="card" style="padding:15px 16px">
       <div class="row-between" style="font-size:13.5px;margin-bottom:${rest.length||t.byGroup.length?'12':'0'}px">
         <span class="muted">Avg workout <b class="mono">${fmtDur(t.avgDuration)}</b></span>
         <span class="muted">${t.density!=null?`<b class="mono">${t.density}</b> sets / 10 min`:''}</span></div>
@@ -164,6 +186,7 @@ function timeCard(){
       ${t.byGroup.length?`<div class="eyebrow" style="margin:2px 0 9px">Where your time goes</div>
         ${t.byGroup.map(([g,m])=>`<div style="margin-bottom:9px"><div class="row-between" style="margin-bottom:4px"><span style="font-weight:600;font-size:13px">${g}</span><span class="mono dim" style="font-size:12px">${fmtDur(m)}</span></div><div style="height:6px;background:var(--surface-2);border-radius:3px;overflow:hidden"><div style="height:100%;width:${Math.round(m/maxG*100)}%;background:var(--accent);border-radius:3px"></div></div></div>`).join('')}`:''}
     </div>`;
+  return collapsible('time','Time · last 4 weeks',`avg ${fmtDur(t.avgDuration)}`,body);
 }
 function muscleBreakdown(mo){
   const arr=A.muscleSetCounts(mo);if(!arr.length)return'';
@@ -342,6 +365,10 @@ function watchViewport(){
 /* ---------------- training profile (P1: optional, engine starts using it in P2) ---------------- */
 function seenFlag(k){return !!(state.settings.seen&&state.settings.seen[k]);}
 function markSeen(k){state.settings.seen=Object.assign({},state.settings.seen,{[k]:true});S.saveSettingsCloud();}
+// Two-way toggle for a collapsible panel: 'collapse:<key>' present = collapsed, absent = open (default).
+// Rides the synced `seen` map, so the choice persists and syncs across devices.
+function toggleCollapse(key){const k='collapse:'+key,seen=state.settings.seen=state.settings.seen||{};
+  if(seen[k])delete seen[k];else seen[k]=true;S.saveSettingsCloud();render();}
 // A short label for the "Profile: …" lines; "Balanced" when nothing is set.
 function profileSummary(){const p=state.settings.profile||{};const parts=[];
   const g={size:'Size',strength:'Strength',general:'General'},gy={full:'Full gym',machine:'Machine gym',home:'Home'};

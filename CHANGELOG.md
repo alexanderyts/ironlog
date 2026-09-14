@@ -2,6 +2,14 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.46.0 — 2026-09-14 · Weeks that turn over, readable bars, tidier notes
+Polish from your observations on the Progress and Home screens.
+- **"This week" now means this calendar week (Monday–Sunday).** Before, the "This week" and "Week volume" figures (on Home and Progress) counted a rolling last-7-days, so they never reset on Monday — Monday morning still showed Thursday and Friday's workouts. They now start fresh each Monday. (Nothing else changed: "30-day workouts" is still a rolling month, and streaks are unaffected.)
+- **You can read the volume bars.** The tallest bar in the 8-week chart is always labelled with its number so the chart has a scale; tap any other bar to see its value. (Screen readers get every bar's value without tapping.)
+- **Coach's notes, Recovery and Time fold away.** Each of those three sections now has a tap-to-collapse header with a one-line gist (e.g. "last one 6d ago"). Collapse the ones you don't want taking up space; the app remembers your choice per section and syncs it across your devices. They start open.
+- **The deload notes stopped repeating themselves.** The coaching note about a deload now has a wider set of shorter wordings that rotate week to week, and it no longer echoes the "own the stretch" reminder that already shows inside the workout — so the same idea isn't said three times on one screen.
+- Not verified on-device (tested in a desktop browser at phone width and with the automated suite — 192 tests green).
+
 ## v0.45.3 — 2026-09-14 · Checkpoint: fix the bugs the review found before polishing
 A three-lane adversarial review of everything changed since the last checkpoint, to catch anything I'd introduced. It found a real one:
 - **Cross-device data loss, fixed.** The safeguard that stops an older copy of the app from overwriting a backup written by a newer one only worked for one sync — the very next set you logged could slip past it and clobber the newer backup. It now stays blocked until this phone is updated, then resumes on its own.

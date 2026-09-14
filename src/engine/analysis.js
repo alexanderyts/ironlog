@@ -203,12 +203,16 @@ function renderFinding(f,week){
         `${pre} — <b>${f.lower}</b> lower-body sets to <b>${f.upper}</b> upper. A squat or hinge day would even you out.`,
         `${pre}: <b>${f.lower}</b> vs <b>${f.upper}</b> upper sets. Time to give them their own day.`])};
     }
-    case 'deload-taken':return {lv:'good',x:pickVariant(f,week,[
-      `You took a <b>deload</b> ${f.days<=7?'this week':'recently'} — smart. Recovery is where the last block turns into growth; ease back to full loads when you feel fresh.`,
-      `Nice — a <b>deload</b> ${f.days<=7?'this week':'lately'}. Let the fatigue clear, then pick the loads back up.`])};
+    case 'deload-taken':{const w=f.days<=7;return {lv:'good',x:pickVariant(f,week,[
+      `<b>Deload</b> ${w?'this week':'recently'} — good call. That's where the last block turns into strength.`,
+      `You eased off with a <b>deload</b> ${w?'this week':'lately'}. Come back fresh and the loads climb.`,
+      `A <b>deload</b> ${w?'this week':'recently'} — recovery's doing its job. Back to full loads when you're ready.`,
+      `Smart <b>deload</b> ${w?'this week':'lately'}. Let the fatigue drain, then pick it back up.`])};}
     case 'deload-due':return {lv:'info',x:pickVariant(f,week,[
-      `<b>${f.weeks} weeks</b> straight — a lighter <b>deload</b> (about 60% loads, full range, own the stretch) clears fatigue so the next block hits harder.`,
-      `You've pushed <b>${f.weeks} weeks</b> without a <b>deload</b> — a recovery week now sets up your next jump in strength.`])};
+      `<b>${f.weeks} weeks</b> straight — an easy <b>deload</b> week now clears fatigue for the next push.`,
+      `You've trained hard <b>${f.weeks} weeks</b> running. A recovery week sets up your next jump.`,
+      `<b>${f.weeks} weeks</b> without a break — a lighter <b>deload</b> keeps progress from stalling.`,
+      `Worth a <b>deload</b> soon: <b>${f.weeks} weeks</b> in is when fatigue starts outrunning recovery.`])};
     case 'region-gap':{
       const rl=regLabel(f.group,f.reg);
       if(st==='resolved')return {lv:'good',x:`<b>${cap(rl)}</b> — sorted. Your ${g} is covered now.`};

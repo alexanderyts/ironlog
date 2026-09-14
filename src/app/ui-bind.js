@@ -190,8 +190,14 @@ function bind(){
   if(!v.__delegated){v.__delegated=true;v.addEventListener('click',e=>{
     const a=e.target.closest('[data-action]');if(a&&ACTIONS[a.dataset.action]){ACTIONS[a.dataset.action](a,e);return;}
     const mu=e.target.closest('[data-mute]');if(mu){const seen=state.settings.seen=state.settings.seen||{};seen['mute:'+mu.dataset.mute]=true;S.saveSettingsCloud();render();toast('Got it — hidden from Coach’s notes',{label:'Undo',fn:()=>{delete seen['mute:'+mu.dataset.mute];S.saveSettingsCloud();render();}});return;}
+    const cl=e.target.closest('[data-collapse]');if(cl){toggleCollapse(cl.dataset.collapse);return;}
+    const bv=e.target.closest('[data-barval]');if(bv){bv.classList.toggle('on');return;}   // reveal/hide a volume bar's value
     const sc=e.target.closest('[data-sess]');if(sc){openSessionDetail(sc.dataset.sess);return;}   // works from Home's last-session card AND History
-  });}
+  });
+  // Enter/Space activate the role="button" divs (collapse headers, tappable bars) for keyboard users
+  v.addEventListener('keydown',e=>{if(e.key!=='Enter'&&e.key!==' ')return;
+    const cl=e.target.closest&&e.target.closest('[data-collapse]');if(cl){e.preventDefault();toggleCollapse(cl.dataset.collapse);return;}
+    const bv=e.target.closest&&e.target.closest('[data-barval]');if(bv){e.preventDefault();bv.classList.toggle('on');}});}
   const gp=$('#groupPick');if(gp)gp.addEventListener('click',e=>{const b=e.target.closest('[data-g]');if(!b)return;const g=b.dataset.g;draft.groups.has(g)?draft.groups.delete(g):draft.groups.add(g);b.classList.toggle('on');
     refreshBuildBtns();});
   v.querySelectorAll('[data-repeat]').forEach(b=>b.addEventListener('click',()=>{const s=state.sessions.find(x=>x.id===b.dataset.repeat);if(s)startSession({ids:s.exercises.map(e=>e.id),msg:draft.deload?'Deload — same exercises, lighter loads':'Loaded — weights prefilled from history',deload:draft.deload,source:'repeat'});}));
