@@ -2,6 +2,15 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.47.0 — 2026-09-14 · Log your cardio
+You can now log a cardio session — a walk, the treadmill, the elliptical, whatever — right alongside your lifting.
+- **Two ways to log it.** On Home, tap **Log cardio**. Either **Start now & time it** (a live clock runs; tap Finish when you're done) or, under "log one you already did", enter the **minutes** by hand — so a walk you forgot to start is easy to add after the fact.
+- **Pick what it was.** Type (Treadmill · Elliptical · StairMaster · Outdoor · Indoor), intensity (Easy · Moderate · Hard), and an optional distance (mi/km, following your weight-unit setting). You can edit or delete any cardio session later.
+- **It shows up where it should.** Cardio appears in **History** (its own card and a calendar dot), counts toward your **"This week"** total and your **streak**, and gets its own **Cardio summary** on the Progress tab (this-week minutes and a by-type breakdown).
+- **It never touches your lifting numbers.** Cardio is deliberately kept out of your volume, PRs, the coach's analysis, and the workout builder — the same way a deload never affects your progression. Your strength stats are exactly what they were.
+- **Safeguards carry over.** A cardio session left running for hours offers an honest end time instead of recording a 40-hour "walk", and a full-storage warning protects it just like a workout.
+- Not verified on-device (tested in a desktop browser at phone width and with the automated suite — 204 tests green, run 3× for stability; the lifting review snapshot is unchanged, proving cardio stays invisible to the strength math).
+
 ## v0.46.0 — 2026-09-14 · Weeks that turn over, readable bars, tidier notes
 Polish from your observations on the Progress and Home screens.
 - **"This week" now means this calendar week (Monday–Sunday).** Before, the "This week" and "Week volume" figures (on Home and Progress) counted a rolling last-7-days, so they never reset on Monday — Monday morning still showed Thursday and Friday's workouts. They now start fresh each Monday. (Nothing else changed: "30-day workouts" is still a rolling month, and streaks are unaffected.)

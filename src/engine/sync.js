@@ -5,6 +5,15 @@ const MODES=(IL.data&&IL.data.MODES)||{},EX=(IL.data&&IL.data.EX)||{},GROUPS=(IL
 // Training profile (v6 P2 reads it; P1 only stores it). Each field is optional; a valid non-'auto'
 // value is kept, anything else is dropped (so absent = auto = Balanced = today's behaviour).
 const PROFILE_ENUM={goal:['size','strength','general'],gym:['full','machine','home'],length:['short','standard','long'],sets:['straight','ramp'],push:['guide','quiet']};
+// Cardio is its own session KIND (kind:'cardio', exercises:[]). These enums bound the two picked fields;
+// distance is optional and carries the unit it was logged in (so a later lb↔kg switch can't reinterpret it).
+const CARDIO_ENUM={type:['treadmill','elliptical','stairmaster','outdoor','indoor'],intensity:['easy','moderate','hard']};
+function cleanCardio(c){c=c&&typeof c==='object'?c:{};const o={};
+  o.type=CARDIO_ENUM.type.indexOf(c.type)>=0?c.type:'treadmill';
+  o.intensity=CARDIO_ENUM.intensity.indexOf(c.intensity)>=0?c.intensity:'moderate';
+  const d=+c.distance;if(Number.isFinite(d)&&d>0)o.distance=Math.min(1000,d);
+  if(o.distance!=null)o.unit=c.unit==='km'?'km':'mi';
+  return o;}
 function cleanProfile(p){if(!p||typeof p!=='object')return undefined;const o={};
   Object.keys(PROFILE_ENUM).forEach(k=>{if(PROFILE_ENUM[k].indexOf(p[k])>=0)o[k]=p[k];});
   if([2,3,4,5,6].indexOf(+p.days)>=0)o.days=+p.days;
@@ -72,7 +81,9 @@ const rid=p=>p+Math.random().toString(36).slice(2,9);
 
 function cleanSet(st){st=st&&typeof st==='object'?st:{};const o={w:sNumBlank(st.w),r:sNumBlank(st.r),done:st.done!==false};if(st.warm)o.warm=true;const at=+st.at;if(Number.isFinite(at)&&at>0)o.at=at;return o;}   // missing done => done; `at` (check timestamp) kept if a real number
 function cleanExercise(e){e=e&&typeof e==='object'?e:{};const o={id:sId(e.id),name:sStr(e.name),sets:sArr(e.sets,MAX_SETS).map(cleanSet)};if(e.mode&&MODES[e.mode])o.mode=sId(e.mode);if(typeof e.note==='string'&&e.note.trim())o.note=sStr(e.note,500);return o;}   // drop an unknown mode (a bad import would white-screen Progress via MODES[mode].label)
-function cleanSession(s){s=s&&typeof s==='object'?s:{};const o={id:sId(s.id)||rid('imp'),schema:sNum(s.schema)||1,date:sNum(s.date)||Date.now(),updatedAt:sNum(s.updatedAt)||sNum(s.date)||Date.now(),completed:s.completed!==false,exercises:sArr(s.exercises,MAX_EX).map(cleanExercise)};if(s.deload)o.deload=true;const end=+s.endedAt;if(Number.isFinite(end)&&end>0){o.endedAt=end;if(s.endEstimated===true)o.endEstimated=true;}return o;}
+function cleanSession(s){s=s&&typeof s==='object'?s:{};const o={id:sId(s.id)||rid('imp'),schema:sNum(s.schema)||1,date:sNum(s.date)||Date.now(),updatedAt:sNum(s.updatedAt)||sNum(s.date)||Date.now(),completed:s.completed!==false,exercises:sArr(s.exercises,MAX_EX).map(cleanExercise)};if(s.deload)o.deload=true;const end=+s.endedAt;if(Number.isFinite(end)&&end>0){o.endedAt=end;if(s.endEstimated===true)o.endEstimated=true;}
+  if(s.kind==='cardio'){o.kind='cardio';o.exercises=[];o.cardio=cleanCardio(s.cardio);}   // cardio never carries exercises → every strength filter drops it
+  return o;}
 function cleanRoutine(r){r=r&&typeof r==='object'?r:{};return {id:sId(r.id)||rid('r'),name:sStr(r.name),exIds:sArr(r.exIds,MAX_EX).map(sId).filter(Boolean),updatedAt:sNum(r.updatedAt)||Date.now()};}
 function cleanSettings(o){if(!o||typeof o!=='object')return null;
   const s={settingsUpdatedAt:sNum(o.settingsUpdatedAt)};
@@ -114,5 +125,5 @@ function resolveActive(local,remote){
   return {active:local.active,activeClearedAt:lc,changed:false,pushNeeded:remoteEvt<localEvt};
 }
 
-IL.sync={mergeSessions,applyTombstones,pruneTombstones,exportPayload,parseImport,resolveActive,cleanSession,cleanRoutine,cleanSettings,cleanProfile,PROFILE_ENUM,TOMB_KEEP};
+IL.sync={mergeSessions,applyTombstones,pruneTombstones,exportPayload,parseImport,resolveActive,cleanSession,cleanRoutine,cleanSettings,cleanProfile,cleanCardio,PROFILE_ENUM,CARDIO_ENUM,TOMB_KEEP};
 if(typeof module!=='undefined')module.exports=IL.sync;

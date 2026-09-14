@@ -7,7 +7,7 @@ const {DAY,startOfDay,e1rm,isWorking,setLoad,sessionVolume,sessionSets,sessionDu
 
 // completed() INCLUDES deloads on purpose — volume/frequency/PR-window analysis wants everything the
 // user actually did. Progression-only scans use real() (completed AND not a deload) instead.
-const completed=sessions=>sessions.filter(s=>s.completed!==false&&s.exercises.length);
+const completed=sessions=>sessions.filter(s=>s.completed!==false&&s.exercises.length&&s.kind!=='cardio');
 
 // A comparative judgment ("you press more than you pull", "legs are undertrained") needs a real
 // sample to mean anything — one heavy session can trip a raw set-count threshold. Require both a
@@ -400,5 +400,18 @@ function muscleSetCounts(sessions){
   return Object.entries(cnt).sort((a,b)=>b[1]-a[1]);
 }
 
-IL.analysis={analyze,progressionStat,gapPrio,patPrio,findings,findingKey,withStatus,renderFinding,buildTips,buildHints,personalRecords,weeklyVolumes,muscleSetCounts,deloadStats,timeByGroup,restTaken,sessionDensity,exerciseRest,timeTrends,MIN_COMPARATIVE_SESSIONS,MIN_COMPARATIVE_DAYS};
+// Cardio summary (Progress). Reads ONLY cardio sessions — a self-contained picture that never touches
+// the lifting analysis. This-week count/minutes, a 4-week total, and a minutes-by-type breakdown.
+function cardioStats(sessions,now){
+  now=now||Date.now();const ws=weekStart(now),cut=now-28*DAY;
+  const all=(sessions||[]).filter(s=>s.completed!==false&&s.kind==='cardio'&&s.date<now);
+  if(!all.length)return {sessions:0};
+  const wk=all.filter(s=>s.date>=ws),win=all.filter(s=>s.date>=cut);
+  const mins=arr=>arr.reduce((a,s)=>a+(sessionDuration(s)||0),0);
+  const byType={};win.forEach(s=>{const t=(s.cardio&&s.cardio.type)||'indoor';byType[t]=(byType[t]||0)+(sessionDuration(s)||0);});
+  const last=all.slice().sort((a,b)=>b.date-a.date)[0];
+  return {sessions:all.length,weekCount:wk.length,weekMin:mins(wk),winCount:win.length,winMin:mins(win),
+    byType:Object.entries(byType).sort((a,b)=>b[1]-a[1]),lastType:last.cardio&&last.cardio.type,lastDate:last.date};
+}
+IL.analysis={analyze,progressionStat,gapPrio,patPrio,findings,findingKey,withStatus,renderFinding,buildTips,buildHints,personalRecords,weeklyVolumes,muscleSetCounts,deloadStats,timeByGroup,restTaken,sessionDensity,exerciseRest,timeTrends,cardioStats,MIN_COMPARATIVE_SESSIONS,MIN_COMPARATIVE_DAYS};
 if(typeof module!=='undefined')module.exports=IL.analysis;

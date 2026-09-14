@@ -3,17 +3,19 @@
 /* ---------------- TODAY ---------------- */
 function viewToday(){
   if(todayScreen==='edit'&&editSession)return editorView(editSession,'edit');
+  if(todayScreen==='active'&&state.active&&state.active.kind==='cardio')return cardioLiveView(state.active);
   if(todayScreen==='active'&&state.active)return editorView(state.active,'active');
   if(todayScreen==='start')return startWorkoutView();
   return homeView();
 }
 function homeView(){
   const done=completedSessions(),now=Date.now();
-  const wk=done.filter(s=>s.date>=P.weekStart(now));   // calendar week (Mon–Sun), not a rolling 7 days
+  const wk=done.filter(s=>s.date>=P.weekStart(now));   // strength this week (for volume)
   const wkVol=wk.reduce((a,s)=>a+volOf(s),0);
-  const streak=P.calcStreak(done,now);
+  const wkAny=completedAny().filter(s=>s.date>=P.weekStart(now)).length;   // count includes cardio
+  const streak=P.calcStreak(completedAny(),now);
   const hr=new Date().getHours();const greet=hr<12?'Good morning':hr<18?'Good afternoon':'Good evening';
-  const last=done[0];
+  const last=completedAny()[0];   // most recent session of any kind (lift or cardio)
   return `
   <div class="section">
     <div style="padding:6px 2px 0">
@@ -23,11 +25,12 @@ function homeView(){
     ${profileIntroCard()}
     ${state.active?resumeCard():''}
     <div class="statgrid" style="grid-template-columns:1fr 1fr 1fr;margin:16px 0 18px;gap:9px">
-      <div class="card stat" style="padding:14px 12px"><div class="k">This wk</div><div class="v mono">${wk.length}</div></div>
+      <div class="card stat" style="padding:14px 12px"><div class="k">This wk</div><div class="v mono">${wkAny}</div></div>
       <div class="card stat" style="padding:14px 12px"><div class="k">Streak</div><div class="v mono">${streak}<small>wk</small></div></div>
       <div class="card stat" style="padding:14px 12px"><div class="k">${volLabel()}</div><div class="v mono">${fmtVol(wkVol)}</div></div>
     </div>
     ${state.active?'':startBlock()}
+    ${state.active?'':cardioBlock()}
     ${last?`<div class="eyebrow" style="margin:26px 2px 10px">Last session</div>${sessCard(last)}`:emptyHome()}
     <div class="eyebrow" style="margin:24px 2px 10px">Jump in</div>
     <button class="btn ghost block" id="btnGoLibrary" data-action="goLibrary" style="justify-content:space-between">
@@ -42,6 +45,89 @@ function startBlock(){
   const START=`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>`;
   return `<button class="btn primary block" id="btnStartFlow" data-action="startFlow" style="height:56px;font-size:16px">${START} Start a workout</button>`;
 }
+/* ---------------- CARDIO ----------------
+   A cardio session is its own kind (kind:'cardio', exercises:[]) — invisible to the lifting math.
+   Two ways in: Start a live timer (finish stamps the end), or log one you already did by hand. */
+const CARDIO_TYPES=[['treadmill','Treadmill'],['elliptical','Elliptical'],['stairmaster','StairMaster'],['outdoor','Outdoor'],['indoor','Indoor']];
+const CARDIO_INTS=[['easy','Easy'],['moderate','Moderate'],['hard','Hard']];
+const cardioTypeLabel=t=>{const f=CARDIO_TYPES.find(x=>x[0]===t);return f?f[1]:t;};
+const cardioIntLabel=i=>{const f=CARDIO_INTS.find(x=>x[0]===i);return f?f[1]:i;};
+const CARDIO_ICON=`<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 4.5a1.4 1.4 0 1 0 0-.01M6 21l3-5 3 2 1-4M9 16l-2-3 4-3 2 3h3"/></svg>`;
+// The last cardio type this person logged — a small nicety so the picker defaults to their usual.
+function lastCardioType(){const c=state.sessions.filter(s=>s.completed!==false&&s.kind==='cardio'&&s.cardio).sort((a,b)=>b.date-a.date)[0];return c?c.cardio.type:'treadmill';}
+function cardioBlock(){
+  return `<button class="btn ghost block" id="btnCardio" data-action="cardioOpen" style="margin-top:10px;height:50px;justify-content:center;gap:9px">${CARDIO_ICON} Log cardio</button>`;
+}
+// Live cardio: a running clock + the type/intensity/distance you can adjust while you go, then Finish.
+function cardioLiveView(s){
+  const c=s.cardio||{};
+  return `
+  <div class="section">
+    <div class="topbar"><button class="backbtn" data-action="backHome">${ICON_BACK} Home</button>
+      <span style="display:flex;gap:10px;align-items:center"><button class="linkbtn dim" id="btnCardioDiscard">Discard</button><button class="btn good sm" id="btnCardioFinish">Finish</button></span></div>
+    <div style="padding:0 2px 2px"><div class="eyebrow">Cardio in progress · saves when you finish · <span id="elapsedLbl">${fmtElapsed(s.date)}</span></div>
+      <h2 style="font-size:23px;margin-top:4px">${cardioTypeLabel(c.type)}</h2></div>
+    <div class="card" style="padding:18px 16px;margin:14px 0 16px;text-align:center">
+      <div class="eyebrow" style="margin-bottom:6px">Elapsed</div>
+      <div class="mono" id="cardioClock" style="font-size:44px;font-weight:800;letter-spacing:-.02em;font-family:var(--font-display)">${fmtClockElapsed(s.date)}</div></div>
+    ${cardioFields(c,'live')}
+    <div style="height:14px"></div>
+    <button class="btn good block" id="btnCardioFinishBottom">Finish &amp; save cardio</button>
+  </div>`;
+}
+// The shared type/intensity/distance controls, used by both the live view and the manual sheet.
+// `ctx` ('live'|'sheet') just namespaces nothing — the data-attrs are the same; handlers read cardioDraft/active.
+function cardioFields(c,ctx){
+  const du=distanceUnit();
+  return `
+    <div class="eyebrow" style="margin:2px 2px 8px">Type</div>
+    <div class="chips" style="margin-bottom:14px">${CARDIO_TYPES.map(([v,l])=>`<button class="chip ${c.type===v?'on':''}" data-cardtype="${v}">${l}</button>`).join('')}</div>
+    <div class="eyebrow" style="margin:2px 2px 8px">Intensity</div>
+    <div class="chips" style="margin-bottom:14px">${CARDIO_INTS.map(([v,l])=>`<button class="chip ${c.intensity===v?'on':''}" data-cardint="${v}">${l}</button>`).join('')}</div>
+    <div class="eyebrow" style="margin:2px 2px 8px">Distance · optional</div>
+    <div class="search" style="margin-bottom:2px"><input id="cardDist" inputmode="decimal" placeholder="e.g. 1.5" value="${c.distance!=null?c.distance:''}"><span class="dim mono" style="font-size:13px">${du}</span></div>`;
+}
+// mm:ss elapsed for the live clock (updated by the second in bindCardio).
+function fmtClockElapsed(startTs){const t=Math.max(0,Math.floor((Date.now()-startTs)/1000));const m=Math.floor(t/60),ss=t%60;return m+':'+(ss<10?'0':'')+ss;}
+// The manual / start sheet: pick type+intensity+distance, then either Start the timer or log minutes.
+function openCardioSheet(){
+  cardioDraft={type:lastCardioType(),intensity:'easy',distance:'',mins:30};
+  openSheet('Cardio',cardioSheetBody());
+  bindCardioSheet();
+}
+function cardioSheetBody(){
+  const c=cardioDraft;
+  return `
+    ${cardioFields(c,'sheet')}
+    <button class="btn primary block" id="btnCardioStart" style="margin-top:16px;gap:9px">${CARDIO_ICON} Start now &amp; time it</button>
+    <div class="row-between" style="margin:18px 2px 12px"><span class="eyebrow">Or log one you already did</span></div>
+    <div class="settingrow" style="border:none;padding:6px 2px">
+      <div><div style="font-weight:600">Minutes</div><div class="dim" style="font-size:12.5px">How long you went</div></div>
+      <div class="stepper"><button data-cardmin="-5">−</button><button class="val mono" id="cardMinVal">${c.mins}</button><button data-cardmin="5">＋</button></div></div>
+    <button class="btn good block" id="btnCardioLog" style="margin-top:12px">Log it</button>`;
+}
+// Edit a saved cardio session — same fields, prefilled, plus its minutes; saves back to the record.
+function openCardioEdit(s){
+  const dur=P.sessionDuration(s),c=s.cardio||{};
+  cardioDraft={type:c.type,intensity:c.intensity,distance:c.distance!=null?String(c.distance):'',mins:dur!=null?dur:30,editId:s.id};
+  closeSheet();openSheet('Edit cardio',cardioEditBody());bindCardioSheet(cardioEditBody);
+}
+function cardioEditBody(){
+  const c=cardioDraft;
+  return `
+    ${cardioFields(c,'edit')}
+    <div class="settingrow" style="border:none;padding:6px 2px">
+      <div><div style="font-weight:600">Minutes</div><div class="dim" style="font-size:12.5px">How long you went</div></div>
+      <div class="stepper"><button data-cardmin="-5">−</button><button class="val mono" id="cardMinVal">${c.mins}</button><button data-cardmin="5">＋</button></div></div>
+    <button class="btn primary block" id="btnCardioSave" style="margin-top:12px">Save changes</button>`;
+}
+// Begin a live cardio session from the sheet's current picks.
+function startCardio(){
+  const c=cardioDraft||{type:'treadmill',intensity:'easy'};
+  const cardio=cardioFromInput({type:c.type,intensity:c.intensity});   // reads the #cardDist field
+  const s={id:S.uid(),schema:SCHEMA,date:Date.now(),updatedAt:Date.now(),completed:false,kind:'cardio',exercises:[],cardio};
+  closeSheet();S.setActive(s);todayScreen='active';render();
+}
 // One-time card introducing the optional training profile (P1). Dismissed by either button (synced).
 function profileIntroCard(){
   if(seenFlag('profileIntro'))return '';
@@ -51,7 +137,13 @@ function profileIntroCard(){
     <div style="display:flex;gap:9px;margin-top:13px"><button class="btn primary sm" data-action="profileGo">Take me there</button><button class="btn ghost sm" data-action="profileSkip">I'm good</button></div></div>`;
 }
 function resumeCard(){
-  const s=state.active;const sets=setsOf(s);
+  const s=state.active;
+  if(s.kind==='cardio'){const c=s.cardio||{};
+    return `<button class="resume" id="btnResume" data-action="resume">
+      <span class="tri">${CARDIO_ICON}</span>
+      <span style="flex:1;min-width:0"><span style="font-weight:700;display:block">Resume your cardio</span><span class="dim" style="font-size:13px">${cardioTypeLabel(c.type)} · running ${fmtElapsed(s.date)}</span></span>
+      <span style="color:var(--accent);font-size:20px;flex-shrink:0">→</span></button>`;}
+  const sets=setsOf(s);
   return `<button class="resume" id="btnResume" data-action="resume">
     <span class="tri"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></span>
     <span style="flex:1;min-width:0"><span style="font-weight:700;display:block">Resume your workout</span><span class="dim" style="font-size:13px">${s.exercises.length} exercise${s.exercises.length!==1?'s':''} · ${sets} set${sets!==1?'s':''} logged${P.staleness(s).sinceLastSet>=P.STALE_AFTER_MIN?` · <span style="color:var(--warn)">idle ${fmtDur(P.staleness(s).sinceLastSet)}</span>`:''}</span></span>

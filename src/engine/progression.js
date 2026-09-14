@@ -71,7 +71,7 @@ function fmtVol(v){
 // The sessions that count toward PROGRESSION: completed, and not a deload (a deload is a recovery
 // detour, invisible to overload). Order is preserved (callers rely on newest-first). This is the one
 // predicate every progression/history scan shares — change it here, not in nine places.
-const real=sessions=>(sessions||[]).filter(s=>s.completed!==false&&!s.deload);
+const real=sessions=>(sessions||[]).filter(s=>s.completed!==false&&!s.deload&&s.kind!=='cardio');
 
 // Most recent completed performance of an exercise. opts: {beforeTs, excludeId, mode}
 // When `mode` is given, only instances performed with that modality match — so progression compares
@@ -305,7 +305,9 @@ function weekIndex(ts){return Math.round((weekStart(ts)-WEEK_EPOCH)/(7*DAY));}
 // and ONE empty week between two trained weeks is tolerated — a single week off (travel, a rest week)
 // shouldn't zero a streak; two empty weeks in a row do end it (#7).
 function calcStreak(sessions,now){
-  now=now||Date.now();const done=sessions.filter(s=>s.completed!==false&&s.exercises.length);
+  // streak counts any completed activity — a lifting session OR a cardio session (deliberate: cardio
+  // is real training). Everything else strength-only via completed()/exercises.length keeps cardio out.
+  now=now||Date.now();const done=sessions.filter(s=>s.completed!==false&&(s.exercises.length||s.kind==='cardio'));
   if(!done.length)return 0;
   const weeks=new Set(done.map(s=>weekIndex(s.date)));
   const cur=weekIndex(now);

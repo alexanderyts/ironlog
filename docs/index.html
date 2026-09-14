@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-iodkn0wRoKmngTHqut5vCLkaXhIgBLXtSvnPcTqPxio=' 'sha256-WPBob/luB2k1aalTWXpi6zk3SrIbj8GlZV7AlFdG7oA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-0SximAxirhO9CRsPQiocikRUB1QFdj2LCk9WYi6xfeY=' 'sha256-WPBob/luB2k1aalTWXpi6zk3SrIbj8GlZV7AlFdG7oA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Ironlog</title>
@@ -410,8 +410,8 @@ html.standalone .tabbar{bottom:auto;top:calc(var(--screen-h,100vh) - var(--tab-h
 </div>
 
 <script>
-/* Ironlog v0.46.0 · site build */
-var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.46.0",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
+/* Ironlog v0.47.0 · site build */
+var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.47.0",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
 
 /* ===== src/data/exercises.js ===== */
 (function(){'use strict';
@@ -757,7 +757,7 @@ function fmtVol(v){
 // The sessions that count toward PROGRESSION: completed, and not a deload (a deload is a recovery
 // detour, invisible to overload). Order is preserved (callers rely on newest-first). This is the one
 // predicate every progression/history scan shares — change it here, not in nine places.
-const real=sessions=>(sessions||[]).filter(s=>s.completed!==false&&!s.deload);
+const real=sessions=>(sessions||[]).filter(s=>s.completed!==false&&!s.deload&&s.kind!=='cardio');
 
 // Most recent completed performance of an exercise. opts: {beforeTs, excludeId, mode}
 // When `mode` is given, only instances performed with that modality match — so progression compares
@@ -991,7 +991,9 @@ function weekIndex(ts){return Math.round((weekStart(ts)-WEEK_EPOCH)/(7*DAY));}
 // and ONE empty week between two trained weeks is tolerated — a single week off (travel, a rest week)
 // shouldn't zero a streak; two empty weeks in a row do end it (#7).
 function calcStreak(sessions,now){
-  now=now||Date.now();const done=sessions.filter(s=>s.completed!==false&&s.exercises.length);
+  // streak counts any completed activity — a lifting session OR a cardio session (deliberate: cardio
+  // is real training). Everything else strength-only via completed()/exercises.length keeps cardio out.
+  now=now||Date.now();const done=sessions.filter(s=>s.completed!==false&&(s.exercises.length||s.kind==='cardio'));
   if(!done.length)return 0;
   const weeks=new Set(done.map(s=>weekIndex(s.date)));
   const cur=weekIndex(now);
@@ -1306,7 +1308,7 @@ function sessionGroups(s){const g={};s.exercises.forEach(e=>{const x=EX[e.id];if
 // holiday) it still continues but is flagged `meta.lapsed` so the caller skips stall/rotation/volume.
 function findPlan(groups,sessions,now,meta){
   now=now||Date.now();const want=new Set(groups);
-  const completed=(sessions||[]).filter(s=>s.completed!==false&&s.exercises&&s.exercises.length);   // newest-first (upsert/history keep it sorted)
+  const completed=(sessions||[]).filter(s=>s.completed!==false&&s.exercises&&s.exercises.length&&s.kind!=='cardio');   // newest-first (upsert/history keep it sorted)
   const scan=maxGap=>{
     let ref=now;
     for(const s of completed){
@@ -1510,7 +1512,7 @@ const {DAY,startOfDay,e1rm,isWorking,setLoad,sessionVolume,sessionSets,sessionDu
 
 // completed() INCLUDES deloads on purpose — volume/frequency/PR-window analysis wants everything the
 // user actually did. Progression-only scans use real() (completed AND not a deload) instead.
-const completed=sessions=>sessions.filter(s=>s.completed!==false&&s.exercises.length);
+const completed=sessions=>sessions.filter(s=>s.completed!==false&&s.exercises.length&&s.kind!=='cardio');
 
 // A comparative judgment ("you press more than you pull", "legs are undertrained") needs a real
 // sample to mean anything — one heavy session can trip a raw set-count threshold. Require both a
@@ -1903,7 +1905,20 @@ function muscleSetCounts(sessions){
   return Object.entries(cnt).sort((a,b)=>b[1]-a[1]);
 }
 
-IL.analysis={analyze,progressionStat,gapPrio,patPrio,findings,findingKey,withStatus,renderFinding,buildTips,buildHints,personalRecords,weeklyVolumes,muscleSetCounts,deloadStats,timeByGroup,restTaken,sessionDensity,exerciseRest,timeTrends,MIN_COMPARATIVE_SESSIONS,MIN_COMPARATIVE_DAYS};
+// Cardio summary (Progress). Reads ONLY cardio sessions — a self-contained picture that never touches
+// the lifting analysis. This-week count/minutes, a 4-week total, and a minutes-by-type breakdown.
+function cardioStats(sessions,now){
+  now=now||Date.now();const ws=weekStart(now),cut=now-28*DAY;
+  const all=(sessions||[]).filter(s=>s.completed!==false&&s.kind==='cardio'&&s.date<now);
+  if(!all.length)return {sessions:0};
+  const wk=all.filter(s=>s.date>=ws),win=all.filter(s=>s.date>=cut);
+  const mins=arr=>arr.reduce((a,s)=>a+(sessionDuration(s)||0),0);
+  const byType={};win.forEach(s=>{const t=(s.cardio&&s.cardio.type)||'indoor';byType[t]=(byType[t]||0)+(sessionDuration(s)||0);});
+  const last=all.slice().sort((a,b)=>b.date-a.date)[0];
+  return {sessions:all.length,weekCount:wk.length,weekMin:mins(wk),winCount:win.length,winMin:mins(win),
+    byType:Object.entries(byType).sort((a,b)=>b[1]-a[1]),lastType:last.cardio&&last.cardio.type,lastDate:last.date};
+}
+IL.analysis={analyze,progressionStat,gapPrio,patPrio,findings,findingKey,withStatus,renderFinding,buildTips,buildHints,personalRecords,weeklyVolumes,muscleSetCounts,deloadStats,timeByGroup,restTaken,sessionDensity,exerciseRest,timeTrends,cardioStats,MIN_COMPARATIVE_SESSIONS,MIN_COMPARATIVE_DAYS};
 if(typeof module!=='undefined')module.exports=IL.analysis;
 
 })();
@@ -1918,6 +1933,15 @@ const MODES=(IL.data&&IL.data.MODES)||{},EX=(IL.data&&IL.data.EX)||{},GROUPS=(IL
 // Training profile (v6 P2 reads it; P1 only stores it). Each field is optional; a valid non-'auto'
 // value is kept, anything else is dropped (so absent = auto = Balanced = today's behaviour).
 const PROFILE_ENUM={goal:['size','strength','general'],gym:['full','machine','home'],length:['short','standard','long'],sets:['straight','ramp'],push:['guide','quiet']};
+// Cardio is its own session KIND (kind:'cardio', exercises:[]). These enums bound the two picked fields;
+// distance is optional and carries the unit it was logged in (so a later lb↔kg switch can't reinterpret it).
+const CARDIO_ENUM={type:['treadmill','elliptical','stairmaster','outdoor','indoor'],intensity:['easy','moderate','hard']};
+function cleanCardio(c){c=c&&typeof c==='object'?c:{};const o={};
+  o.type=CARDIO_ENUM.type.indexOf(c.type)>=0?c.type:'treadmill';
+  o.intensity=CARDIO_ENUM.intensity.indexOf(c.intensity)>=0?c.intensity:'moderate';
+  const d=+c.distance;if(Number.isFinite(d)&&d>0)o.distance=Math.min(1000,d);
+  if(o.distance!=null)o.unit=c.unit==='km'?'km':'mi';
+  return o;}
 function cleanProfile(p){if(!p||typeof p!=='object')return undefined;const o={};
   Object.keys(PROFILE_ENUM).forEach(k=>{if(PROFILE_ENUM[k].indexOf(p[k])>=0)o[k]=p[k];});
   if([2,3,4,5,6].indexOf(+p.days)>=0)o.days=+p.days;
@@ -1985,7 +2009,9 @@ const rid=p=>p+Math.random().toString(36).slice(2,9);
 
 function cleanSet(st){st=st&&typeof st==='object'?st:{};const o={w:sNumBlank(st.w),r:sNumBlank(st.r),done:st.done!==false};if(st.warm)o.warm=true;const at=+st.at;if(Number.isFinite(at)&&at>0)o.at=at;return o;}   // missing done => done; `at` (check timestamp) kept if a real number
 function cleanExercise(e){e=e&&typeof e==='object'?e:{};const o={id:sId(e.id),name:sStr(e.name),sets:sArr(e.sets,MAX_SETS).map(cleanSet)};if(e.mode&&MODES[e.mode])o.mode=sId(e.mode);if(typeof e.note==='string'&&e.note.trim())o.note=sStr(e.note,500);return o;}   // drop an unknown mode (a bad import would white-screen Progress via MODES[mode].label)
-function cleanSession(s){s=s&&typeof s==='object'?s:{};const o={id:sId(s.id)||rid('imp'),schema:sNum(s.schema)||1,date:sNum(s.date)||Date.now(),updatedAt:sNum(s.updatedAt)||sNum(s.date)||Date.now(),completed:s.completed!==false,exercises:sArr(s.exercises,MAX_EX).map(cleanExercise)};if(s.deload)o.deload=true;const end=+s.endedAt;if(Number.isFinite(end)&&end>0){o.endedAt=end;if(s.endEstimated===true)o.endEstimated=true;}return o;}
+function cleanSession(s){s=s&&typeof s==='object'?s:{};const o={id:sId(s.id)||rid('imp'),schema:sNum(s.schema)||1,date:sNum(s.date)||Date.now(),updatedAt:sNum(s.updatedAt)||sNum(s.date)||Date.now(),completed:s.completed!==false,exercises:sArr(s.exercises,MAX_EX).map(cleanExercise)};if(s.deload)o.deload=true;const end=+s.endedAt;if(Number.isFinite(end)&&end>0){o.endedAt=end;if(s.endEstimated===true)o.endEstimated=true;}
+  if(s.kind==='cardio'){o.kind='cardio';o.exercises=[];o.cardio=cleanCardio(s.cardio);}   // cardio never carries exercises → every strength filter drops it
+  return o;}
 function cleanRoutine(r){r=r&&typeof r==='object'?r:{};return {id:sId(r.id)||rid('r'),name:sStr(r.name),exIds:sArr(r.exIds,MAX_EX).map(sId).filter(Boolean),updatedAt:sNum(r.updatedAt)||Date.now()};}
 function cleanSettings(o){if(!o||typeof o!=='object')return null;
   const s={settingsUpdatedAt:sNum(o.settingsUpdatedAt)};
@@ -2027,7 +2053,7 @@ function resolveActive(local,remote){
   return {active:local.active,activeClearedAt:lc,changed:false,pushNeeded:remoteEvt<localEvt};
 }
 
-IL.sync={mergeSessions,applyTombstones,pruneTombstones,exportPayload,parseImport,resolveActive,cleanSession,cleanRoutine,cleanSettings,cleanProfile,PROFILE_ENUM,TOMB_KEEP};
+IL.sync={mergeSessions,applyTombstones,pruneTombstones,exportPayload,parseImport,resolveActive,cleanSession,cleanRoutine,cleanSettings,cleanProfile,cleanCardio,PROFILE_ENUM,CARDIO_ENUM,TOMB_KEEP};
 if(typeof module!=='undefined')module.exports=IL.sync;
 
 })();
@@ -2418,7 +2444,9 @@ const setsOf=s=>P.sessionSets(s);
 // A "Volume" stat label, tappable for a one-line explainer (the number itself, e.g. "12,480 lb", has
 // no context otherwise — see ROADMAP-v2 #1).
 function volLabel(label){return `<span data-vol-info style="cursor:pointer">${label||'Volume'} <span class="dim" style="font-weight:400">ⓘ</span></span>`;}
-const completedSessions=()=>state.sessions.filter(s=>s.completed!==false&&s.exercises.length);
+const completedSessions=()=>state.sessions.filter(s=>s.completed!==false&&s.exercises.length&&s.kind!=='cardio');   // strength only — feeds every lifting stat
+const completedCardio=()=>state.sessions.filter(s=>s.completed!==false&&s.kind==='cardio');
+const completedAny=()=>state.sessions.filter(s=>s.completed!==false&&(s.exercises.length||s.kind==='cardio'));   // strength ∪ cardio — for History, "this week" count, streak
 const ICON_BACK='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>';
 function demoURL(id){const e=EX[id];if(!e)return 'https://www.youtube.com/';return 'https://www.youtube.com/results?search_query='+encodeURIComponent('how to '+e.name+' proper form technique');}
 
@@ -2460,6 +2488,9 @@ let editSession=null,editDirty=false;
 // startSession() when a workout begins — so nothing leaks into the next visit.
 let draft={groups:new Set(),deload:false};
 function resetDraft(){draft.groups=new Set();draft.deload=false;}
+// Cardio-entry sheet's transient picks (type/intensity/distance/minutes). Rebuilt each time the sheet opens.
+let cardioDraft=null;
+const distanceUnit=()=>U()==='kg'?'km':'mi';   // cardio distance unit follows the weight unit
 let calMonth=new Date().getFullYear()*12+new Date().getMonth(),selDay=null,histShown=30;   // History renders 30 at a time (#13)
 let libQuery='',libGroup='All';
 function setTab(t){vlog('tab '+t);if(t!==currentTab)histShown=30;currentTab=t;document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===t));render();window.scrollTo(0,0);}
@@ -2492,17 +2523,19 @@ function persistCur(){if(todayScreen==='edit')editDirty=true;else S.persistActiv
 /* ---------------- TODAY ---------------- */
 function viewToday(){
   if(todayScreen==='edit'&&editSession)return editorView(editSession,'edit');
+  if(todayScreen==='active'&&state.active&&state.active.kind==='cardio')return cardioLiveView(state.active);
   if(todayScreen==='active'&&state.active)return editorView(state.active,'active');
   if(todayScreen==='start')return startWorkoutView();
   return homeView();
 }
 function homeView(){
   const done=completedSessions(),now=Date.now();
-  const wk=done.filter(s=>s.date>=P.weekStart(now));   // calendar week (Mon–Sun), not a rolling 7 days
+  const wk=done.filter(s=>s.date>=P.weekStart(now));   // strength this week (for volume)
   const wkVol=wk.reduce((a,s)=>a+volOf(s),0);
-  const streak=P.calcStreak(done,now);
+  const wkAny=completedAny().filter(s=>s.date>=P.weekStart(now)).length;   // count includes cardio
+  const streak=P.calcStreak(completedAny(),now);
   const hr=new Date().getHours();const greet=hr<12?'Good morning':hr<18?'Good afternoon':'Good evening';
-  const last=done[0];
+  const last=completedAny()[0];   // most recent session of any kind (lift or cardio)
   return `
   <div class="section">
     <div style="padding:6px 2px 0">
@@ -2512,11 +2545,12 @@ function homeView(){
     ${profileIntroCard()}
     ${state.active?resumeCard():''}
     <div class="statgrid" style="grid-template-columns:1fr 1fr 1fr;margin:16px 0 18px;gap:9px">
-      <div class="card stat" style="padding:14px 12px"><div class="k">This wk</div><div class="v mono">${wk.length}</div></div>
+      <div class="card stat" style="padding:14px 12px"><div class="k">This wk</div><div class="v mono">${wkAny}</div></div>
       <div class="card stat" style="padding:14px 12px"><div class="k">Streak</div><div class="v mono">${streak}<small>wk</small></div></div>
       <div class="card stat" style="padding:14px 12px"><div class="k">${volLabel()}</div><div class="v mono">${fmtVol(wkVol)}</div></div>
     </div>
     ${state.active?'':startBlock()}
+    ${state.active?'':cardioBlock()}
     ${last?`<div class="eyebrow" style="margin:26px 2px 10px">Last session</div>${sessCard(last)}`:emptyHome()}
     <div class="eyebrow" style="margin:24px 2px 10px">Jump in</div>
     <button class="btn ghost block" id="btnGoLibrary" data-action="goLibrary" style="justify-content:space-between">
@@ -2531,6 +2565,89 @@ function startBlock(){
   const START=`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>`;
   return `<button class="btn primary block" id="btnStartFlow" data-action="startFlow" style="height:56px;font-size:16px">${START} Start a workout</button>`;
 }
+/* ---------------- CARDIO ----------------
+   A cardio session is its own kind (kind:'cardio', exercises:[]) — invisible to the lifting math.
+   Two ways in: Start a live timer (finish stamps the end), or log one you already did by hand. */
+const CARDIO_TYPES=[['treadmill','Treadmill'],['elliptical','Elliptical'],['stairmaster','StairMaster'],['outdoor','Outdoor'],['indoor','Indoor']];
+const CARDIO_INTS=[['easy','Easy'],['moderate','Moderate'],['hard','Hard']];
+const cardioTypeLabel=t=>{const f=CARDIO_TYPES.find(x=>x[0]===t);return f?f[1]:t;};
+const cardioIntLabel=i=>{const f=CARDIO_INTS.find(x=>x[0]===i);return f?f[1]:i;};
+const CARDIO_ICON=`<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 4.5a1.4 1.4 0 1 0 0-.01M6 21l3-5 3 2 1-4M9 16l-2-3 4-3 2 3h3"/></svg>`;
+// The last cardio type this person logged — a small nicety so the picker defaults to their usual.
+function lastCardioType(){const c=state.sessions.filter(s=>s.completed!==false&&s.kind==='cardio'&&s.cardio).sort((a,b)=>b.date-a.date)[0];return c?c.cardio.type:'treadmill';}
+function cardioBlock(){
+  return `<button class="btn ghost block" id="btnCardio" data-action="cardioOpen" style="margin-top:10px;height:50px;justify-content:center;gap:9px">${CARDIO_ICON} Log cardio</button>`;
+}
+// Live cardio: a running clock + the type/intensity/distance you can adjust while you go, then Finish.
+function cardioLiveView(s){
+  const c=s.cardio||{};
+  return `
+  <div class="section">
+    <div class="topbar"><button class="backbtn" data-action="backHome">${ICON_BACK} Home</button>
+      <span style="display:flex;gap:10px;align-items:center"><button class="linkbtn dim" id="btnCardioDiscard">Discard</button><button class="btn good sm" id="btnCardioFinish">Finish</button></span></div>
+    <div style="padding:0 2px 2px"><div class="eyebrow">Cardio in progress · saves when you finish · <span id="elapsedLbl">${fmtElapsed(s.date)}</span></div>
+      <h2 style="font-size:23px;margin-top:4px">${cardioTypeLabel(c.type)}</h2></div>
+    <div class="card" style="padding:18px 16px;margin:14px 0 16px;text-align:center">
+      <div class="eyebrow" style="margin-bottom:6px">Elapsed</div>
+      <div class="mono" id="cardioClock" style="font-size:44px;font-weight:800;letter-spacing:-.02em;font-family:var(--font-display)">${fmtClockElapsed(s.date)}</div></div>
+    ${cardioFields(c,'live')}
+    <div style="height:14px"></div>
+    <button class="btn good block" id="btnCardioFinishBottom">Finish &amp; save cardio</button>
+  </div>`;
+}
+// The shared type/intensity/distance controls, used by both the live view and the manual sheet.
+// `ctx` ('live'|'sheet') just namespaces nothing — the data-attrs are the same; handlers read cardioDraft/active.
+function cardioFields(c,ctx){
+  const du=distanceUnit();
+  return `
+    <div class="eyebrow" style="margin:2px 2px 8px">Type</div>
+    <div class="chips" style="margin-bottom:14px">${CARDIO_TYPES.map(([v,l])=>`<button class="chip ${c.type===v?'on':''}" data-cardtype="${v}">${l}</button>`).join('')}</div>
+    <div class="eyebrow" style="margin:2px 2px 8px">Intensity</div>
+    <div class="chips" style="margin-bottom:14px">${CARDIO_INTS.map(([v,l])=>`<button class="chip ${c.intensity===v?'on':''}" data-cardint="${v}">${l}</button>`).join('')}</div>
+    <div class="eyebrow" style="margin:2px 2px 8px">Distance · optional</div>
+    <div class="search" style="margin-bottom:2px"><input id="cardDist" inputmode="decimal" placeholder="e.g. 1.5" value="${c.distance!=null?c.distance:''}"><span class="dim mono" style="font-size:13px">${du}</span></div>`;
+}
+// mm:ss elapsed for the live clock (updated by the second in bindCardio).
+function fmtClockElapsed(startTs){const t=Math.max(0,Math.floor((Date.now()-startTs)/1000));const m=Math.floor(t/60),ss=t%60;return m+':'+(ss<10?'0':'')+ss;}
+// The manual / start sheet: pick type+intensity+distance, then either Start the timer or log minutes.
+function openCardioSheet(){
+  cardioDraft={type:lastCardioType(),intensity:'easy',distance:'',mins:30};
+  openSheet('Cardio',cardioSheetBody());
+  bindCardioSheet();
+}
+function cardioSheetBody(){
+  const c=cardioDraft;
+  return `
+    ${cardioFields(c,'sheet')}
+    <button class="btn primary block" id="btnCardioStart" style="margin-top:16px;gap:9px">${CARDIO_ICON} Start now &amp; time it</button>
+    <div class="row-between" style="margin:18px 2px 12px"><span class="eyebrow">Or log one you already did</span></div>
+    <div class="settingrow" style="border:none;padding:6px 2px">
+      <div><div style="font-weight:600">Minutes</div><div class="dim" style="font-size:12.5px">How long you went</div></div>
+      <div class="stepper"><button data-cardmin="-5">−</button><button class="val mono" id="cardMinVal">${c.mins}</button><button data-cardmin="5">＋</button></div></div>
+    <button class="btn good block" id="btnCardioLog" style="margin-top:12px">Log it</button>`;
+}
+// Edit a saved cardio session — same fields, prefilled, plus its minutes; saves back to the record.
+function openCardioEdit(s){
+  const dur=P.sessionDuration(s),c=s.cardio||{};
+  cardioDraft={type:c.type,intensity:c.intensity,distance:c.distance!=null?String(c.distance):'',mins:dur!=null?dur:30,editId:s.id};
+  closeSheet();openSheet('Edit cardio',cardioEditBody());bindCardioSheet(cardioEditBody);
+}
+function cardioEditBody(){
+  const c=cardioDraft;
+  return `
+    ${cardioFields(c,'edit')}
+    <div class="settingrow" style="border:none;padding:6px 2px">
+      <div><div style="font-weight:600">Minutes</div><div class="dim" style="font-size:12.5px">How long you went</div></div>
+      <div class="stepper"><button data-cardmin="-5">−</button><button class="val mono" id="cardMinVal">${c.mins}</button><button data-cardmin="5">＋</button></div></div>
+    <button class="btn primary block" id="btnCardioSave" style="margin-top:12px">Save changes</button>`;
+}
+// Begin a live cardio session from the sheet's current picks.
+function startCardio(){
+  const c=cardioDraft||{type:'treadmill',intensity:'easy'};
+  const cardio=cardioFromInput({type:c.type,intensity:c.intensity});   // reads the #cardDist field
+  const s={id:S.uid(),schema:SCHEMA,date:Date.now(),updatedAt:Date.now(),completed:false,kind:'cardio',exercises:[],cardio};
+  closeSheet();S.setActive(s);todayScreen='active';render();
+}
 // One-time card introducing the optional training profile (P1). Dismissed by either button (synced).
 function profileIntroCard(){
   if(seenFlag('profileIntro'))return '';
@@ -2540,7 +2657,13 @@ function profileIntroCard(){
     <div style="display:flex;gap:9px;margin-top:13px"><button class="btn primary sm" data-action="profileGo">Take me there</button><button class="btn ghost sm" data-action="profileSkip">I'm good</button></div></div>`;
 }
 function resumeCard(){
-  const s=state.active;const sets=setsOf(s);
+  const s=state.active;
+  if(s.kind==='cardio'){const c=s.cardio||{};
+    return `<button class="resume" id="btnResume" data-action="resume">
+      <span class="tri">${CARDIO_ICON}</span>
+      <span style="flex:1;min-width:0"><span style="font-weight:700;display:block">Resume your cardio</span><span class="dim" style="font-size:13px">${cardioTypeLabel(c.type)} · running ${fmtElapsed(s.date)}</span></span>
+      <span style="color:var(--accent);font-size:20px;flex-shrink:0">→</span></button>`;}
+  const sets=setsOf(s);
   return `<button class="resume" id="btnResume" data-action="resume">
     <span class="tri"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></span>
     <span style="flex:1;min-width:0"><span style="font-weight:700;display:block">Resume your workout</span><span class="dim" style="font-size:13px">${s.exercises.length} exercise${s.exercises.length!==1?'s':''} · ${sets} set${sets!==1?'s':''} logged${P.staleness(s).sinceLastSet>=P.STALE_AFTER_MIN?` · <span style="color:var(--warn)">idle ${fmtDur(P.staleness(s).sinceLastSet)}</span>`:''}</span></span>
@@ -2796,7 +2919,7 @@ function setRow(st,ei,si){
 // detail/notes/add sheets, Settings, and the iOS viewport code. (Shares scope — see ui-core.js.)
 /* ---------------- HISTORY ---------------- */
 function viewHistory(){
-  const done=completedSessions();
+  const done=completedAny();   // History + calendar show lifts AND cardio
   return `<div class="section">
     <div class="view-title" style="margin:0 2px 14px;font-size:22px">History</div>
     <div class="card" style="padding:16px">${calendar(done)}</div>
@@ -2825,6 +2948,11 @@ function sessionList(done){
   return cards+more;
 }
 function sessCard(s){
+  if(s.kind==='cardio'){const c=s.cardio||{},dur=P.sessionDuration(s);
+    const bits=[cardioIntLabel(c.intensity)];if(dur!=null)bits.push((s.endEstimated?'≈':'')+fmtDur(dur));if(c.distance!=null)bits.push(c.distance+' '+(c.unit||distanceUnit()));
+    return `<div class="card sess" data-sess="${s.id}">
+      <div class="sess-top"><div class="sess-date" style="display:flex;align-items:center;gap:8px"><span style="color:var(--accent)">${CARDIO_ICON}</span>${relDay(s.date)}</div><span class="pill">Cardio</span></div>
+      <div class="sess-meta"><span class="muted"><b>${cardioTypeLabel(c.type)}</b></span><span class="muted">${bits.join(' · ')}</span></div></div>`;}
   return `<div class="card sess" data-sess="${s.id}">
     <div class="sess-top"><div class="sess-date">${relDay(s.date)}${s.deload?' <span class="deload-badge">Deload</span>':''}</div><span class="pill accent">${s.exercises.length} exercise${s.exercises.length!==1?'s':''}</span></div>
     <div class="sess-meta"><span class="muted">Volume <b>${fmtVol(volOf(s))} ${U()}</b></span><span class="muted">Sets <b>${setsOf(s)}</b></span>${P.sessionDuration(s)!=null?`<span class="muted">${s.endEstimated?'≈':''}<b>${fmtDur(P.sessionDuration(s))}</b></span>`:''}</div>
@@ -2857,20 +2985,23 @@ function libRow(e,attr){
 
 /* ---------------- PROGRESS ---------------- */
 function viewProgress(){
-  const done=completedSessions(),now=Date.now();
-  const wk=done.filter(s=>s.date>=P.weekStart(now)),mo=done.filter(s=>s.date>=now-30*DAY);   // this week = calendar Mon–Sun
+  const done=completedSessions(),anyDone=completedAny(),now=Date.now();
+  const wk=done.filter(s=>s.date>=P.weekStart(now)),mo=done.filter(s=>s.date>=now-30*DAY);   // strength this week/month (for volume + muscle breakdown)
   const wkVol=wk.reduce((a,s)=>a+volOf(s),0);
+  // counts include cardio (activity), the strength math above does not
+  const wkAny=anyDone.filter(s=>s.date>=P.weekStart(now)).length,moAny=anyDone.filter(s=>s.date>=now-30*DAY).length;
   return `<div class="section">
     <div class="view-title" style="margin:0 2px 14px;font-size:22px">Progress</div>
     <div class="statgrid">
-      <div class="card stat"><div class="k">This week</div><div class="v mono">${wk.length}<small>workouts</small></div></div>
+      <div class="card stat"><div class="k">This week</div><div class="v mono">${wkAny}<small>session${wkAny!==1?'s':''}</small></div></div>
       <div class="card stat"><div class="k">${volLabel('Week volume')}</div><div class="v mono">${fmtVol(wkVol)}<small>${U()}</small></div></div>
-      <div class="card stat"><div class="k">30-day workouts</div><div class="v mono">${mo.length}</div></div>
-      <div class="card stat"><div class="k">Current streak</div><div class="v mono">${P.calcStreak(done,now)}<small>wk</small></div></div>
+      <div class="card stat"><div class="k">30-day sessions</div><div class="v mono">${moAny}</div></div>
+      <div class="card stat"><div class="k">Current streak</div><div class="v mono">${P.calcStreak(anyDone,now)}<small>wk</small></div></div>
     </div>
     ${coachCard(done)}
     ${recoveryCard()}
     ${timeCard()}
+    ${cardioCard()}
     <div class="eyebrow" style="margin:24px 2px 10px">Weekly volume · last 8 weeks</div>
     <div class="card" style="padding:14px 12px 10px">${volumeChart()}</div>
     <div class="eyebrow" style="margin:24px 2px 10px">Personal records</div>
@@ -2981,6 +3112,20 @@ function timeCard(){
         ${t.byGroup.map(([g,m])=>`<div style="margin-bottom:9px"><div class="row-between" style="margin-bottom:4px"><span style="font-weight:600;font-size:13px">${g}</span><span class="mono dim" style="font-size:12px">${fmtDur(m)}</span></div><div style="height:6px;background:var(--surface-2);border-radius:3px;overflow:hidden"><div style="height:100%;width:${Math.round(m/maxG*100)}%;background:var(--accent);border-radius:3px"></div></div></div>`).join('')}`:''}
     </div>`;
   return collapsible('time','Time · last 4 weeks',`avg ${fmtDur(t.avgDuration)}`,body);
+}
+// Cardio summary — its own section on Progress. Nothing here touches the lifting stats.
+function cardioCard(){
+  const c=A.cardioStats(state.sessions,Date.now());
+  if(!c.sessions)return '';
+  const maxT=Math.max(1,...c.byType.map(t=>t[1]));
+  const body=`<div class="card" style="padding:15px 16px">
+      <div class="row-between" style="font-size:13.5px;margin-bottom:${c.byType.length?'12':'0'}px">
+        <span class="muted">This week <b class="mono">${c.weekCount} session${c.weekCount!==1?'s':''}</b></span>
+        <span class="muted">${c.weekMin?`<b class="mono">${fmtDur(c.weekMin)}</b>`:''}</span></div>
+      ${c.byType.length?`<div class="eyebrow" style="margin:2px 0 9px">Minutes by type · last 4 weeks</div>
+        ${c.byType.map(([t,m])=>`<div style="margin-bottom:9px"><div class="row-between" style="margin-bottom:4px"><span style="font-weight:600;font-size:13px">${cardioTypeLabel(t)}</span><span class="mono dim" style="font-size:12px">${fmtDur(m)}</span></div><div style="height:6px;background:var(--surface-2);border-radius:3px;overflow:hidden"><div style="height:100%;width:${Math.round(m/maxT*100)}%;background:var(--accent);border-radius:3px"></div></div></div>`).join('')}`:''}
+    </div>`;
+  return collapsible('cardio','Cardio · last 4 weeks',`${c.winCount} session${c.winCount!==1?'s':''} · ${fmtDur(c.winMin)}`,body);
 }
 function muscleBreakdown(mo){
   const arr=A.muscleSetCounts(mo);if(!arr.length)return'';
@@ -3297,6 +3442,7 @@ function importData(ev){
 }
 function openSessionDetail(sid){
   const s=state.sessions.find(x=>x.id===sid);if(!s)return;
+  if(s.kind==='cardio'){openCardioDetail(s);return;}
   openSheet(fmtDate(s.date),`<div class="sess-meta" style="margin:0 0 16px"><span class="muted">Volume <b>${fmtVol(volOf(s))} ${U()}</b></span><span class="muted">Sets <b>${setsOf(s)}</b></span><span class="muted">${new Date(s.date).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})}</span></div>
     ${s.exercises.map(e=>{const ex=EX[e.id];return `<div class="card" style="padding:13px 15px;margin-bottom:10px">
       <div style="display:flex;gap:11px;align-items:center;margin-bottom:9px"><div class="ex-ic" style="width:36px;height:36px">${exIcon(ex?ex.group:'Core')}</div><div class="ex-name">${esc(ex?ex.name:e.name)}</div></div>
@@ -3310,6 +3456,25 @@ function openSessionDetail(sid){
   body.querySelector('[data-editsess]').addEventListener('click',()=>{closeSheet();startEdit(s);});
   body.querySelector('[data-routinefrom]').addEventListener('click',()=>{closeSheet();saveAsRoutine(s);});
   body.querySelector('[data-delsess]').addEventListener('click',()=>showConfirm('Delete session?','This removes the workout from your history.','Delete',()=>{
+    const copy=JSON.parse(JSON.stringify(s));S.deleteSession(s.id);closeSheet();render();
+    toast('Session deleted',{label:'Undo',fn:()=>{S.restoreSession(copy);render();toast('Restored');}});}));
+}
+// Cardio session detail — type/intensity/duration/distance, plus delete (edit lands in C5).
+function openCardioDetail(s){
+  const c=s.cardio||{},dur=P.sessionDuration(s);
+  openSheet(fmtDate(s.date),`
+    <div class="card" style="padding:16px;margin-bottom:14px">
+      <div style="display:flex;gap:12px;align-items:center;margin-bottom:12px"><div class="ex-ic" style="width:42px;height:42px">${CARDIO_ICON}</div>
+        <div><div class="ex-name" style="font-size:16px">${cardioTypeLabel(c.type)}</div><div class="ex-sub">${cardioIntLabel(c.intensity)} intensity</div></div></div>
+      <div class="sess-meta" style="margin:0">
+        ${dur!=null?`<span class="muted">${s.endEstimated?'≈':''}Duration <b>${fmtDur(dur)}</b></span>`:''}
+        ${c.distance!=null?`<span class="muted">Distance <b>${c.distance} ${c.unit||distanceUnit()}</b></span>`:''}
+        <span class="muted">${new Date(s.date).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})}</span></div></div>
+    <div class="dim" style="font-size:12px;margin:0 2px 14px">Cardio is tracked on its own — it never affects your lifting volume, PRs or the coach.</div>
+    <button class="btn ghost block" id="cardEdit" style="margin-bottom:12px">✎ Edit</button>
+    <button class="linkbtn dim" data-delsess="${s.id}" style="display:block;text-align:center;width:100%">Delete this session</button>`);
+  $('#cardEdit').addEventListener('click',()=>openCardioEdit(s));
+  $('#sheetBody').querySelector('[data-delsess]').addEventListener('click',()=>showConfirm('Delete session?','This removes the cardio session from your history.','Delete',()=>{
     const copy=JSON.parse(JSON.stringify(s));S.deleteSession(s.id);closeSheet();render();
     toast('Session deleted',{label:'Undo',fn:()=>{S.restoreSession(copy);render();toast('Restored');}});}));
 }
@@ -3438,6 +3603,60 @@ function commitFinish(s,endedAt,estimated){
 function discardActive(){showConfirm('Discard workout?','Nothing from this session will be saved.','Discard',()=>{
   stopRest();stopElapsed();const copy=state.active;state.active=null;S.persistActive();todayScreen='home';render();
   toast('Workout discarded',{label:'Undo',fn:()=>{S.setActive(copy);todayScreen='active';render();}});});}
+
+/* ---------------- cardio finish / manual save ---------------- */
+// Read the distance input (live view or sheet) into a cardio object, dropping a blank/invalid value.
+function cardioFromInput(base){
+  const c=Object.assign({},base);delete c.distance;delete c.unit;
+  const el=$('#cardDist');const d=el?parseFloat(el.value):(base&&base.distance);
+  if(isFinite(d)&&d>0){c.distance=d;c.unit=distanceUnit();}
+  return c;
+}
+// Finish a LIVE cardio session. Like a lift's Finish, a long-forgotten one offers an honest end time
+// rather than silently recording hours of "cardio" (the same 50-hour safeguard).
+function finishCardio(){
+  const s=state.active;if(!s)return;
+  s.cardio=cardioFromInput(s.cardio);
+  const now=Date.now(),sinceStart=Math.round((now-s.date)/60000);
+  if(sinceStart>=P.STALE_CONFIRM_MIN){
+    const hourIn=+s.date+60*60000;
+    openSheet('When did you finish?',`<div class="dim" style="font-size:13.5px;margin:-2px 2px 14px;line-height:1.5">This cardio session was started ${fmtDur(sinceStart)} ago. When did you actually finish?</div>
+      <button class="btn primary block" id="cEndNow" style="margin-bottom:9px">Just now · ${fmtClock(now)}</button>
+      <button class="btn ghost block" id="cEndHour" style="margin-bottom:9px">About an hour after I started · ≈${fmtClock(hourIn)}</button>
+      <button class="btn ghost block" id="cEndNone">Don't record a length</button>`);
+    bindClick('#cEndNow',()=>commitCardio(s,now,false));
+    bindClick('#cEndHour',()=>commitCardio(s,hourIn,true));
+    bindClick('#cEndNone',()=>commitCardio(s,null,false));
+    return;
+  }
+  commitCardio(s,now,false);
+}
+// Save a cardio session (live-finished or manually entered) with the same storage-full guard as a lift.
+function commitCardio(s,endedAt,estimated){
+  closeSheet();stopElapsed();stopCardioClock();
+  if(endedAt)s.endedAt=endedAt;else delete s.endedAt;
+  if(estimated&&endedAt)s.endEstimated=true;else delete s.endEstimated;
+  s.completed=true;s.updatedAt=Date.now();
+  if(!S.upsertSession(s,false)){
+    const i=state.sessions.findIndex(x=>x.id===s.id);if(i>=0)state.sessions.splice(i,1);
+    s.completed=false;delete s.endedAt;delete s.endEstimated;
+    if(state.active===s){toast('Storage is full — your cardio is safe but not saved yet. Export a backup from Settings, then finish again.');}
+    else toast('Storage is full — that cardio session didn’t save. Export a backup from Settings.');
+    render();return;
+  }
+  if(state.active===s){state.active=null;S.persistActive();}
+  const mins=P.sessionDuration(s);
+  todayScreen='home';setTab('history');
+  toast(`Logged ${cardioTypeLabel(s.cardio.type)}${mins!=null?' · '+fmtDur(mins):''}`);
+}
+// Manual entry from the sheet: build a completed cardio session from the picks + minutes, no live timer.
+function logCardioManual(){
+  const c=cardioDraft;const mins=Math.max(1,+c.mins||0);
+  const now=Date.now(),date=now-mins*60000;   // place it ending ~now; duration = mins
+  const cardio=cardioFromInput({type:c.type,intensity:c.intensity});
+  const s={id:S.uid(),schema:SCHEMA,date,updatedAt:now,completed:false,kind:'cardio',exercises:[],cardio};
+  commitCardio(s,now,false);
+}
 function startEdit(s){editSession=JSON.parse(JSON.stringify(s));editDirty=false;todayScreen='edit';setTab('today');}
 function finishEdit(){
   const s=editSession;
@@ -3465,6 +3684,7 @@ let elapsedT=null,notifiedStaleId=null;
 function stopElapsed(){clearTimeout(elapsedT);elapsedT=null;}
 function scheduleElapsed(){stopElapsed();elapsedT=setTimeout(()=>{
   if(!(state.active&&todayScreen==='active'))return;
+  if(state.active.kind==='cardio'){const el=$('#elapsedLbl');if(el)el.textContent=fmtElapsed(state.active.date);scheduleElapsed();return;}   // cardio has no sets/stale banner — just tick the label
   const stale=P.staleness(state.active).sinceLastSet>=P.STALE_AFTER_MIN;
   if(stale)maybeStaleNotify(state.active);
   // Crossing the threshold brings in the banner via a re-render (bind() re-arms this timer). Never
@@ -3479,6 +3699,51 @@ function maybeStaleNotify(s){
   if(notifiedStaleId===s.id||!document.hidden)return;
   try{if(state.settings.rest.notify&&'Notification'in window&&Notification.permission==='granted'){
     notifiedStaleId=s.id;new Notification('Still training?',{body:'Your workout is still open — finish it to log it.'});}}catch(e){}
+}
+// Cardio live clock — ticks the mm:ss readout every second (its own timer; the minute-level #elapsedLbl
+// is handled by scheduleElapsed). Stops itself the instant the cardio session ends or the view changes.
+let cardioClockT=null;
+function stopCardioClock(){clearInterval(cardioClockT);cardioClockT=null;}
+function startCardioClock(){stopCardioClock();cardioClockT=setInterval(()=>{
+  if(!(state.active&&state.active.kind==='cardio'&&todayScreen==='active')){stopCardioClock();return;}
+  const el=$('#cardioClock');if(el)el.textContent=fmtClockElapsed(state.active.date);else stopCardioClock();
+},1000);}
+function discardCardio(){showConfirm('Discard cardio?','This session won’t be saved.','Discard',()=>{
+  stopCardioClock();stopElapsed();const copy=state.active;state.active=null;S.persistActive();todayScreen='home';render();
+  toast('Cardio discarded',{label:'Undo',fn:()=>{S.setActive(copy);todayScreen='active';render();}});});}
+// Live cardio view wiring: Finish/Discard, the type/intensity chips (mutate the active record + re-render,
+// preserving any typed distance across the render), and the per-second clock.
+function bindCardioLive(){
+  const v=$('#view');
+  bindClick('#btnCardioFinish',finishCardio);bindClick('#btnCardioFinishBottom',finishCardio);
+  bindClick('#btnCardioDiscard',discardCardio);
+  const keepDist=()=>{state.active.cardio=cardioFromInput(state.active.cardio);};
+  v.querySelectorAll('[data-cardtype]').forEach(b=>b.addEventListener('click',()=>{keepDist();state.active.cardio.type=b.dataset.cardtype;S.persistActive();render();}));
+  v.querySelectorAll('[data-cardint]').forEach(b=>b.addEventListener('click',()=>{keepDist();state.active.cardio.intensity=b.dataset.cardint;S.persistActive();render();}));
+  startCardioClock();
+}
+// Manual/start sheet wiring: type/intensity chips + minutes stepper re-render the sheet; the distance
+// input is captured before each re-render so a typed value survives.
+function bindCardioSheet(bodyFn){
+  bodyFn=bodyFn||cardioSheetBody;
+  const b=$('#sheetBody');
+  const grab=()=>{const el=$('#cardDist');if(el)cardioDraft.distance=el.value;};
+  const rerender=()=>{grab();b.innerHTML=bodyFn();bindCardioSheet(bodyFn);};
+  b.querySelectorAll('[data-cardtype]').forEach(el=>el.addEventListener('click',()=>{cardioDraft.type=el.dataset.cardtype;rerender();}));
+  b.querySelectorAll('[data-cardint]').forEach(el=>el.addEventListener('click',()=>{cardioDraft.intensity=el.dataset.cardint;rerender();}));
+  b.querySelectorAll('[data-cardmin]').forEach(el=>el.addEventListener('click',()=>{cardioDraft.mins=Math.max(1,(+cardioDraft.mins||0)+ +el.dataset.cardmin);rerender();}));
+  bindClick('#btnCardioStart',startCardio);
+  bindClick('#btnCardioLog',logCardioManual);
+  bindClick('#btnCardioSave',saveCardioEdit);
+}
+// Save edits back to an existing cardio record (id/date kept; minutes → endedAt).
+function saveCardioEdit(){
+  const c=cardioDraft,s=state.sessions.find(x=>x.id===c.editId);if(!s)return;
+  const mins=Math.max(1,+c.mins||0);
+  s.cardio=cardioFromInput({type:c.type,intensity:c.intensity});
+  s.endedAt=s.date+mins*60000;delete s.endEstimated;s.updatedAt=Date.now();
+  if(!S.upsertSession(s,false)){toast('Storage is full — the edit didn’t save. Export a backup from Settings.');render();return;}
+  closeSheet();render();toast('Cardio updated');
 }
 // Delegated view actions: a click on any element carrying data-action="name" (or inside one) runs
 // ACTIONS[name](el, ev). One listener on #view covers every view and survives re-renders, so a new
@@ -3501,7 +3766,8 @@ const ACTIONS={
   staleDiscard:()=>discardActive(),
   profileGo:()=>{markSeen('profileIntro');openProfile();},
   profileSkip:()=>{markSeen('profileIntro');render();},
-  profileOpen:()=>openProfile()
+  profileOpen:()=>openProfile(),
+  cardioOpen:()=>{if(state.active){toast('Finish or discard your current session first');return;}openCardioSheet();}
 };
 function bind(){
   const v=$('#view');
@@ -3534,6 +3800,7 @@ function bind(){
   bindClick('#btnSaveEdit',finishEdit);
   bindClick('#btnDiscard',discardActive);
   const ll=$('#logList');if(ll)bindLog(ll);
+  if(todayScreen==='active'&&state.active&&state.active.kind==='cardio')bindCardioLive();else stopCardioClock();
   if(todayScreen==='active'&&state.active&&$('#elapsedLbl'))scheduleElapsed();else stopElapsed();
   // history
   const cal=v.querySelector('.cal-grid');

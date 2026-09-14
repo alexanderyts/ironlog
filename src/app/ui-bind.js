@@ -120,6 +120,60 @@ function commitFinish(s,endedAt,estimated){
 function discardActive(){showConfirm('Discard workout?','Nothing from this session will be saved.','Discard',()=>{
   stopRest();stopElapsed();const copy=state.active;state.active=null;S.persistActive();todayScreen='home';render();
   toast('Workout discarded',{label:'Undo',fn:()=>{S.setActive(copy);todayScreen='active';render();}});});}
+
+/* ---------------- cardio finish / manual save ---------------- */
+// Read the distance input (live view or sheet) into a cardio object, dropping a blank/invalid value.
+function cardioFromInput(base){
+  const c=Object.assign({},base);delete c.distance;delete c.unit;
+  const el=$('#cardDist');const d=el?parseFloat(el.value):(base&&base.distance);
+  if(isFinite(d)&&d>0){c.distance=d;c.unit=distanceUnit();}
+  return c;
+}
+// Finish a LIVE cardio session. Like a lift's Finish, a long-forgotten one offers an honest end time
+// rather than silently recording hours of "cardio" (the same 50-hour safeguard).
+function finishCardio(){
+  const s=state.active;if(!s)return;
+  s.cardio=cardioFromInput(s.cardio);
+  const now=Date.now(),sinceStart=Math.round((now-s.date)/60000);
+  if(sinceStart>=P.STALE_CONFIRM_MIN){
+    const hourIn=+s.date+60*60000;
+    openSheet('When did you finish?',`<div class="dim" style="font-size:13.5px;margin:-2px 2px 14px;line-height:1.5">This cardio session was started ${fmtDur(sinceStart)} ago. When did you actually finish?</div>
+      <button class="btn primary block" id="cEndNow" style="margin-bottom:9px">Just now · ${fmtClock(now)}</button>
+      <button class="btn ghost block" id="cEndHour" style="margin-bottom:9px">About an hour after I started · ≈${fmtClock(hourIn)}</button>
+      <button class="btn ghost block" id="cEndNone">Don't record a length</button>`);
+    bindClick('#cEndNow',()=>commitCardio(s,now,false));
+    bindClick('#cEndHour',()=>commitCardio(s,hourIn,true));
+    bindClick('#cEndNone',()=>commitCardio(s,null,false));
+    return;
+  }
+  commitCardio(s,now,false);
+}
+// Save a cardio session (live-finished or manually entered) with the same storage-full guard as a lift.
+function commitCardio(s,endedAt,estimated){
+  closeSheet();stopElapsed();stopCardioClock();
+  if(endedAt)s.endedAt=endedAt;else delete s.endedAt;
+  if(estimated&&endedAt)s.endEstimated=true;else delete s.endEstimated;
+  s.completed=true;s.updatedAt=Date.now();
+  if(!S.upsertSession(s,false)){
+    const i=state.sessions.findIndex(x=>x.id===s.id);if(i>=0)state.sessions.splice(i,1);
+    s.completed=false;delete s.endedAt;delete s.endEstimated;
+    if(state.active===s){toast('Storage is full — your cardio is safe but not saved yet. Export a backup from Settings, then finish again.');}
+    else toast('Storage is full — that cardio session didn’t save. Export a backup from Settings.');
+    render();return;
+  }
+  if(state.active===s){state.active=null;S.persistActive();}
+  const mins=P.sessionDuration(s);
+  todayScreen='home';setTab('history');
+  toast(`Logged ${cardioTypeLabel(s.cardio.type)}${mins!=null?' · '+fmtDur(mins):''}`);
+}
+// Manual entry from the sheet: build a completed cardio session from the picks + minutes, no live timer.
+function logCardioManual(){
+  const c=cardioDraft;const mins=Math.max(1,+c.mins||0);
+  const now=Date.now(),date=now-mins*60000;   // place it ending ~now; duration = mins
+  const cardio=cardioFromInput({type:c.type,intensity:c.intensity});
+  const s={id:S.uid(),schema:SCHEMA,date,updatedAt:now,completed:false,kind:'cardio',exercises:[],cardio};
+  commitCardio(s,now,false);
+}
 function startEdit(s){editSession=JSON.parse(JSON.stringify(s));editDirty=false;todayScreen='edit';setTab('today');}
 function finishEdit(){
   const s=editSession;
@@ -147,6 +201,7 @@ let elapsedT=null,notifiedStaleId=null;
 function stopElapsed(){clearTimeout(elapsedT);elapsedT=null;}
 function scheduleElapsed(){stopElapsed();elapsedT=setTimeout(()=>{
   if(!(state.active&&todayScreen==='active'))return;
+  if(state.active.kind==='cardio'){const el=$('#elapsedLbl');if(el)el.textContent=fmtElapsed(state.active.date);scheduleElapsed();return;}   // cardio has no sets/stale banner — just tick the label
   const stale=P.staleness(state.active).sinceLastSet>=P.STALE_AFTER_MIN;
   if(stale)maybeStaleNotify(state.active);
   // Crossing the threshold brings in the banner via a re-render (bind() re-arms this timer). Never
@@ -161,6 +216,51 @@ function maybeStaleNotify(s){
   if(notifiedStaleId===s.id||!document.hidden)return;
   try{if(state.settings.rest.notify&&'Notification'in window&&Notification.permission==='granted'){
     notifiedStaleId=s.id;new Notification('Still training?',{body:'Your workout is still open — finish it to log it.'});}}catch(e){}
+}
+// Cardio live clock — ticks the mm:ss readout every second (its own timer; the minute-level #elapsedLbl
+// is handled by scheduleElapsed). Stops itself the instant the cardio session ends or the view changes.
+let cardioClockT=null;
+function stopCardioClock(){clearInterval(cardioClockT);cardioClockT=null;}
+function startCardioClock(){stopCardioClock();cardioClockT=setInterval(()=>{
+  if(!(state.active&&state.active.kind==='cardio'&&todayScreen==='active')){stopCardioClock();return;}
+  const el=$('#cardioClock');if(el)el.textContent=fmtClockElapsed(state.active.date);else stopCardioClock();
+},1000);}
+function discardCardio(){showConfirm('Discard cardio?','This session won’t be saved.','Discard',()=>{
+  stopCardioClock();stopElapsed();const copy=state.active;state.active=null;S.persistActive();todayScreen='home';render();
+  toast('Cardio discarded',{label:'Undo',fn:()=>{S.setActive(copy);todayScreen='active';render();}});});}
+// Live cardio view wiring: Finish/Discard, the type/intensity chips (mutate the active record + re-render,
+// preserving any typed distance across the render), and the per-second clock.
+function bindCardioLive(){
+  const v=$('#view');
+  bindClick('#btnCardioFinish',finishCardio);bindClick('#btnCardioFinishBottom',finishCardio);
+  bindClick('#btnCardioDiscard',discardCardio);
+  const keepDist=()=>{state.active.cardio=cardioFromInput(state.active.cardio);};
+  v.querySelectorAll('[data-cardtype]').forEach(b=>b.addEventListener('click',()=>{keepDist();state.active.cardio.type=b.dataset.cardtype;S.persistActive();render();}));
+  v.querySelectorAll('[data-cardint]').forEach(b=>b.addEventListener('click',()=>{keepDist();state.active.cardio.intensity=b.dataset.cardint;S.persistActive();render();}));
+  startCardioClock();
+}
+// Manual/start sheet wiring: type/intensity chips + minutes stepper re-render the sheet; the distance
+// input is captured before each re-render so a typed value survives.
+function bindCardioSheet(bodyFn){
+  bodyFn=bodyFn||cardioSheetBody;
+  const b=$('#sheetBody');
+  const grab=()=>{const el=$('#cardDist');if(el)cardioDraft.distance=el.value;};
+  const rerender=()=>{grab();b.innerHTML=bodyFn();bindCardioSheet(bodyFn);};
+  b.querySelectorAll('[data-cardtype]').forEach(el=>el.addEventListener('click',()=>{cardioDraft.type=el.dataset.cardtype;rerender();}));
+  b.querySelectorAll('[data-cardint]').forEach(el=>el.addEventListener('click',()=>{cardioDraft.intensity=el.dataset.cardint;rerender();}));
+  b.querySelectorAll('[data-cardmin]').forEach(el=>el.addEventListener('click',()=>{cardioDraft.mins=Math.max(1,(+cardioDraft.mins||0)+ +el.dataset.cardmin);rerender();}));
+  bindClick('#btnCardioStart',startCardio);
+  bindClick('#btnCardioLog',logCardioManual);
+  bindClick('#btnCardioSave',saveCardioEdit);
+}
+// Save edits back to an existing cardio record (id/date kept; minutes → endedAt).
+function saveCardioEdit(){
+  const c=cardioDraft,s=state.sessions.find(x=>x.id===c.editId);if(!s)return;
+  const mins=Math.max(1,+c.mins||0);
+  s.cardio=cardioFromInput({type:c.type,intensity:c.intensity});
+  s.endedAt=s.date+mins*60000;delete s.endEstimated;s.updatedAt=Date.now();
+  if(!S.upsertSession(s,false)){toast('Storage is full — the edit didn’t save. Export a backup from Settings.');render();return;}
+  closeSheet();render();toast('Cardio updated');
 }
 // Delegated view actions: a click on any element carrying data-action="name" (or inside one) runs
 // ACTIONS[name](el, ev). One listener on #view covers every view and survives re-renders, so a new
@@ -183,7 +283,8 @@ const ACTIONS={
   staleDiscard:()=>discardActive(),
   profileGo:()=>{markSeen('profileIntro');openProfile();},
   profileSkip:()=>{markSeen('profileIntro');render();},
-  profileOpen:()=>openProfile()
+  profileOpen:()=>openProfile(),
+  cardioOpen:()=>{if(state.active){toast('Finish or discard your current session first');return;}openCardioSheet();}
 };
 function bind(){
   const v=$('#view');
@@ -216,6 +317,7 @@ function bind(){
   bindClick('#btnSaveEdit',finishEdit);
   bindClick('#btnDiscard',discardActive);
   const ll=$('#logList');if(ll)bindLog(ll);
+  if(todayScreen==='active'&&state.active&&state.active.kind==='cardio')bindCardioLive();else stopCardioClock();
   if(todayScreen==='active'&&state.active&&$('#elapsedLbl'))scheduleElapsed();else stopElapsed();
   // history
   const cal=v.querySelector('.cal-grid');

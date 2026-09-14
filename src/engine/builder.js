@@ -261,7 +261,7 @@ function sessionGroups(s){const g={};s.exercises.forEach(e=>{const x=EX[e.id];if
 // holiday) it still continues but is flagged `meta.lapsed` so the caller skips stall/rotation/volume.
 function findPlan(groups,sessions,now,meta){
   now=now||Date.now();const want=new Set(groups);
-  const completed=(sessions||[]).filter(s=>s.completed!==false&&s.exercises&&s.exercises.length);   // newest-first (upsert/history keep it sorted)
+  const completed=(sessions||[]).filter(s=>s.completed!==false&&s.exercises&&s.exercises.length&&s.kind!=='cardio');   // newest-first (upsert/history keep it sorted)
   const scan=maxGap=>{
     let ref=now;
     for(const s of completed){

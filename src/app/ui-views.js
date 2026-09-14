@@ -2,7 +2,7 @@
 // detail/notes/add sheets, Settings, and the iOS viewport code. (Shares scope — see ui-core.js.)
 /* ---------------- HISTORY ---------------- */
 function viewHistory(){
-  const done=completedSessions();
+  const done=completedAny();   // History + calendar show lifts AND cardio
   return `<div class="section">
     <div class="view-title" style="margin:0 2px 14px;font-size:22px">History</div>
     <div class="card" style="padding:16px">${calendar(done)}</div>
@@ -31,6 +31,11 @@ function sessionList(done){
   return cards+more;
 }
 function sessCard(s){
+  if(s.kind==='cardio'){const c=s.cardio||{},dur=P.sessionDuration(s);
+    const bits=[cardioIntLabel(c.intensity)];if(dur!=null)bits.push((s.endEstimated?'≈':'')+fmtDur(dur));if(c.distance!=null)bits.push(c.distance+' '+(c.unit||distanceUnit()));
+    return `<div class="card sess" data-sess="${s.id}">
+      <div class="sess-top"><div class="sess-date" style="display:flex;align-items:center;gap:8px"><span style="color:var(--accent)">${CARDIO_ICON}</span>${relDay(s.date)}</div><span class="pill">Cardio</span></div>
+      <div class="sess-meta"><span class="muted"><b>${cardioTypeLabel(c.type)}</b></span><span class="muted">${bits.join(' · ')}</span></div></div>`;}
   return `<div class="card sess" data-sess="${s.id}">
     <div class="sess-top"><div class="sess-date">${relDay(s.date)}${s.deload?' <span class="deload-badge">Deload</span>':''}</div><span class="pill accent">${s.exercises.length} exercise${s.exercises.length!==1?'s':''}</span></div>
     <div class="sess-meta"><span class="muted">Volume <b>${fmtVol(volOf(s))} ${U()}</b></span><span class="muted">Sets <b>${setsOf(s)}</b></span>${P.sessionDuration(s)!=null?`<span class="muted">${s.endEstimated?'≈':''}<b>${fmtDur(P.sessionDuration(s))}</b></span>`:''}</div>
@@ -63,20 +68,23 @@ function libRow(e,attr){
 
 /* ---------------- PROGRESS ---------------- */
 function viewProgress(){
-  const done=completedSessions(),now=Date.now();
-  const wk=done.filter(s=>s.date>=P.weekStart(now)),mo=done.filter(s=>s.date>=now-30*DAY);   // this week = calendar Mon–Sun
+  const done=completedSessions(),anyDone=completedAny(),now=Date.now();
+  const wk=done.filter(s=>s.date>=P.weekStart(now)),mo=done.filter(s=>s.date>=now-30*DAY);   // strength this week/month (for volume + muscle breakdown)
   const wkVol=wk.reduce((a,s)=>a+volOf(s),0);
+  // counts include cardio (activity), the strength math above does not
+  const wkAny=anyDone.filter(s=>s.date>=P.weekStart(now)).length,moAny=anyDone.filter(s=>s.date>=now-30*DAY).length;
   return `<div class="section">
     <div class="view-title" style="margin:0 2px 14px;font-size:22px">Progress</div>
     <div class="statgrid">
-      <div class="card stat"><div class="k">This week</div><div class="v mono">${wk.length}<small>workouts</small></div></div>
+      <div class="card stat"><div class="k">This week</div><div class="v mono">${wkAny}<small>session${wkAny!==1?'s':''}</small></div></div>
       <div class="card stat"><div class="k">${volLabel('Week volume')}</div><div class="v mono">${fmtVol(wkVol)}<small>${U()}</small></div></div>
-      <div class="card stat"><div class="k">30-day workouts</div><div class="v mono">${mo.length}</div></div>
-      <div class="card stat"><div class="k">Current streak</div><div class="v mono">${P.calcStreak(done,now)}<small>wk</small></div></div>
+      <div class="card stat"><div class="k">30-day sessions</div><div class="v mono">${moAny}</div></div>
+      <div class="card stat"><div class="k">Current streak</div><div class="v mono">${P.calcStreak(anyDone,now)}<small>wk</small></div></div>
     </div>
     ${coachCard(done)}
     ${recoveryCard()}
     ${timeCard()}
+    ${cardioCard()}
     <div class="eyebrow" style="margin:24px 2px 10px">Weekly volume · last 8 weeks</div>
     <div class="card" style="padding:14px 12px 10px">${volumeChart()}</div>
     <div class="eyebrow" style="margin:24px 2px 10px">Personal records</div>
@@ -187,6 +195,20 @@ function timeCard(){
         ${t.byGroup.map(([g,m])=>`<div style="margin-bottom:9px"><div class="row-between" style="margin-bottom:4px"><span style="font-weight:600;font-size:13px">${g}</span><span class="mono dim" style="font-size:12px">${fmtDur(m)}</span></div><div style="height:6px;background:var(--surface-2);border-radius:3px;overflow:hidden"><div style="height:100%;width:${Math.round(m/maxG*100)}%;background:var(--accent);border-radius:3px"></div></div></div>`).join('')}`:''}
     </div>`;
   return collapsible('time','Time · last 4 weeks',`avg ${fmtDur(t.avgDuration)}`,body);
+}
+// Cardio summary — its own section on Progress. Nothing here touches the lifting stats.
+function cardioCard(){
+  const c=A.cardioStats(state.sessions,Date.now());
+  if(!c.sessions)return '';
+  const maxT=Math.max(1,...c.byType.map(t=>t[1]));
+  const body=`<div class="card" style="padding:15px 16px">
+      <div class="row-between" style="font-size:13.5px;margin-bottom:${c.byType.length?'12':'0'}px">
+        <span class="muted">This week <b class="mono">${c.weekCount} session${c.weekCount!==1?'s':''}</b></span>
+        <span class="muted">${c.weekMin?`<b class="mono">${fmtDur(c.weekMin)}</b>`:''}</span></div>
+      ${c.byType.length?`<div class="eyebrow" style="margin:2px 0 9px">Minutes by type · last 4 weeks</div>
+        ${c.byType.map(([t,m])=>`<div style="margin-bottom:9px"><div class="row-between" style="margin-bottom:4px"><span style="font-weight:600;font-size:13px">${cardioTypeLabel(t)}</span><span class="mono dim" style="font-size:12px">${fmtDur(m)}</span></div><div style="height:6px;background:var(--surface-2);border-radius:3px;overflow:hidden"><div style="height:100%;width:${Math.round(m/maxT*100)}%;background:var(--accent);border-radius:3px"></div></div></div>`).join('')}`:''}
+    </div>`;
+  return collapsible('cardio','Cardio · last 4 weeks',`${c.winCount} session${c.winCount!==1?'s':''} · ${fmtDur(c.winMin)}`,body);
 }
 function muscleBreakdown(mo){
   const arr=A.muscleSetCounts(mo);if(!arr.length)return'';
@@ -503,6 +525,7 @@ function importData(ev){
 }
 function openSessionDetail(sid){
   const s=state.sessions.find(x=>x.id===sid);if(!s)return;
+  if(s.kind==='cardio'){openCardioDetail(s);return;}
   openSheet(fmtDate(s.date),`<div class="sess-meta" style="margin:0 0 16px"><span class="muted">Volume <b>${fmtVol(volOf(s))} ${U()}</b></span><span class="muted">Sets <b>${setsOf(s)}</b></span><span class="muted">${new Date(s.date).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})}</span></div>
     ${s.exercises.map(e=>{const ex=EX[e.id];return `<div class="card" style="padding:13px 15px;margin-bottom:10px">
       <div style="display:flex;gap:11px;align-items:center;margin-bottom:9px"><div class="ex-ic" style="width:36px;height:36px">${exIcon(ex?ex.group:'Core')}</div><div class="ex-name">${esc(ex?ex.name:e.name)}</div></div>
@@ -516,6 +539,25 @@ function openSessionDetail(sid){
   body.querySelector('[data-editsess]').addEventListener('click',()=>{closeSheet();startEdit(s);});
   body.querySelector('[data-routinefrom]').addEventListener('click',()=>{closeSheet();saveAsRoutine(s);});
   body.querySelector('[data-delsess]').addEventListener('click',()=>showConfirm('Delete session?','This removes the workout from your history.','Delete',()=>{
+    const copy=JSON.parse(JSON.stringify(s));S.deleteSession(s.id);closeSheet();render();
+    toast('Session deleted',{label:'Undo',fn:()=>{S.restoreSession(copy);render();toast('Restored');}});}));
+}
+// Cardio session detail — type/intensity/duration/distance, plus delete (edit lands in C5).
+function openCardioDetail(s){
+  const c=s.cardio||{},dur=P.sessionDuration(s);
+  openSheet(fmtDate(s.date),`
+    <div class="card" style="padding:16px;margin-bottom:14px">
+      <div style="display:flex;gap:12px;align-items:center;margin-bottom:12px"><div class="ex-ic" style="width:42px;height:42px">${CARDIO_ICON}</div>
+        <div><div class="ex-name" style="font-size:16px">${cardioTypeLabel(c.type)}</div><div class="ex-sub">${cardioIntLabel(c.intensity)} intensity</div></div></div>
+      <div class="sess-meta" style="margin:0">
+        ${dur!=null?`<span class="muted">${s.endEstimated?'≈':''}Duration <b>${fmtDur(dur)}</b></span>`:''}
+        ${c.distance!=null?`<span class="muted">Distance <b>${c.distance} ${c.unit||distanceUnit()}</b></span>`:''}
+        <span class="muted">${new Date(s.date).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})}</span></div></div>
+    <div class="dim" style="font-size:12px;margin:0 2px 14px">Cardio is tracked on its own — it never affects your lifting volume, PRs or the coach.</div>
+    <button class="btn ghost block" id="cardEdit" style="margin-bottom:12px">✎ Edit</button>
+    <button class="linkbtn dim" data-delsess="${s.id}" style="display:block;text-align:center;width:100%">Delete this session</button>`);
+  $('#cardEdit').addEventListener('click',()=>openCardioEdit(s));
+  $('#sheetBody').querySelector('[data-delsess]').addEventListener('click',()=>showConfirm('Delete session?','This removes the cardio session from your history.','Delete',()=>{
     const copy=JSON.parse(JSON.stringify(s));S.deleteSession(s.id);closeSheet();render();
     toast('Session deleted',{label:'Undo',fn:()=>{S.restoreSession(copy);render();toast('Restored');}});}));
 }

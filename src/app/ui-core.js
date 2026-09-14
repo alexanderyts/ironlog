@@ -32,7 +32,9 @@ const setsOf=s=>P.sessionSets(s);
 // A "Volume" stat label, tappable for a one-line explainer (the number itself, e.g. "12,480 lb", has
 // no context otherwise — see ROADMAP-v2 #1).
 function volLabel(label){return `<span data-vol-info style="cursor:pointer">${label||'Volume'} <span class="dim" style="font-weight:400">ⓘ</span></span>`;}
-const completedSessions=()=>state.sessions.filter(s=>s.completed!==false&&s.exercises.length);
+const completedSessions=()=>state.sessions.filter(s=>s.completed!==false&&s.exercises.length&&s.kind!=='cardio');   // strength only — feeds every lifting stat
+const completedCardio=()=>state.sessions.filter(s=>s.completed!==false&&s.kind==='cardio');
+const completedAny=()=>state.sessions.filter(s=>s.completed!==false&&(s.exercises.length||s.kind==='cardio'));   // strength ∪ cardio — for History, "this week" count, streak
 const ICON_BACK='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>';
 function demoURL(id){const e=EX[id];if(!e)return 'https://www.youtube.com/';return 'https://www.youtube.com/results?search_query='+encodeURIComponent('how to '+e.name+' proper form technique');}
 
@@ -74,6 +76,9 @@ let editSession=null,editDirty=false;
 // startSession() when a workout begins — so nothing leaks into the next visit.
 let draft={groups:new Set(),deload:false};
 function resetDraft(){draft.groups=new Set();draft.deload=false;}
+// Cardio-entry sheet's transient picks (type/intensity/distance/minutes). Rebuilt each time the sheet opens.
+let cardioDraft=null;
+const distanceUnit=()=>U()==='kg'?'km':'mi';   // cardio distance unit follows the weight unit
 let calMonth=new Date().getFullYear()*12+new Date().getMonth(),selDay=null,histShown=30;   // History renders 30 at a time (#13)
 let libQuery='',libGroup='All';
 function setTab(t){vlog('tab '+t);if(t!==currentTab)histShown=30;currentTab=t;document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===t));render();window.scrollTo(0,0);}
