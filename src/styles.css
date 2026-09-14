@@ -5,6 +5,13 @@
   --good:#12915c; --good-soft:#dcf1e7; --warn:#b8860b; --on-good:#ffffff;
   --shadow:0 1px 2px rgba(20,27,36,.06),0 6px 20px rgba(20,27,36,.06);
   --radius:16px; --radius-sm:11px;
+  /* Three font roles, defined once so every element uses the SAME family + fallback stack (no bare
+     "Archivo" dropping to Times before the web font loads). Display = headings & big numbers, Body =
+     everything else, Mono = weights/reps/times. Loaded weights (build.js): Archivo 600/700/800, Plex
+     Sans 400/500/600/700, Plex Mono 500/600/700 — so no synthetic (faux) bold anywhere. */
+  --font-display:"Archivo",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --font-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --font-mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
   --safe-b:env(safe-area-inset-bottom,0px);
   --tab-h:64px;
   /* Set by IL.ui (syncViewportDeficit) in standalone iOS only: how far the layout viewport falls
@@ -65,30 +72,30 @@ html{background:var(--bg)}
 body{
   background:var(--bg); color:var(--ink);
   padding-bottom:calc(var(--tab-h) + var(--safe-b));
+  font-family:var(--font-body);
+  -webkit-font-smoothing:antialiased; line-height:1.5; font-size:14px;
 }
-/* While the rest bar is up (~50px above the tab bar), reserve room so it never covers the last set
-   row or the Finish button (#8). :has is supported on the app's iOS Safari target; the base padding
-   above is the fallback where it isn't. No change to the tab bar / safe-area model. */
+/* While the rest bar is up (~50px above the tab bar), reserve extra room so it never covers the last
+   set row or the Finish button (#8). ONLY the padding changes here — nothing else. :has is supported
+   on the app's iOS Safari target; the base padding above is the fallback. No tab-bar/safe-area change. */
 body:has(.restbar.on){
   padding-bottom:calc(var(--tab-h) + var(--safe-b) + 64px);
-  font-family:"IBM Plex Sans",system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
-  -webkit-font-smoothing:antialiased; line-height:1.5; font-size:14px;
 }
 #view{width:100%}
 button{font-family:inherit; cursor:pointer; border:none; background:none; color:inherit}
 input,select{font-family:inherit}
-h1,h2,h3{margin:0; text-wrap:balance; font-family:"Archivo",system-ui,sans-serif}
-.mono{font-family:"IBM Plex Mono",ui-monospace,monospace; font-variant-numeric:tabular-nums}
+h1,h2,h3{margin:0; text-wrap:balance; font-family:var(--font-display)}
+.mono{font-family:var(--font-mono); font-variant-numeric:tabular-nums}
 .wrap{max-width:520px; margin:0 auto; padding:0 16px}
 
 /* Header */
 .app-head{position:sticky; top:0; z-index:20; background:color-mix(in srgb,var(--bg) 86%,transparent); backdrop-filter:blur(12px); border-bottom:1px solid var(--line)}
 .app-head .wrap{display:flex; align-items:center; justify-content:space-between; height:56px}
-.brand{font-family:"Archivo"; font-weight:800; font-size:20px; letter-spacing:-.02em; display:flex; align-items:center; gap:8px}
+.brand{font-family:var(--font-display); font-weight:800; font-size:20px; letter-spacing:-.02em; display:flex; align-items:center; gap:8px}
 .brand .spark{width:10px;height:22px;background:var(--accent);border-radius:2px;transform:skewX(-12deg)}
 .icon-btn{width:40px;height:40px;border-radius:11px;display:grid;place-items:center;color:var(--ink-2)}
 .icon-btn:active{background:var(--surface-2)}
-.view-title{font-family:"Archivo";font-weight:800;font-size:15px;letter-spacing:-.01em}
+.view-title{font-family:var(--font-display);font-weight:800;font-size:15px;letter-spacing:-.01em}
 
 /* Tab bar — see the safe-area model comment above body. Fixed to the viewport bottom, painted in
    the canvas colour (--bg, opaque) so the padding region and the un-paintable strip below it in the
@@ -159,7 +166,7 @@ html.standalone .tabbar{bottom:auto;top:calc(var(--screen-h,100vh) - var(--tab-h
 .set-hdr{padding:2px 4px 8px;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
 .set-hdr div:nth-child(2),.set-hdr div:nth-child(3){text-align:center}
 .set-row{margin-bottom:9px}
-.set-no{width:30px;height:44px;border-radius:10px;background:var(--surface-2);display:grid;place-items:center;font-weight:700;color:var(--ink-2);font-family:"IBM Plex Mono";font-size:14px;position:relative}
+.set-no{width:30px;height:44px;border-radius:10px;background:var(--surface-2);display:grid;place-items:center;font-weight:700;color:var(--ink-2);font-family:var(--font-mono);font-size:14px;position:relative}
 .set-no::after{content:"";position:absolute;inset:-4px -7px}
 .set-no:active{transform:scale(.94)}
 .set-row.done .set-no{background:var(--good-soft);color:var(--good)}
@@ -175,7 +182,7 @@ html.standalone .tabbar{bottom:auto;top:calc(var(--screen-h,100vh) - var(--tab-h
 .numwrap button:first-child::after{left:-3px}
 .numwrap button:last-child::after{right:-3px}
 .numwrap button:active{color:var(--accent);transform:scale(1.15)}
-.numwrap input{flex:1;min-width:0;text-align:center;border:none;background:none;height:100%;font-family:"IBM Plex Mono";font-size:16px;font-weight:600;color:var(--ink)}
+.numwrap input{flex:1;min-width:0;text-align:center;border:none;background:none;height:100%;font-family:var(--font-mono);font-size:16px;font-weight:600;color:var(--ink)}
 .numwrap input:focus{outline:none}
 .set-check{width:40px;height:44px;border-radius:11px;border:1.5px solid var(--line);display:grid;place-items:center;color:var(--ink-3);position:relative}
 .set-check::after{content:"";position:absolute;inset:-4px}
@@ -190,7 +197,7 @@ html.standalone .tabbar{bottom:auto;top:calc(var(--screen-h,100vh) - var(--tab-h
 /* suggestion banner */
 .sugg{display:flex;align-items:center;gap:10px;margin:0 12px 11px;padding:9px 12px;border-radius:11px;background:var(--accent-soft);font-size:13px;color:var(--accent);font-weight:500}
 .sugg.match{background:var(--surface-2);color:var(--ink-2)}
-.sugg .lastp{font-family:"IBM Plex Mono";font-weight:600}
+.sugg .lastp{font-family:var(--font-mono);font-weight:600}
 .sugg .apply{margin-left:auto;background:var(--accent);color:var(--accent-ink);height:30px;padding:0 12px;border-radius:9px;font-weight:600;font-size:12.5px;flex-shrink:0;position:relative}
 .sugg .apply::after{content:"";position:absolute;inset:-8px}   /* hit-slop → ≥44pt target (#27) */
 .modechip{margin:0 12px 10px;padding:4px 11px;border-radius:9px;background:var(--surface-2);color:var(--ink-2);font-size:12px;font-weight:600;display:inline-flex;align-items:center;gap:4px;position:relative}
@@ -205,7 +212,7 @@ html.standalone .tabbar{bottom:auto;top:calc(var(--screen-h,100vh) - var(--tab-h
 .statgrid{display:grid;grid-template-columns:1fr 1fr;gap:11px}
 .stat{padding:15px 16px}
 .stat .k{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
-.stat .v{font-family:"Archivo";font-weight:800;font-size:27px;letter-spacing:-.02em;margin-top:5px;line-height:1}
+.stat .v{font-family:var(--font-display);font-weight:800;font-size:27px;letter-spacing:-.02em;margin-top:5px;line-height:1}
 .stat .v small{font-size:14px;font-weight:600;color:var(--ink-3);margin-left:3px}
 
 /* bar chart */
@@ -230,12 +237,12 @@ html.standalone .tabbar{bottom:auto;top:calc(var(--screen-h,100vh) - var(--tab-h
 /* session cards / detail */
 .sess{padding:14px 16px;margin-bottom:11px}
 .sess-top{display:flex;align-items:center;justify-content:space-between;gap:10px}
-.sess-date{font-family:"Archivo";font-weight:700;font-size:15px}
+.sess-date{font-family:var(--font-display);font-weight:700;font-size:15px}
 .sess-meta{display:flex;gap:14px;margin-top:9px;font-size:12.5px;flex-wrap:wrap}
-.sess-meta b{font-family:"IBM Plex Mono";font-weight:600;color:var(--ink)}
+.sess-meta b{font-family:var(--font-mono);font-weight:600;color:var(--ink)}
 .sess-ex{margin-top:11px;display:flex;flex-direction:column;gap:3px}
 .sess-ex div{font-size:13px;color:var(--ink-2);display:flex;justify-content:space-between;gap:12px}
-.sess-ex .s{font-family:"IBM Plex Mono";color:var(--ink-3);flex-shrink:0}
+.sess-ex .s{font-family:var(--font-mono);color:var(--ink-3);flex-shrink:0}
 
 /* sheet / modal */
 .scrim{position:fixed;inset:0;bottom:calc(-1 * var(--deficit));z-index:50;background:rgba(10,14,20,.5);opacity:0;pointer-events:none;transition:opacity .2s}
@@ -285,7 +292,7 @@ html.standalone .tabbar{bottom:auto;top:calc(var(--screen-h,100vh) - var(--tab-h
 .restbar .inner{max-width:520px;margin:0 auto;padding:0 12px}
 .restbar .rcard{background:var(--ink);color:var(--bg);border-radius:14px;padding:9px 12px;display:flex;align-items:center;gap:11px;box-shadow:0 6px 24px rgba(0,0,0,.25)}
 .restbar.done .rcard{background:var(--good);color:#fff}
-.rest-time{font-family:"IBM Plex Mono";font-weight:600;font-size:19px;min-width:52px}
+.rest-time{font-family:var(--font-mono);font-weight:600;font-size:19px;min-width:52px}
 .rest-lbl{font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;opacity:.7;margin-bottom:1px}
 .rest-prog{flex:1;height:6px;background:rgba(255,255,255,.22);border-radius:3px;overflow:hidden}
 .rest-prog span{display:block;height:100%;width:0;background:var(--accent);border-radius:3px;transition:width .3s linear}

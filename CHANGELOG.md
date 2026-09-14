@@ -2,6 +2,12 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.45.2 — 2026-09-14 · Fix the font properly (it was falling back to Times)
+Found the real cause of the "off" font. In v0.45 a stray brace ended the page's base style one line too early, which knocked the body typeface, text size and smoothing out of effect **except while a rest timer was on screen** — so almost everywhere, text was silently rendering in the browser's default serif (Times) at the wrong size. My earlier tweaks couldn't fix it because they weren't the problem.
+- **Body text is IBM Plex Sans again, everywhere, at the right size.** Headings stay Archivo; weights and reps stay IBM Plex Mono.
+- **One consistent font system.** All three roles (headings, body, numbers) are now defined once and used everywhere with the same fallback list, so nothing can drop to a stray typeface again. The bold weights the app actually uses are now loaded too, so bold text is real bold instead of a smeared synthetic bold.
+- Checked in the browser: body, labels and headings all resolve to the right typeface.
+
 ## v0.45.1 — 2026-09-14 · You pick the workout; the app just remembers
 Two changes from your feedback on v0.45.
 - **Reverted the type changes.** The muted-text colour and the slightly larger labels from the last update are back to how they were. (One thing kept: the green Finish button uses dark text in dark mode — it was genuinely too faint to read before, and it's invisible in light mode.)

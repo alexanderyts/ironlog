@@ -14,7 +14,7 @@ const write=(p,d)=>{const f=path.join(root,p);fs.mkdirSync(path.dirname(f),{recu
 // functions hung on a namespace, no behaviour change.
 const UI=['src/app/ui-core.js','src/app/ui-today.js','src/app/ui-views.js','src/app/ui-bind.js'];
 const MODULES=['src/data/exercises.js','src/engine/progression.js','src/engine/search.js','src/engine/builder.js','src/engine/analysis.js','src/engine/sync.js','src/app/dropbox.js','src/app/store.js',UI];
-const FONTS='<link rel="preconnect" href="https://fonts.googleapis.com">\n<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>\n<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">';
+const FONTS='<link rel="preconnect" href="https://fonts.googleapis.com">\n<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>\n<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=IBM+Plex+Mono:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">';
 
 function bundle(target,demo){
   const head=`/* Ironlog v${pkg.version} · ${target}${demo?' demo':''} build */\nvar IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:${JSON.stringify(target)},DEMO:${!!demo},VERSION:${JSON.stringify(pkg.version)},DROPBOX_APP_KEY:${JSON.stringify(cfg.DROPBOX_APP_KEY||'')}};\n`;
