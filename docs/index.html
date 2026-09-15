@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-mzL5ELuKrikxl0JmaJMUXyDYtKQ6i3cyTYNt/n6XcFE=' 'sha256-WPBob/luB2k1aalTWXpi6zk3SrIbj8GlZV7AlFdG7oA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-2WQP4/a1e0cmKdpgErv457CA0uwipjDAK5lRUKERQYo=' 'sha256-WPBob/luB2k1aalTWXpi6zk3SrIbj8GlZV7AlFdG7oA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Ironlog</title>
@@ -132,6 +132,8 @@ h1,h2,h3{margin:0; text-wrap:balance; font-family:var(--font-display)}
    after WebKit's launch-time viewport correction, with no JS in the loop, so nothing can flicker
    on the frame the correction lands. (--deficit still drives the sheet/scrim/rest bar/toast.) */
 html.standalone .tabbar{bottom:auto;top:calc(var(--screen-h,100vh) - var(--tab-h) - var(--safe-b) - 1px)}
+/* On-screen keyboard up (set by syncKeyboard): hide the fixed tab bar so it can't float over the keyboard. */
+html.kb-open .tabbar{display:none}
 .tabbar .row{max-width:520px;margin:0 auto;display:grid;grid-template-columns:repeat(4,1fr)}
 .tab{height:var(--tab-h);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:var(--ink-3);font-size:11px;font-weight:600;letter-spacing:.01em}
 .tab svg{width:23px;height:23px}
@@ -410,8 +412,8 @@ html.standalone .tabbar{bottom:auto;top:calc(var(--screen-h,100vh) - var(--tab-h
 </div>
 
 <script>
-/* Ironlog v0.48.0 · site build */
-var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.48.0",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
+/* Ironlog v0.48.1 · site build */
+var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.48.1",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
 
 /* ===== src/data/exercises.js ===== */
 (function(){'use strict';
@@ -2473,7 +2475,7 @@ function showConfirm(title,msg,okLabel,cb,kind){
   _confirmCb=cb;$('#cdialog').classList.add('on');$('#cscrim').classList.add('on');
 }
 function closeConfirm(){$('#cdialog').classList.remove('on');$('#cscrim').classList.remove('on');_confirmCb=null;}
-function openSheet(title,body){$('#sheetTitle').textContent=title;$('#sheetBody').innerHTML=body;$('#sheet').classList.add('on');$('#scrim').classList.add('on');}
+function openSheet(title,body){$('#sheetTitle').textContent=title;const b=$('#sheetBody');b.innerHTML=body;b.scrollTop=0;$('#sheet').classList.add('on');$('#scrim').classList.add('on');}   // scrollTop=0: a reused sheet must open at its top (search bar), not wherever the last one was scrolled
 function closeSheet(){$('#sheet').classList.remove('on');$('#scrim').classList.remove('on');}
 function applyTheme(){const t=state.settings.theme;if(t==='system')document.documentElement.removeAttribute('data-theme');else document.documentElement.setAttribute('data-theme',t);}
 function updateCloud(){
@@ -3234,7 +3236,8 @@ function saveAsRoutine(s){
   const guess=[...new Set(ids.map(id=>EX[id]&&EX[id].group).filter(Boolean))].slice(0,2).join(' & ')||'My routine';
   openNameSheet('Save routine',guess,name=>{S.saveRoutine({name,exIds:ids});toast('Routine saved');});
 }
-function fmtSec(s){return Math.floor(s/60)+':'+String(s%60).padStart(2,'0');}
+// (fmtSec lives in ui-core — it rounds first; a duplicate here without rounding was overriding it and
+//  printing medians like "2:40.813813". Removed so every rest time reads as clean m:ss.)
 function cloudSection(){
   const n=state.cloudName;const last=state.lastSync?new Date(state.lastSync).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}):'';
   if(CFG.DEMO)return `<div class="card" style="padding:13px 15px;background:var(--surface-2);border:none"><div class="cloud" style="font-size:13px"><span class="dot"></span>This is a demo with sample data. Anything you change stays in this browser only.</div>
@@ -3301,11 +3304,21 @@ function syncViewportDeficit(){
   document.documentElement.style.setProperty('--deficit',d+'px');
   vlog('deficit '+d+' inner '+innerHeight);
 }
+// Is the on-screen keyboard up? On iOS the layout viewport doesn't shrink for the keyboard, so a
+// fixed-bottom bar floats over it (and can get shoved to the top of the keyboard on scroll). When the
+// visual viewport is much shorter than the window, hide the tab bar — CSS .kb-open .tabbar{display:none}.
+function syncKeyboard(){
+  const vv=window.visualViewport;if(!vv)return;
+  const kb=window.innerHeight-vv.height-vv.offsetTop;
+  document.documentElement.classList.toggle('kb-open',kb>120);
+}
 function watchViewport(){
   syncViewportDeficit();
   ['resize','orientationchange','pageshow','focus','scroll'].forEach(ev=>addEventListener(ev,syncViewportDeficit,{passive:true}));
   document.addEventListener('visibilitychange',syncViewportDeficit);
-  if(window.visualViewport)visualViewport.addEventListener('resize',syncViewportDeficit);
+  if(window.visualViewport){visualViewport.addEventListener('resize',syncViewportDeficit);
+    visualViewport.addEventListener('resize',syncKeyboard);visualViewport.addEventListener('scroll',syncKeyboard);}
+  addEventListener('focusout',()=>setTimeout(syncKeyboard,50),{passive:true});   // catch the keyboard dismissing
   // WebKit's correction fires no event we can hook, so check every frame while the page is visible
   // (one subtraction per frame — free). A frame-level check means the bar can never be visibly
   // stale for longer than the frame the correction lands in.

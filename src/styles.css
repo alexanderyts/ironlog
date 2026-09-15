@@ -110,6 +110,8 @@ h1,h2,h3{margin:0; text-wrap:balance; font-family:var(--font-display)}
    after WebKit's launch-time viewport correction, with no JS in the loop, so nothing can flicker
    on the frame the correction lands. (--deficit still drives the sheet/scrim/rest bar/toast.) */
 html.standalone .tabbar{bottom:auto;top:calc(var(--screen-h,100vh) - var(--tab-h) - var(--safe-b) - 1px)}
+/* On-screen keyboard up (set by syncKeyboard): hide the fixed tab bar so it can't float over the keyboard. */
+html.kb-open .tabbar{display:none}
 .tabbar .row{max-width:520px;margin:0 auto;display:grid;grid-template-columns:repeat(4,1fr)}
 .tab{height:var(--tab-h);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:var(--ink-3);font-size:11px;font-weight:600;letter-spacing:.01em}
 .tab svg{width:23px;height:23px}

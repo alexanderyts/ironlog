@@ -53,7 +53,7 @@ function showConfirm(title,msg,okLabel,cb,kind){
   _confirmCb=cb;$('#cdialog').classList.add('on');$('#cscrim').classList.add('on');
 }
 function closeConfirm(){$('#cdialog').classList.remove('on');$('#cscrim').classList.remove('on');_confirmCb=null;}
-function openSheet(title,body){$('#sheetTitle').textContent=title;$('#sheetBody').innerHTML=body;$('#sheet').classList.add('on');$('#scrim').classList.add('on');}
+function openSheet(title,body){$('#sheetTitle').textContent=title;const b=$('#sheetBody');b.innerHTML=body;b.scrollTop=0;$('#sheet').classList.add('on');$('#scrim').classList.add('on');}   // scrollTop=0: a reused sheet must open at its top (search bar), not wherever the last one was scrolled
 function closeSheet(){$('#sheet').classList.remove('on');$('#scrim').classList.remove('on');}
 function applyTheme(){const t=state.settings.theme;if(t==='system')document.documentElement.removeAttribute('data-theme');else document.documentElement.setAttribute('data-theme',t);}
 function updateCloud(){

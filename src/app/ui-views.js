@@ -305,7 +305,8 @@ function saveAsRoutine(s){
   const guess=[...new Set(ids.map(id=>EX[id]&&EX[id].group).filter(Boolean))].slice(0,2).join(' & ')||'My routine';
   openNameSheet('Save routine',guess,name=>{S.saveRoutine({name,exIds:ids});toast('Routine saved');});
 }
-function fmtSec(s){return Math.floor(s/60)+':'+String(s%60).padStart(2,'0');}
+// (fmtSec lives in ui-core — it rounds first; a duplicate here without rounding was overriding it and
+//  printing medians like "2:40.813813". Removed so every rest time reads as clean m:ss.)
 function cloudSection(){
   const n=state.cloudName;const last=state.lastSync?new Date(state.lastSync).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}):'';
   if(CFG.DEMO)return `<div class="card" style="padding:13px 15px;background:var(--surface-2);border:none"><div class="cloud" style="font-size:13px"><span class="dot"></span>This is a demo with sample data. Anything you change stays in this browser only.</div>
@@ -372,11 +373,21 @@ function syncViewportDeficit(){
   document.documentElement.style.setProperty('--deficit',d+'px');
   vlog('deficit '+d+' inner '+innerHeight);
 }
+// Is the on-screen keyboard up? On iOS the layout viewport doesn't shrink for the keyboard, so a
+// fixed-bottom bar floats over it (and can get shoved to the top of the keyboard on scroll). When the
+// visual viewport is much shorter than the window, hide the tab bar — CSS .kb-open .tabbar{display:none}.
+function syncKeyboard(){
+  const vv=window.visualViewport;if(!vv)return;
+  const kb=window.innerHeight-vv.height-vv.offsetTop;
+  document.documentElement.classList.toggle('kb-open',kb>120);
+}
 function watchViewport(){
   syncViewportDeficit();
   ['resize','orientationchange','pageshow','focus','scroll'].forEach(ev=>addEventListener(ev,syncViewportDeficit,{passive:true}));
   document.addEventListener('visibilitychange',syncViewportDeficit);
-  if(window.visualViewport)visualViewport.addEventListener('resize',syncViewportDeficit);
+  if(window.visualViewport){visualViewport.addEventListener('resize',syncViewportDeficit);
+    visualViewport.addEventListener('resize',syncKeyboard);visualViewport.addEventListener('scroll',syncKeyboard);}
+  addEventListener('focusout',()=>setTimeout(syncKeyboard,50),{passive:true});   // catch the keyboard dismissing
   // WebKit's correction fires no event we can hook, so check every frame while the page is visible
   // (one subtraction per frame — free). A frame-level check means the bar can never be visibly
   // stale for longer than the frame the correction lands in.

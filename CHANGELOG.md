@@ -2,6 +2,13 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.48.1 — 2026-09-15 · Editing & keyboard cleanups
+Three fixes to how things behave while you're logging.
+- **Sheets open at the top.** Tapping "Add exercise" (or any picker) now opens with the search bar in view, instead of somewhere in the middle of the list where the last sheet left off.
+- **The tab bar gets out of the keyboard's way.** With the keyboard up, the bottom tab bar no longer floats over it or gets shoved to the top of the keyboard when you scroll — it hides until the keyboard closes.
+- **Clean rest times on the Time card.** The "rest between sets" numbers were showing long decimals (like `2:40.813813`). They now read as plain minutes and seconds (`2:41`).
+- Not verified on-device (the keyboard behaviour especially — tested in a desktop browser at phone width; 211 tests green).
+
 ## v0.48.0 — 2026-09-15 · Honest numbers for the odd lifts
 Fixes for exercises that don't fit "weight × reps", and for a way the rest timing could be thrown off — all from a real workout.
 - **Assisted Dip is now its own exercise.** If you do dips on an assist machine, log it as **Assisted Dip** (search "assisted dip"): the number you enter is the *assistance*, so less weight is harder, the next-time suggestion asks for **less assist** as you get stronger, and it never shows a bogus 1RM. (Before, an assisted dip logged on the wrong exercise counted the assist as your load and pushed you the wrong way.)

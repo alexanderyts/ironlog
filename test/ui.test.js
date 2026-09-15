@@ -454,3 +454,21 @@ test('D5/D7/D8: Home continues the plan in one tap; empty selection disables Bui
     assert.equal(h.$$('[data-sess]').length,45,'Show more reveals the rest');
   }finally{h.teardown();}
 });
+
+test('UI: rest times on the Time card render as clean m:ss, never with decimals',()=>{
+  const h=launch();
+  try{
+    const now=Date.now(),day=86400000;
+    // one timed session; a compound with 4 sets → gaps 100s / 160.813s / 200s → median 160.813s.
+    // The old duplicate fmtSec printed "2:40.813813"; it must now read "2:41".
+    const t0=now-3*day;
+    const at=[t0+60000, t0+160000, t0+320813, t0+520813];   // gaps: 100s, 160.813s, 200s
+    h.state.sessions=[{id:'tt',schema:1,date:t0,updatedAt:now,completed:true,endedAt:t0+600000,
+      exercises:[{id:'barbell-bench-press',name:'Bench',sets:at.map(a=>({w:135,r:5,done:true,at:a}))}]}];
+    h.click('.tab[data-tab="progress"]');
+    const view=h.$('#view').textContent;
+    assert.match(view,/compounds ~\d+:\d\d\b/,'rest shows m:ss');
+    assert.doesNotMatch(view,/:\d\d\.\d/,'no decimal seconds anywhere on the tab');
+    assert.match(view,/2:41/,'160.813s rounds to 2:41');
+  }finally{h.teardown();}
+});
