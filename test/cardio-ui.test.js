@@ -118,3 +118,20 @@ test('C5: editing a saved cardio session updates its type and duration',()=>{
     assert.equal(h.IL.prog.sessionDuration(s),30,'duration updated to 30 min');
   }finally{h.teardown();}
 });
+
+test('C2b: manual cardio can be back-dated to a past day',()=>{
+  const h=launch();
+  try{
+    h.click('[data-action="cardioOpen"]');
+    // pick a date three days ago
+    const d=new Date(Date.now()-3*86400000);const iso=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+    const w=h.$('#cardWhen');assert.ok(w,'the sheet has a When date field');
+    w.value=iso;
+    h.click('#btnCardioLog');
+    const c=h.state.sessions.filter(s=>s.kind==='cardio')[0];
+    assert.ok(c,'a cardio session was logged');
+    const logged=new Date(c.date);
+    assert.equal(logged.getFullYear()+'-'+String(logged.getMonth()+1).padStart(2,'0')+'-'+String(logged.getDate()).padStart(2,'0'),iso,'session lands on the chosen day');
+    assert.ok(c.endedAt-c.date>0,'still has a positive duration');
+  }finally{h.teardown();}
+});

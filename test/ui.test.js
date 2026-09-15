@@ -106,14 +106,18 @@ test('UI: T1 — checking a set stamps it, unchecking clears it, finishing recor
     assert.equal(h.text('#elapsedLbl'),'just started');
     h.type(h.$$('input[data-f="w"]')[0],'135');               // weight before the tick (#19)
     h.click(h.$$('[data-check]')[0]);
-    assert.ok(active.exercises[0].sets[0].at>=start,'checking stamps `at`');
+    const stamp=active.exercises[0].sets[0].at;
+    assert.ok(stamp>=start,'checking stamps `at`');
     h.click(h.$$('[data-check]')[0]);
-    assert.ok(!('at'in active.exercises[0].sets[0]),'unchecking clears `at`');
-    h.click(h.$$('[data-check]')[0]);               // re-check, then finish
+    // A mis-tap corrected seconds later keeps its TRUE time — the stamp survives un-tick (so re-ticking
+    // doesn't jump it to "now" and poison the rest medians). See ui-bind data-check handler.
+    assert.equal(active.exercises[0].sets[0].at,stamp,'un-ticking keeps the original stamp');
+    h.click(h.$$('[data-check]')[0]);               // re-check
+    assert.equal(active.exercises[0].sets[0].at,stamp,'re-ticking keeps the original stamp, not a fresh one');
     h.click('#btnFinish');
     const saved=h.state.sessions.filter(s=>s.id===active.id)[0];
     assert.ok('endedAt'in saved && saved.endedAt>=start,'finish records endedAt');
-    assert.ok(saved.exercises[0].sets[0].at,'the saved set keeps its timestamp');
+    assert.equal(saved.exercises[0].sets[0].at,stamp,'the saved set keeps its timestamp');
   }finally{h.teardown();}
 });
 

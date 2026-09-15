@@ -90,8 +90,9 @@ function cardioFields(c,ctx){
 // mm:ss elapsed for the live clock (updated by the second in bindCardio).
 function fmtClockElapsed(startTs){const t=Math.max(0,Math.floor((Date.now()-startTs)/1000));const m=Math.floor(t/60),ss=t%60;return m+':'+(ss<10?'0':'')+ss;}
 // The manual / start sheet: pick type+intensity+distance, then either Start the timer or log minutes.
+function todayISO(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 function openCardioSheet(){
-  cardioDraft={type:lastCardioType(),intensity:'easy',distance:'',mins:30};
+  cardioDraft={type:lastCardioType(),intensity:'easy',distance:'',mins:30,when:todayISO()};
   openSheet('Cardio',cardioSheetBody());
   bindCardioSheet();
 }
@@ -104,6 +105,9 @@ function cardioSheetBody(){
     <div class="settingrow" style="border:none;padding:6px 2px">
       <div><div style="font-weight:600">Minutes</div><div class="dim" style="font-size:12.5px">How long you went</div></div>
       <div class="stepper"><button data-cardmin="-5">−</button><button class="val mono" id="cardMinVal">${c.mins}</button><button data-cardmin="5">＋</button></div></div>
+    <div class="settingrow" style="border:none;padding:6px 2px">
+      <div><div style="font-weight:600">When</div><div class="dim" style="font-size:12.5px">Defaults to today — back-date a walk you forgot</div></div>
+      <input type="date" id="cardWhen" value="${esc(c.when||todayISO())}" max="${todayISO()}" class="field" style="width:auto;height:40px;padding:0 12px"></div>
     <button class="btn good block" id="btnCardioLog" style="margin-top:12px">Log it</button>`;
 }
 // Edit a saved cardio session — same fields, prefilled, plus its minutes; saves back to the record.
@@ -361,13 +365,13 @@ function logExercise(s,e,ei,mode){
     <div class="log-ex-head">
       <div class="ex-ic">${exIcon(ex?ex.group:'Core')}</div>
       <button data-openex="${e.id}" style="flex:1;min-width:0;text-align:left;background:none;padding:0"><div class="ex-name">${esc(e.name)} <span class="dim" style="font-weight:400;font-size:12px">ⓘ</span></div>
-        <div class="ex-sub">${ex?ex.muscles.join(' · '):''} · target ${ex?ex.rr[0]+'–'+ex.rr[1]:'8–12'} reps</div></button>
+        <div class="ex-sub">${ex?ex.muscles.join(' · '):''} · target ${ex?ex.rr[0]+'–'+ex.rr[1]:'8–12'} ${D.TIME_METRIC.has(e.id)?'sec':'reps'}</div></button>
       <button class="sheet-x" data-delex="${ei}" aria-label="Remove exercise">✕</button>
     </div>
     <button class="modechip" data-mode="${ei}" aria-label="Change equipment">${esc(MODES[emode]?MODES[emode].label:emode)} ▾</button>
     ${prLine}${sugg}${noteLine}
     <div class="setgrid">
-      <div class="set-hdr"><div>Set</div><div>${whdr}</div><div>Reps</div><div></div></div>
+      <div class="set-hdr"><div>Set</div><div>${whdr}</div><div>${D.TIME_METRIC.has(e.id)?'Sec':'Reps'}</div><div></div></div>
       ${e.sets.map((st,si)=>setRow(st,ei,si)).join('')}
     </div>
     <div class="set-actions">

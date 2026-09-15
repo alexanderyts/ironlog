@@ -115,7 +115,7 @@ const RAW=[
  // Triceps
  ["cable-overhead-extension","Cable Overhead Triceps Extension","Triceps",["Triceps"],"Cable",I,[10,15],"Facing away from the stack, extend overhead from a deep long-head stretch.",""],
  ["single-arm-pushdown","Single-Arm Pushdown","Triceps",["Triceps"],"Cable",I,[12,15],"Push one handle down to lockout with the elbow pinned, control up.",""],
- ["machine-dip","Machine Dip","Triceps",["Triceps","Chest"],"Machine",C,[8,12],"Press the handles down to lockout staying upright to bias the triceps.","assisted dip"],
+ ["machine-dip","Machine Dip","Triceps",["Triceps","Chest"],"Machine",C,[8,12],"Press the handles down to lockout staying upright to bias the triceps.","dip machine,seated dip,tricep dip machine"],
  // Quads
  ["sissy-squat","Sissy Squat","Quads",["Quads"],"Bodyweight",C,[8,15],"Rise onto the toes and lean back, bending the knees to stretch the quads, then drive up.",""],
  ["reverse-lunge","Reverse Lunge","Quads",["Quads","Glutes"],"Dumbbell",C,[8,12],"Step back into a lunge and drive through the front heel to stand; alternate legs.",""],
@@ -134,6 +134,7 @@ const RAW=[
  // ── Commercial-gym selectorized machines (the Planet Fitness floor): every major movement has a
  //    pin-loaded option so a machine-only gym can still build a complete session ──────────────────
  ["assisted-pull-up","Assisted Pull-Up","Back",["Back","Biceps"],"Machine",C,[8,12],"Kneel on the assist pad and pull the chin over the handles; less assist weight = harder.","assisted pullup,pull-up machine,pullup machine,assisted chin"],
+ ["assisted-dip","Assisted Dip","Triceps",["Triceps","Chest"],"Machine",C,[8,12],"Kneel or stand on the assist pad and press to lockout; the number you log is the ASSISTANCE, so less weight = harder.","assisted dip,assisted dips,dip machine,assisted tricep dip,gravitron dip"],
  ["machine-lateral-raise","Machine Lateral Raise","Shoulders",["Shoulders"],"Machine",I,[12,20],"Arms against the pads, raise out to the sides to shoulder height, control down.","lateral raise machine,side delt machine,shoulder machine"],
  ["machine-bicep-curl","Machine Bicep Curl","Biceps",["Biceps"],"Machine",I,[10,15],"Upper arms on the pad, curl the handles up and squeeze, lower fully.","bicep curl machine,arm curl machine,curl machine"],
  ["machine-tricep-extension","Machine Triceps Extension","Triceps",["Triceps"],"Machine",I,[10,15],"Upper arms on the pad, press the handles down to lockout, control back.","tricep extension machine,arm extension machine,triceps machine"],
@@ -173,7 +174,7 @@ const META={
  'leg-press-calf-raise':['gastro','iso',2],'single-leg-calf-raise':['gastro','iso',3],
  'pallof-press':['rotation','iso',2],'reverse-crunch':['flexion','iso',2],
  // commercial-gym machines
- 'assisted-pull-up':['lats','vpull',2],'machine-lateral-raise':['side','iso',2],'machine-bicep-curl':['overall','iso',2],'machine-tricep-extension':['lateral','iso',2],
+ 'assisted-pull-up':['lats','vpull',2],'assisted-dip':['lateral','hpush',2],'machine-lateral-raise':['side','iso',2],'machine-bicep-curl':['overall','iso',2],'machine-tricep-extension':['lateral','iso',2],
  'hip-adduction':['overall','iso',3],'glute-kickback-machine':['overall','iso',2],'machine-hip-thrust':['overall','hinge',2],
  'ab-crunch-machine':['flexion','iso',2],'torso-rotation-machine':['rotation','iso',3],'machine-back-extension':['overall','hinge',2],'cable-wrist-curl':['flexor','iso',2]
 };
@@ -185,7 +186,12 @@ const LONG_LENGTH=new Set(['incline-dumbbell-fly','dumbbell-pullover','cable-pul
 const UNILATERAL=new Set(['single-arm-cable-row','concentration-curl','single-arm-pushdown','reverse-lunge','single-leg-curl','single-leg-hip-thrust','single-leg-calf-raise','bulgarian-split-squat','walking-lunge','step-up','dumbbell-row','cable-kickback']);
 // Assist machines where LESS weight is harder: progression REDUCES the load and a PR is the lowest
 // assist, not the highest (#16). The engine flips the increment and the PR ranking for these ids.
-const INVERTED_LOAD=new Set(['assisted-pull-up']);
+const INVERTED_LOAD=new Set(['assisted-pull-up','assisted-dip']);
+// Time-held lifts: the "reps" field is SECONDS, not reps. So they carry no weight×reps volume and no
+// 1RM estimate — a plank or a loaded carry is progressed by holding longer or adding load, and the
+// engine shows load × seconds. They still count as SETS for balance/frequency/coach. (farmers-carry
+// and plank already declare seconds in their target range and instructions; this makes the maths agree.)
+const TIME_METRIC=new Set(['plank','farmers-carry']);
 
 const EXERCISES=RAW.map(r=>{const m=META[r[0]]||['overall','iso',3];
   return {id:r[0],name:r[1],group:r[2],muscles:r[3],equip:r[4],type:r[5],rr:r[6],instr:r[7],alias:r[8],reg:m[0],pat:m[1],tier:m[2]||3};});
@@ -259,4 +265,4 @@ function patLabel(p){return {hpush:'horizontal press',vpush:'overhead press',hpu
 function exampleFor(group,reg){const e=EXERCISES.find(x=>x.group===group&&x.reg===reg&&x.type===C)||EXERCISES.find(x=>x.group===group&&x.reg===reg);return e?e.name:null;}
 function hashId(s){let h=0;for(let i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))>>>0;return h;}
 
-IL.data={C,I,EXERCISES,EX,GROUPS,PRESETS,META,REGIONS,IDEAL_PATS,PAT_RANK,EQUIP_LOAD,MODES,MODE_ORDER,EQUIP_MODE,LONG_LENGTH,UNILATERAL,INVERTED_LOAD,PUSH_PATS,PULL_PATS,LOWER_GROUPS,BW_FACTOR,GROUP_ICON,exIcon,regLabel,patLabel,exampleFor,hashId};
+IL.data={C,I,EXERCISES,EX,GROUPS,PRESETS,META,REGIONS,IDEAL_PATS,PAT_RANK,EQUIP_LOAD,MODES,MODE_ORDER,EQUIP_MODE,LONG_LENGTH,UNILATERAL,INVERTED_LOAD,TIME_METRIC,PUSH_PATS,PULL_PATS,LOWER_GROUPS,BW_FACTOR,GROUP_ICON,exIcon,regLabel,patLabel,exampleFor,hashId};

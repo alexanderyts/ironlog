@@ -2,7 +2,7 @@
 // No DOM, no app state: everything takes the sessions array it should look at.
 var IL=globalThis.IL||(globalThis.IL={});
 if(typeof require==='function'&&!IL.data)require('../data/exercises.js');
-const {EX,BW_FACTOR,EQUIP_MODE,MODES,INVERTED_LOAD}=IL.data;
+const {EX,BW_FACTOR,EQUIP_MODE,MODES,INVERTED_LOAD,TIME_METRIC}=IL.data;
 
 // The modality a logged exercise instance was performed with: its explicit `mode`, else derived
 // from the exercise's fixed equipment. Stable for any instance, so mode-less history (and every
@@ -17,7 +17,7 @@ function e1rm(w,r){return r<=1?w:Math.round(w*(1+r/30));}
 function isWorking(st){return st.done!==false&&!st.warm;}
 // Load moved in a set: entered weight plus a share of bodyweight on bodyweight moves
 function setLoad(exId,w,bw){const f=BW_FACTOR[exId]||0;return (+w||0)+(bw&&f?Math.round(bw*f):0);}
-function sessionVolume(s,bw){let v=0;s.exercises.forEach(e=>e.sets.forEach(st=>{if(isWorking(st))v+=setLoad(e.id,st.w,bw)*(+st.r||0);}));return v;}
+function sessionVolume(s,bw){let v=0;s.exercises.forEach(e=>{if(TIME_METRIC&&TIME_METRIC.has(e.id))return;e.sets.forEach(st=>{if(isWorking(st))v+=setLoad(e.id,st.w,bw)*(+st.r||0);});});return v;}   // time-held lifts (planks, carries) count seconds, not weight×reps → no lb volume
 function sessionSets(s){let n=0;s.exercises.forEach(e=>e.sets.forEach(st=>{if(isWorking(st))n++;}));return n;}
 // How long a finished workout took, in whole minutes. `date` is the start (set at newSession); a set
 // gets `at` when checked; `endedAt` is stamped at Finish. Returns null when the session predates
@@ -176,11 +176,11 @@ function setPattern(sets){
 }
 
 // "3×8/8/8 @ 135lb" for flat work; "135→155→185lb · 10/8/6" when the weight changes across sets
-function fmtPerf(sets,unit){
-  unit=unit||'';if(!sets||!sets.length)return'';
+function fmtPerf(sets,unit,rsuf){
+  unit=unit||'';rsuf=rsuf||'';if(!sets||!sets.length)return'';   // rsuf='s' renders the rep field as seconds (time-held lifts)
   const p=setPattern(sets);
-  if(p.pattern==='flat')return sets.length+'×'+sets.map(s=>s.r).join('/')+(p.top>0?' @ '+p.top+unit:' · bodyweight');
-  return sets.map(s=>+s.w||0).join('→')+unit+' · '+sets.map(s=>s.r).join('/');
+  if(p.pattern==='flat')return sets.length+'×'+sets.map(s=>s.r+rsuf).join('/')+(p.top>0?' @ '+p.top+unit:' · bodyweight');
+  return sets.map(s=>+s.w||0).join('→')+unit+' · '+sets.map(s=>s.r+rsuf).join('/');
 }
 
 // What to load next time, from last time's working sets. Returns {sets:[{w,r}], bumped, pattern,

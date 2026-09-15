@@ -2,7 +2,7 @@
 var IL=globalThis.IL||(globalThis.IL={});
 if(typeof require==='function'&&!IL.data)require('../data/exercises.js');
 if(typeof require==='function'&&!IL.prog)require('./progression.js');
-const {EX,EXERCISES,REGIONS,IDEAL_PATS,LOWER_GROUPS,MODES,INVERTED_LOAD,regLabel,patLabel,exampleFor,hashId}=IL.data;
+const {EX,EXERCISES,REGIONS,IDEAL_PATS,LOWER_GROUPS,MODES,INVERTED_LOAD,TIME_METRIC,regLabel,patLabel,exampleFor,hashId}=IL.data;
 const {DAY,startOfDay,e1rm,isWorking,setLoad,sessionVolume,sessionSets,sessionDuration,setTimeline,modeOf,calcStreak,real,weekIndex,weekStart,lastPerf}=IL.prog;
 
 // completed() INCLUDES deloads on purpose — volume/frequency/PR-window analysis wants everything the
@@ -315,9 +315,10 @@ function personalRecords(sessions,bw,limit){
     if(!isWorking(st))return;const w=setLoad(e.id,st.w,bw),r=+st.r||0;if(!w||!r)return;
     const est=e1rm(w,r);const ex=EX[e.id];const key=e.id+':'+mode;
     const inverted=!!(ex&&INVERTED_LOAD&&INVERTED_LOAD.has(e.id));   // assist machine: the PR is the LEAST assist, and no 1RM estimate (#16)
-    const showEst=!!ex&&ex.type==='compound'&&!inverted&&!!(MODES[mode]&&MODES[mode].e1rm);
-    const better=inverted?(!best[key]||w<best[key].load):(!best[key]||est>best[key].est);
-    if(better)best[key]={id:e.id,mode,w:+st.w||0,load:w,r,est,name:ex?ex.name:e.name,date:s.date,compound:!!ex&&ex.type==='compound',showEst,inverted,bodyweight:mode==='bodyweight'};
+    const time=!!(TIME_METRIC&&TIME_METRIC.has(e.id));   // time-held: "reps" are seconds → no 1RM; best = heaviest, then longest
+    const showEst=!!ex&&ex.type==='compound'&&!inverted&&!time&&!!(MODES[mode]&&MODES[mode].e1rm);
+    const better=inverted?(!best[key]||w<best[key].load):time?(!best[key]||w>best[key].load||(w===best[key].load&&r>best[key].r)):(!best[key]||est>best[key].est);
+    if(better)best[key]={id:e.id,mode,w:+st.w||0,load:w,r,est,name:ex?ex.name:e.name,date:s.date,compound:!!ex&&ex.type==='compound',showEst,inverted,time,bodyweight:mode==='bodyweight'};
   })})});
   // e1RM-comparable lifts first (by e1RM); the rest after, by load
   return Object.values(best).sort((a,b)=>(b.showEst-a.showEst)||(a.showEst?b.est-a.est:b.load-a.load)).slice(0,limit||8);
@@ -360,6 +361,7 @@ function deloadStats(sessions,now){
 /* ── Time analytics (T3): everything derived from the per-set `at` stamps and session start/end.
    Sessions with no stamps (logged before timing existed) contribute nothing and are simply skipped. */
 const MAX_GAP_MIN=15;   // a single gap longer than this (a phone call, a chat) isn't credited as training time
+const MIN_REST_S=20;    // nobody rests <20s between working sets — a gap under this is a batch-tick or a mis-log correction, not a rest, and is excluded from the rest medians
 function median(arr){if(!arr.length)return null;const a=arr.slice().sort((x,y)=>x-y),m=a.length>>1;return a.length%2?a[m]:Math.round((a[m-1]+a[m])/2);}
 // Minutes attributed to each muscle group: each stamped set owns the time since the previous stamped
 // set (or the session start), each interval capped at MAX_GAP_MIN. Returns {group: minutes}.
@@ -372,7 +374,7 @@ function timeByGroup(s){
 // Rest gaps (seconds) between consecutive stamped sets of the SAME exercise, split compound/isolation.
 function restGaps(s){const all=[],comp=[],iso=[];
   (s.exercises||[]).forEach(e=>{const ex=EX[e.id];const t=e.sets.map(st=>+st.at).filter(a=>a>0).sort((a,b)=>a-b);
-    for(let i=1;i<t.length;i++){const g=(t[i]-t[i-1])/1000;all.push(g);if(ex&&ex.type==='compound')comp.push(g);else if(ex)iso.push(g);}});
+    for(let i=1;i<t.length;i++){const g=(t[i]-t[i-1])/1000;if(g<MIN_REST_S)continue;all.push(g);if(ex&&ex.type==='compound')comp.push(g);else if(ex)iso.push(g);}});
   return {all,comp,iso};}
 // Median rest actually taken (seconds), overall and by lift type. null when too few stamped sets.
 function restTaken(s){const g=restGaps(s);return {median:median(g.all),compound:median(g.comp),isolation:median(g.iso),n:g.all.length};}
@@ -380,7 +382,7 @@ function restTaken(s){const g=restGaps(s);return {median:median(g.all),compound:
 function sessionDensity(s){const d=sessionDuration(s);return (d&&d>0)?+(sessionSets(s)/d*10).toFixed(1):null;}
 // Median rest (seconds) for ONE exercise across all its stamped history — for the exercise detail sheet.
 function exerciseRest(sessions,id){const gaps=[];completed(sessions).forEach(s=>{const e=s.exercises.find(x=>x.id===id);if(!e)return;
-  const t=e.sets.map(st=>+st.at).filter(a=>a>0).sort((a,b)=>a-b);for(let i=1;i<t.length;i++)gaps.push((t[i]-t[i-1])/1000);});return median(gaps);}
+  const t=e.sets.map(st=>+st.at).filter(a=>a>0).sort((a,b)=>a-b);for(let i=1;i<t.length;i++){const g=(t[i]-t[i-1])/1000;if(g>=MIN_REST_S)gaps.push(g);}});return median(gaps);}
 // 28-day time picture for the Progress "Time" card: how long, how dense, how much rest, split by muscle.
 function timeTrends(sessions,now){
   now=now||Date.now();

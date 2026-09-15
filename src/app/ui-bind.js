@@ -166,13 +166,17 @@ function commitCardio(s,endedAt,estimated){
   todayScreen='home';setTab('history');
   toast(`Logged ${cardioTypeLabel(s.cardio.type)}${mins!=null?' · '+fmtDur(mins):''}`);
 }
-// Manual entry from the sheet: build a completed cardio session from the picks + minutes, no live timer.
+// Manual entry from the sheet: build a completed cardio session from the picks + minutes (+ optional
+// back-date). Today → ends ~now; a past date → placed at midday on that day so History shows it right.
 function logCardioManual(){
-  const c=cardioDraft;const mins=Math.max(1,+c.mins||0);
-  const now=Date.now(),date=now-mins*60000;   // place it ending ~now; duration = mins
+  const c=cardioDraft;const mins=Math.max(1,+c.mins||0);const now=Date.now();
+  const wEl=$('#cardWhen'),when=(wEl&&wEl.value)||c.when||'';const today=(()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');})();
+  let end=now;
+  if(when&&when!==today){const p=when.split('-').map(Number);if(p.length===3&&p[0]){const d=new Date(p[0],p[1]-1,p[2],12,0,0).getTime();if(isFinite(d)&&d<now)end=d;}}   // midday on the chosen day, never in the future
+  const date=end-mins*60000;   // duration = minutes
   const cardio=cardioFromInput({type:c.type,intensity:c.intensity});
   const s={id:S.uid(),schema:SCHEMA,date,updatedAt:now,completed:false,kind:'cardio',exercises:[],cardio};
-  commitCardio(s,now,false);
+  commitCardio(s,end,false);
 }
 function startEdit(s){editSession=JSON.parse(JSON.stringify(s));editDirty=false;todayScreen='edit';setTab('today');}
 function finishEdit(){
@@ -244,7 +248,7 @@ function bindCardioLive(){
 function bindCardioSheet(bodyFn){
   bodyFn=bodyFn||cardioSheetBody;
   const b=$('#sheetBody');
-  const grab=()=>{const el=$('#cardDist');if(el)cardioDraft.distance=el.value;};
+  const grab=()=>{const el=$('#cardDist');if(el)cardioDraft.distance=el.value;const w=$('#cardWhen');if(w)cardioDraft.when=w.value;};
   const rerender=()=>{grab();b.innerHTML=bodyFn();bindCardioSheet(bodyFn);};
   b.querySelectorAll('[data-cardtype]').forEach(el=>el.addEventListener('click',()=>{cardioDraft.type=el.dataset.cardtype;rerender();}));
   b.querySelectorAll('[data-cardint]').forEach(el=>el.addEventListener('click',()=>{cardioDraft.intensity=el.dataset.cardint;rerender();}));
@@ -375,7 +379,9 @@ function bindLog(root){
         // Point the user at the weight field instead of silently accepting it. Bodyweight moves are exempt.
         if(cex&&cex.equip!=='Bodyweight'&&!(+st.w>0)){const wi=$(`input[data-f="w"][data-ei="${ei}"][data-s="${si}"]`);if(wi){wi.focus();if(wi.select)wi.select();}toast('Add a weight first');return;}}
       st.done=!st.done;
-      if(st.done)st.at=Date.now();else delete st.at;   // T1: stamp when the set was completed (cleared if un-ticked)
+      // T1: stamp on completion, but keep an existing stamp on un-tick → re-tick (a mis-tap corrected
+      // seconds later keeps its true time, instead of jumping to "now" and skewing the rest medians).
+      if(st.done&&!(+st.at>0))st.at=Date.now();
       if(st.done&&todayScreen==='active'&&state.settings.rest.auto&&!st.warm)startRest(restSecondsFor(t.exercises[ei].id));persistCur();render();return;}
     const wm=e.target.closest('[data-warm]');if(wm){const ei=+wm.dataset.warm,si=+wm.dataset.s;const st=t.exercises[ei].sets[si];st.warm=!st.warm;persistCur();render();toast(st.warm?'Marked as warm-up':'Counted as a working set');return;}
     const step=e.target.closest('[data-step]');if(step){if(heldRepeat){heldRepeat=false;return;}   // the click after a hold is not one more step

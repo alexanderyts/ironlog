@@ -109,7 +109,8 @@ function volumeChart(){
 function prList(){
   const arr=A.personalRecords(state.sessions,bw(),8);
   if(!arr.length)return`<div style="padding:22px;text-align:center" class="dim">Log a few sets and your PRs show up here.</div>`;
-  const setStr=p=>p.bodyweight?(p.w?'Bodyweight +'+p.w+U():'Bodyweight')+' × '+p.r:p.w+U()+(MODES[p.mode]&&MODES[p.mode].perHand?'/hand':'')+' × '+p.r;
+  const rsuf=p=>p.time?'s':'';   // time-held lifts show seconds, not reps
+  const setStr=p=>p.bodyweight?(p.w?'Bodyweight +'+p.w+U():'Bodyweight')+' × '+p.r+rsuf(p):p.w+U()+(MODES[p.mode]&&MODES[p.mode].perHand?'/hand':'')+' × '+p.r+rsuf(p);
   // show the modality only when it isn't the exercise's native equipment (so a Smith/cable variant
   // is distinguishable from the default; ordinary PRs stay uncluttered)
   const modeTag=p=>{const ex=EX[p.id];const native=ex&&EQUIP_MODE[ex.equip];return p.mode&&p.mode!==native?` <span class="pill" style="font-size:10px;padding:1px 7px">${esc(MODES[p.mode].label)}</span>`:'';};
@@ -190,7 +191,7 @@ function timeCard(){
       <div class="row-between" style="font-size:13.5px;margin-bottom:${rest.length||t.byGroup.length?'12':'0'}px">
         <span class="muted">Avg workout <b class="mono">${fmtDur(t.avgDuration)}</b></span>
         <span class="muted">${t.density!=null?`<b class="mono">${t.density}</b> sets / 10 min`:''}</span></div>
-      ${rest.length?`<div class="dim" style="font-size:12.5px;margin-bottom:${t.byGroup.length?'13':'0'}px">You rest about ${rest.join(' · ')} between sets.</div>`:''}
+      ${rest.length?`<div class="dim" style="font-size:12.5px;margin-bottom:${t.byGroup.length?'13':'0'}px">You rest about ${rest.join(' · ')} between sets. <span style="opacity:.75">Sets ticked seconds apart aren't counted as rest.</span></div>`:''}
       ${t.byGroup.length?`<div class="eyebrow" style="margin:2px 0 9px">Where your time goes</div>
         ${t.byGroup.map(([g,m])=>`<div style="margin-bottom:9px"><div class="row-between" style="margin-bottom:4px"><span style="font-weight:600;font-size:13px">${g}</span><span class="mono dim" style="font-size:12px">${fmtDur(m)}</span></div><div style="height:6px;background:var(--surface-2);border-radius:3px;overflow:hidden"><div style="height:100%;width:${Math.round(m/maxG*100)}%;background:var(--accent);border-radius:3px"></div></div></div>`).join('')}`:''}
     </div>`;
@@ -261,7 +262,7 @@ function exerciseDetail(id){
     ${notesCard(id)}
     <div class="card" style="padding:12px 15px;margin:16px 0">
       <div class="row-between"><span class="eyebrow">Target rep range</span><span class="mono" style="font-weight:600">${e.rr[0]}–${e.rr[1]}</span></div>
-      ${lp?`<div class="row-between" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line)"><span class="eyebrow">Last time</span><span class="mono" style="font-weight:600">${esc(P.fmtPerf(lp.sets,U()))}</span></div>`:''}
+      ${lp?`<div class="row-between" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line)"><span class="eyebrow">Last time</span><span class="mono" style="font-weight:600">${esc(P.fmtPerf(lp.sets,U(),D.TIME_METRIC.has(id)?'s':''))}</span></div>`:''}
       ${rest!=null?`<div class="row-between" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line)"><span class="eyebrow">Rest you usually take</span><span class="mono" style="font-weight:600">~${fmtSec(rest)}</span></div>`:''}
     </div>
     <a class="btn ghost block" href="${demoURL(id)}" target="_blank" rel="noopener noreferrer" style="margin-bottom:10px;text-decoration:none">▶ Watch a demo video</a>
@@ -529,8 +530,8 @@ function openSessionDetail(sid){
   openSheet(fmtDate(s.date),`<div class="sess-meta" style="margin:0 0 16px"><span class="muted">Volume <b>${fmtVol(volOf(s))} ${U()}</b></span><span class="muted">Sets <b>${setsOf(s)}</b></span><span class="muted">${new Date(s.date).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'})}</span></div>
     ${s.exercises.map(e=>{const ex=EX[e.id];return `<div class="card" style="padding:13px 15px;margin-bottom:10px">
       <div style="display:flex;gap:11px;align-items:center;margin-bottom:9px"><div class="ex-ic" style="width:36px;height:36px">${exIcon(ex?ex.group:'Core')}</div><div class="ex-name">${esc(ex?ex.name:e.name)}</div></div>
-      <div class="setgrid" style="padding:0"><div class="set-hdr"><div>Set</div><div>${U()}</div><div>Reps</div><div></div></div>
-      ${e.sets.filter(st=>st.done!==false).map((st,i)=>`<div class="set-row"><div class="set-no ${st.warm?'warm':''}">${st.warm?'W':i+1}</div><div class="numwrap" style="justify-content:center"><span class="mono" style="font-size:16px;font-weight:600">${st.w||0}</span></div><div class="numwrap" style="justify-content:center"><span class="mono" style="font-size:16px;font-weight:600">${st.r||0}</span></div><div></div></div>`).join('')}</div></div>`;}).join('')}
+      <div class="setgrid" style="padding:0"><div class="set-hdr"><div>Set</div><div>${U()}</div><div>${D.TIME_METRIC.has(e.id)?'Sec':'Reps'}</div><div></div></div>
+      ${e.sets.filter(st=>st.done!==false).map((st,i)=>`<div class="set-row"><div class="set-no ${st.warm?'warm':''}">${st.warm?'W':i+1}</div><div class="numwrap" style="justify-content:center"><span class="mono" style="font-size:16px;font-weight:600">${st.w||0}</span></div><div class="numwrap" style="justify-content:center"><span class="mono" style="font-size:16px;font-weight:600">${st.r||0}${D.TIME_METRIC.has(e.id)?'s':''}</span></div><div></div></div>`).join('')}</div></div>`;}).join('')}
     <div style="display:flex;gap:9px;margin:8px 0 10px"><button class="btn ghost" style="flex:1" data-editsess="${s.id}">✎ Edit</button><button class="btn ghost" style="flex:1" data-repeatfrom="${s.id}">↻ Repeat</button></div>
     <button class="btn ghost block" data-routinefrom="${s.id}" style="margin-bottom:10px">★ Save as routine</button>
     <button class="linkbtn dim" data-delsess="${s.id}" style="display:block;text-align:center;width:100%">Delete this session</button>`);

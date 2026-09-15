@@ -2,6 +2,16 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.48.0 — 2026-09-15 · Honest numbers for the odd lifts
+Fixes for exercises that don't fit "weight × reps", and for a way the rest timing could be thrown off — all from a real workout.
+- **Assisted Dip is now its own exercise.** If you do dips on an assist machine, log it as **Assisted Dip** (search "assisted dip"): the number you enter is the *assistance*, so less weight is harder, the next-time suggestion asks for **less assist** as you get stronger, and it never shows a bogus 1RM. (Before, an assisted dip logged on the wrong exercise counted the assist as your load and pushed you the wrong way.)
+- **Planks and carries are timed, not counted.** For **Farmer's Carry** and **Plank** the second column now reads **Sec**, cards show "50 lb × 45 s", and they no longer inflate your weekly volume or invent a 1RM — a loaded carry isn't a weight-×-reps lift. They still count as sets toward your muscle balance and the coach.
+- **Sets ticked seconds apart aren't counted as rest.** If you tick several sets at once, or fix a mis-logged set, those near-instant gaps used to drag your "rest between sets" numbers down (and could read "0 s"). They're now ignored — only real rests count. Un-ticking a set also keeps its original time, so fixing a mis-tap no longer moves it to "now".
+- **Back-date a cardio session.** The manual "log one you already did" now has a **When** date, so a walk you forgot to start is logged on the day it happened.
+- **Fixed:** searching "assisted dip" used to return the (unrelated) Machine Dip.
+- To clean up last Monday: open that session, edit it, swap Tricep Dip → Assisted Dip with the same numbers. The carry's stray PR clears itself.
+- Not verified on-device (tested in a desktop browser at phone width and with the automated suite — 210 tests green, run 3×; the lifting review snapshot is unchanged).
+
 ## v0.47.0 — 2026-09-14 · Log your cardio
 You can now log a cardio session — a walk, the treadmill, the elliptical, whatever — right alongside your lifting.
 - **Two ways to log it.** On Home, tap **Log cardio**. Either **Start now & time it** (a live clock runs; tap Finish when you're done) or, under "log one you already did", enter the **minutes** by hand — so a walk you forgot to start is easy to add after the fact.
