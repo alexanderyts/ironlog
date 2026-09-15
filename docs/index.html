@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-2WQP4/a1e0cmKdpgErv457CA0uwipjDAK5lRUKERQYo=' 'sha256-WPBob/luB2k1aalTWXpi6zk3SrIbj8GlZV7AlFdG7oA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-bFhCWGpuyjp+wohfQFBOwXgT2jxF+TsRyLYDRfH3OuM=' 'sha256-WPBob/luB2k1aalTWXpi6zk3SrIbj8GlZV7AlFdG7oA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Ironlog</title>
@@ -412,8 +412,8 @@ html.kb-open .tabbar{display:none}
 </div>
 
 <script>
-/* Ironlog v0.48.1 · site build */
-var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.48.1",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
+/* Ironlog v0.48.2 · site build */
+var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.48.2",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
 
 /* ===== src/data/exercises.js ===== */
 (function(){'use strict';
@@ -711,7 +711,14 @@ function e1rm(w,r){return r<=1?w:Math.round(w*(1+r/30));}
 function isWorking(st){return st.done!==false&&!st.warm;}
 // Load moved in a set: entered weight plus a share of bodyweight on bodyweight moves
 function setLoad(exId,w,bw){const f=BW_FACTOR[exId]||0;return (+w||0)+(bw&&f?Math.round(bw*f):0);}
-function sessionVolume(s,bw){let v=0;s.exercises.forEach(e=>{if(TIME_METRIC&&TIME_METRIC.has(e.id))return;e.sets.forEach(st=>{if(isWorking(st))v+=setLoad(e.id,st.w,bw)*(+st.r||0);});});return v;}   // time-held lifts (planks, carries) count seconds, not weight×reps → no lb volume
+function sessionVolume(s,bw){let v=0;s.exercises.forEach(e=>{
+  if(TIME_METRIC&&TIME_METRIC.has(e.id))return;   // time-held lifts (planks, carries) count seconds, not weight×reps
+  // Assisted machines: the logged number is the ASSISTANCE, so the resistance actually moved is
+  // bodyweight − assist (mirrors a weighted bodyweight lift, which is bodyweight + added). Needs a
+  // bodyweight; without one it's unknowable and contributes 0 rather than counting the machine's help.
+  const inv=INVERTED_LOAD&&INVERTED_LOAD.has(e.id);
+  e.sets.forEach(st=>{if(isWorking(st)){const load=inv?Math.max(0,(+bw||0)-(+st.w||0)):setLoad(e.id,st.w,bw);v+=load*(+st.r||0);}});
+});return v;}
 function sessionSets(s){let n=0;s.exercises.forEach(e=>e.sets.forEach(st=>{if(isWorking(st))n++;}));return n;}
 // How long a finished workout took, in whole minutes. `date` is the start (set at newSession); a set
 // gets `at` when checked; `endedAt` is stamped at Finish. Returns null when the session predates

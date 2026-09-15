@@ -56,3 +56,18 @@ test('rest gaps under 20s are ignored — a batch-tick or mis-log is not a rest'
     sets:[{w:100,r:5,done:true,at:now},{w:100,r:5,done:true,at:now+60000},{w:100,r:5,done:true,at:now+180000}]}]};
   assert.equal(A.restTaken(s2).n,2,'two real gaps, both kept');
 });
+
+test('assisted-lift volume = (bodyweight − assist) × reps, not the assistance itself',()=>{
+  const bw=216;
+  // assisted dip 70/55/70 × 12/10/12 → (216−70)×12 + (216−55)×10 + (216−70)×12 = 1752+1610+1752 = 5114
+  const s=session(1,[['assisted-dip',[set(70,12),set(55,10),set(70,12)]]]);
+  assert.equal(P.sessionVolume(s,bw),5114,'the resistance moved, not the machine assist (which would be 2230)');
+  // the harder set (55 assist = 161 lb) out-volumes an easier one at equal reps — direction is right
+  const easy=P.sessionVolume(session(1,[['assisted-dip',[set(90,10)]]]),bw);   // (216−90)×10 = 1260
+  const hard=P.sessionVolume(session(1,[['assisted-dip',[set(50,10)]]]),bw);   // (216−50)×10 = 1660
+  assert.ok(hard>easy,'less assist = more volume');
+  // CONTROL: without a bodyweight it can't be computed → contributes 0 (never counts the assist)
+  assert.equal(P.sessionVolume(s,0),0,'no bodyweight → 0, not the assist number');
+  // CONTROL: a weighted bodyweight lift still ADDS bodyweight (tricep-dip, factor 1)
+  assert.equal(P.sessionVolume(session(1,[['tricep-dip',[set(25,10)]]]),bw),(216+25)*10,'weighted dip = bodyweight + added');
+});

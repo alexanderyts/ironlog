@@ -17,7 +17,14 @@ function e1rm(w,r){return r<=1?w:Math.round(w*(1+r/30));}
 function isWorking(st){return st.done!==false&&!st.warm;}
 // Load moved in a set: entered weight plus a share of bodyweight on bodyweight moves
 function setLoad(exId,w,bw){const f=BW_FACTOR[exId]||0;return (+w||0)+(bw&&f?Math.round(bw*f):0);}
-function sessionVolume(s,bw){let v=0;s.exercises.forEach(e=>{if(TIME_METRIC&&TIME_METRIC.has(e.id))return;e.sets.forEach(st=>{if(isWorking(st))v+=setLoad(e.id,st.w,bw)*(+st.r||0);});});return v;}   // time-held lifts (planks, carries) count seconds, not weight×reps → no lb volume
+function sessionVolume(s,bw){let v=0;s.exercises.forEach(e=>{
+  if(TIME_METRIC&&TIME_METRIC.has(e.id))return;   // time-held lifts (planks, carries) count seconds, not weight×reps
+  // Assisted machines: the logged number is the ASSISTANCE, so the resistance actually moved is
+  // bodyweight − assist (mirrors a weighted bodyweight lift, which is bodyweight + added). Needs a
+  // bodyweight; without one it's unknowable and contributes 0 rather than counting the machine's help.
+  const inv=INVERTED_LOAD&&INVERTED_LOAD.has(e.id);
+  e.sets.forEach(st=>{if(isWorking(st)){const load=inv?Math.max(0,(+bw||0)-(+st.w||0)):setLoad(e.id,st.w,bw);v+=load*(+st.r||0);}});
+});return v;}
 function sessionSets(s){let n=0;s.exercises.forEach(e=>e.sets.forEach(st=>{if(isWorking(st))n++;}));return n;}
 // How long a finished workout took, in whole minutes. `date` is the start (set at newSession); a set
 // gets `at` when checked; `endedAt` is stamped at Finish. Returns null when the session predates

@@ -2,6 +2,13 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.48.2 — 2026-09-15 · Assisted-lift volume counts the real work
+Follow-up to v0.48.0: the assisted-dip *progression and PRs* were fixed, but its **volume** still counted the machine's assistance as the load. Now an assisted lift counts the resistance you actually moved.
+- **Assisted Dip / Assisted Pull-Up volume = bodyweight − assist.** Just like a *weighted* dip counts bodyweight + the added plate, an *assisted* dip now counts bodyweight minus the help. So a 216 lb lifter with 70 lb of assist counts 146 lb per rep, not 70. Your weekly volume, session totals and the volume chart all reflect the true work now — and the harder set (less assist) correctly counts as *more* volume, not less.
+- Needs your bodyweight set (Settings → Bodyweight); without it, an assisted lift now contributes 0 rather than a misleading number.
+- Nothing to re-edit: the numbers just recompute. (Last Monday's session, for example, goes from 7,600 to ~10,484 lb.)
+- Not verified on-device (tested in a desktop browser and with the automated suite — 212 tests green; review snapshot unchanged).
+
 ## v0.48.1 — 2026-09-15 · Editing & keyboard cleanups
 Three fixes to how things behave while you're logging.
 - **Sheets open at the top.** Tapping "Add exercise" (or any picker) now opens with the search bar in view, instead of somewhere in the middle of the list where the last sheet left off.
