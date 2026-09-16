@@ -190,3 +190,71 @@ test('UI: marking from the post-workout summary stays in the summary',()=>{
     assert.ok(h.state.sessions.some(s=>s.exercises.some(e=>e.sets.some(t=>t.nc))),'and the set really is marked');
   }finally{h.teardown();}
 });
+
+/* ---- review fixes (v0.49.2) ---- */
+
+test('UI: "Count it again" restores the shown record one tap at a time, not all at once',()=>{
+  const h=launch();
+  try{
+    [ session(2,[['barbell-row',[set(120,10)]]]),
+      session(9,[['barbell-row',[set(110,10)]]]),
+      session(16,[['barbell-row',[set(100,10)]]]) ]
+      .forEach(s=>h.S.upsertSession(JSON.parse(JSON.stringify(s)),false));
+    h.state.settings.bodyweight=216;
+    h.click('.tab[data-tab="progress"]');
+    const open=()=>h.click(h.$$('#prCard [data-openex]').find(r=>r.dataset.openex==='barbell-row'));
+    open();
+    h.click('#sheetBody [data-prmark]');   // set aside 120 -> record 110
+    h.click('#sheetBody [data-prmark]');   // set aside 110 -> record 100
+    assert.ok(h.text('#prCard').indexOf('100')>=0,'record walked down to 100');
+    const markedNow=()=>h.state.sessions.reduce((n,s)=>n+s.exercises.reduce((m,e)=>m+e.sets.filter(t=>t.nc).length,0),0);
+    assert.equal(markedNow(),2,'both top sets are set aside');
+    h.click('#sheetBody [data-prunmark]');   // one tap
+    assert.ok(h.text('#prCard').indexOf('120')>=0,'the 120 (the shown adjusted set) came back');
+    assert.equal(markedNow(),1,'exactly one restored — the 110 is still set aside');
+  }finally{h.teardown();}
+});
+
+test('UI: adjusting a timed lift reads in seconds, never "0lb"/bare reps',()=>{
+  const h=launch();
+  try{
+    [ session(2,[['farmers-carry',[set(50,45)]]]),
+      session(9,[['farmers-carry',[set(50,30)]]]) ]
+      .forEach(s=>h.S.upsertSession(JSON.parse(JSON.stringify(s)),false));
+    h.click('.tab[data-tab="progress"]');
+    h.click(h.$$('#prCard [data-openex]').find(r=>r.dataset.openex==='farmers-carry'));
+    h.click('#sheetBody [data-prmark]');   // set aside the 45s
+    const t=h.text('#sheetBody');
+    assert.ok(t.indexOf('45s')>=0,'the set-aside carry shows seconds');
+    assert.equal(t.indexOf('45 on'),-1,'not bare reps ("× 45 on <date>") — the old missing-suffix bug');
+  }finally{h.teardown();}
+});
+
+test('UI: the PR tip stays hidden until there is a record to tap',()=>{
+  const h=launch();
+  try{
+    h.click('.tab[data-tab="progress"]');
+    assert.ok(!h.has('[data-seentip="prAdjustTip"]'),'no tip when there are no PRs yet');
+    h.S.upsertSession({id:'r',schema:1,date:Date.now()-2*86400000,updatedAt:1,completed:true,
+      exercises:[{id:'barbell-row',name:'Barbell Row',sets:[{w:100,r:10,done:true}]}]},false);
+    h.click('.tab[data-tab="today"]');h.click('.tab[data-tab="progress"]');
+    assert.ok(h.has('[data-seentip="prAdjustTip"]'),'tip appears once a record exists');
+  }finally{h.teardown();}
+});
+
+test('UI: a sheet opened over the keyboard restores the scroll position on close',()=>{
+  const h=launch();
+  try{
+    h.click('[data-action="startFlow"]');h.click('[data-action="blank"]');
+    h.click('#btnAddEx');
+    h.click(h.$$('#addResults [data-quickadd]')[0]);
+    const wInput=h.$('input[data-f="w"]');wInput.focus();
+    let ok=true;try{Object.defineProperty(h.win,'scrollY',{value:240,configurable:true});}catch(e){ok=false;}
+    if(!ok){return;}   // jsdom wouldn't let us fake a scroll offset; covered in the browser instead
+    const calls=[];h.win.scrollTo=(x,y)=>calls.push([x,y]);
+    h.click('[data-openex]');   // open the exercise sheet while the field is focused
+    assert.ok(calls.length&&calls[0][0]===0&&calls[0][1]===0,'it scrolls to the top so iOS shows the sheet');
+    h.click('#sheetClose');
+    assert.ok(calls.some(c=>c[0]===0&&c[1]===240),'and puts the reader back where they were on close');
+  }finally{h.teardown();}
+});

@@ -2,6 +2,14 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.49.2 — 2026-09-16 · Polish on the PR-adjust feature
+A review of v0.49.0/.1 turned up four rough edges, now fixed.
+- **Opening a Note or exercise info mid-workout no longer loses your place.** The panel still opens cleanly over the keyboard, but closing it now returns you exactly where you were instead of the top of the workout.
+- **"Count it again" restores one record at a time**, matching how you set them aside — so if you walked a couple of records back, you can bring them forward one by one.
+- **The "tap a record" hint waits until you actually have a record** — new users no longer see it above an empty list.
+- **Set-aside times now read in seconds** (e.g. a carry shows "50lb × 45s", not "× 45").
+- Not verified on-device (tested in a desktop browser at iPhone size — 229 tests green; review snapshot unchanged).
+
 ## v0.49.1 — 2026-09-16 · Making "adjust a PR" findable
 The feature shipped in v0.49.0 was too well hidden — unless you happened to set a PR with the finish screen open, there was nothing telling you it existed.
 - **Personal Records rows now show a ›** so it's clear they open something.

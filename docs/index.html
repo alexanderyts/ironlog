@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-pRz0dIYivrHRL4Ag8s1OO3AOVGrzoeLA3bw80UJvXxQ=' 'sha256-WPBob/luB2k1aalTWXpi6zk3SrIbj8GlZV7AlFdG7oA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-sJnjYcBSIIjk8iUUjKkoymBc3ELJV+FXwRMBBRgHcvs=' 'sha256-WPBob/luB2k1aalTWXpi6zk3SrIbj8GlZV7AlFdG7oA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Ironlog</title>
@@ -412,8 +412,8 @@ html.kb-open .tabbar{display:none}
 </div>
 
 <script>
-/* Ironlog v0.49.1 · site build */
-var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.49.1",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
+/* Ironlog v0.49.2 · site build */
+var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.49.2",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
 
 /* ===== src/data/exercises.js ===== */
 (function(){'use strict';
@@ -2510,15 +2510,21 @@ function closeConfirm(){$('#cdialog').classList.remove('on');$('#cscrim').classL
    still held focus painted it below the visible area, above the band the keyboard occupies. Dropping
    focus first lets iOS restore the viewport before the sheet slides up. Deliberately touches nothing
    in the tab-bar / safe-area model (--deficit, --screen-h) — see the invariant note in styles.css. */
+let _sheetReturnY=null;   // background scroll position stashed when a sheet had to scroll the page to top
 function openSheet(title,body){
   // Only when a field actually had focus — blurring/scrolling unconditionally would throw away the
-  // reader's scroll position every time they tap a PR row or an exercise from a scrolled list.
+  // reader's scroll position every time they tap a PR row or an exercise from a scrolled list. When we
+  // DO scroll to top (the iOS keyboard fix), remember where they were so closeSheet can put them back —
+  // otherwise opening a Note or the ⓘ mid-set dumped them at the top of a long workout.
   try{const ae=document.activeElement;
-    if(ae&&/^(INPUT|TEXTAREA)$/.test(ae.tagName)){ae.blur();if(window.scrollY)window.scrollTo(0,0);}
+    if(ae&&/^(INPUT|TEXTAREA)$/.test(ae.tagName)){ae.blur();
+      if(window.scrollY){if(_sheetReturnY==null)_sheetReturnY=window.scrollY;window.scrollTo(0,0);}}
   }catch(e){}
   $('#sheetTitle').textContent=title;const b=$('#sheetBody');b.innerHTML=body;b.scrollTop=0;$('#sheet').classList.add('on');$('#scrim').classList.add('on');
 }
-function closeSheet(){$('#sheet').classList.remove('on');$('#scrim').classList.remove('on');}
+function closeSheet(){$('#sheet').classList.remove('on');$('#scrim').classList.remove('on');
+  if(_sheetReturnY!=null){const y=_sheetReturnY;_sheetReturnY=null;try{window.scrollTo(0,y);}catch(e){}}   // restore the pre-sheet scroll position
+}
 function applyTheme(){const t=state.settings.theme;if(t==='system')document.documentElement.removeAttribute('data-theme');else document.documentElement.setAttribute('data-theme',t);}
 function updateCloud(){
   const el=$('#cloudStatus'),t=$('#cloudText');if(!el)return;
@@ -3088,6 +3094,7 @@ function volumeChart(){
 // screen. Same dismiss-once pattern as the coaching notes' "Got it"; rides the synced `seen` map.
 function prTip(){
   if(seenFlag('prAdjustTip'))return '';
+  if(!A.personalRecords(state.sessions,bw(),1).length)return '';   // nothing to tap yet — don't tell a new user to tap a record
   return `<div class="card" style="padding:11px 14px;margin:0 0 9px;background:var(--surface-2);border:none;display:flex;gap:10px;align-items:center">
     <div class="dim" style="font-size:12.5px;line-height:1.45;flex:1">Tap a record for its trend — or set it aside if the form wasn’t there.</div>
     <button class="linkbtn dim" data-seentip="prAdjustTip" style="font-size:12px;padding:2px 4px;flex-shrink:0">Got it</button></div>`;
@@ -3102,7 +3109,7 @@ function prList(){
   // is distinguishable from the default; ordinary PRs stay uncluttered)
   const modeTag=p=>{const ex=EX[p.id];const native=ex&&EQUIP_MODE[ex.equip];return p.mode&&p.mode!==native?` <span class="pill" style="font-size:10px;padding:1px 7px">${esc(MODES[p.mode].label)}</span>`:'';};
   return arr.map(p=>`<div class="ex-row" data-openex="${p.id}" style="cursor:pointer"><div style="flex:1;min-width:0"><div class="ex-name">${esc(p.name)}${modeTag(p)}</div>
-    <div class="ex-sub">Best set ${setStr(p)}</div>${p.adjusted?`<div class="ex-sub" style="color:var(--warn)">PR adjusted · ${p.adjusted.w}${U()} × ${p.adjusted.r} on ${fmtDate(p.adjusted.date)} set aside</div>`:''}</div>
+    <div class="ex-sub">Best set ${setStr(p)}</div>${p.adjusted?`<div class="ex-sub" style="color:var(--warn)">PR adjusted · ${setStr({...p,w:p.adjusted.w,r:p.adjusted.r})} on ${fmtDate(p.adjusted.date)} set aside</div>`:''}</div>
     <div style="text-align:right">${p.showEst?`<div class="mono" style="font-weight:700;font-size:16px">${p.est}<span class="dim" style="font-size:11px"> ${U()} e1RM</span></div>`:`<div class="mono dim" style="font-weight:600;font-size:13px">${p.load}${U()}</div>`}</div>${CHEV_R}</div>`).join('');
 }
 function balBar(l,lv,r,rv){
@@ -3233,20 +3240,23 @@ function trendCard(id){
 /* Your best set on this lift, with the one-tap escape hatch for a rep you don't want to be held to.
    Marking DELETES NOTHING: the set stays in History and keeps counting toward your volume — it just
    stops being the bar, both here and in what the app prefills next time (see lastPerf's `clean`).
-   Mode-scoped like the PR itself, so a Smith variant's record is adjusted separately. */
+   "That rep wasn't clean" sets aside the record shown here (that record's exact set); "Count it again"
+   restores it. Both operate a set at a time; a lift trained in two modalities can be adjusted in each. */
 const markedSets=id=>{let n=0;state.sessions.forEach(s=>s.exercises.forEach(e=>{if(e.id===id)e.sets.forEach(st=>{if(st.nc)n++;});}));return n;};
 function prAdjustCard(id){
   const p=A.personalRecords(state.sessions,bw(),999).filter(x=>x.id===id)[0];
   const marked=markedSets(id);
   if(!p&&!marked)return '';
-  const rsuf=p&&p.time?'s':'';
+  // Format a w×r the same way the record itself reads: seconds for time-held lifts, "Bodyweight" moves,
+  // per-hand dumbbells — so a set-aside plank shows "45s", not "0lb × 45".
+  const fmt=p?((w,r)=>p.bodyweight?(w?'Bodyweight +'+w+U():'Bodyweight')+' × '+r+(p.time?'s':''):w+U()+(MODES[p.mode]&&MODES[p.mode].perHand?'/ea':'')+' × '+r+(p.time?'s':'')):null;
   return `<div class="card" style="padding:12px 15px;margin:0 0 12px">
     <div class="row-between"><span class="eyebrow">Your best set</span>
-      <span class="mono" style="font-weight:600">${p?esc(p.w+U()+(MODES[p.mode]&&MODES[p.mode].perHand?'/ea':'')+' × '+p.r+rsuf):'—'}</span></div>
-    ${p&&p.adjusted?`<div class="dim" style="font-size:12px;margin-top:7px;line-height:1.45"><b style="color:var(--warn)">PR adjusted.</b> ${esc(p.adjusted.w+U()+' × '+p.adjusted.r)} on ${fmtDate(p.adjusted.date)} is set aside — still in your history and still counted in your volume.</div>`:''}
+      <span class="mono" style="font-weight:600">${p?esc(fmt(p.w,p.r)):'—'}</span></div>
+    ${p&&p.adjusted?`<div class="dim" style="font-size:12px;margin-top:7px;line-height:1.45"><b style="color:var(--warn)">PR adjusted.</b> ${esc(fmt(p.adjusted.w,p.adjusted.r))} on ${fmtDate(p.adjusted.date)} is set aside — still in your history and still counted in your volume.</div>`:''}
     <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
       ${p?`<button class="btn sm ghost" data-prmark="${id}">That rep wasn’t clean</button>`:''}
-      ${marked?`<button class="btn sm ghost" data-prunmark="${id}">Count ${marked>1?'them':'it'} again</button>`:''}
+      ${marked?`<button class="btn sm ghost" data-prunmark="${id}">Count it again</button>`:''}
     </div></div>`;
 }
 // The last few notes ever left on this lift (deloads included — a note is a note), newest first.
@@ -3731,14 +3741,27 @@ function markBestSet(id,btn){
   else openSheet(EX[id]?EX[id].name:id,exerciseDetail(id));
   toast('Set aside — it still counts toward your volume');
 }
+// The mirror of markBestSet: restore the single set the card is showing as "PR adjusted" (the disowned
+// set that currently beats the record, in that record's modality). Walking back several is one tap
+// each. Fallback: if there's no beating-set on display but sets are still set aside (a lower one, or
+// one in another modality the card can't surface), clear whatever's left so nothing can strand.
 function unmarkSets(id){
-  let n=0;
-  state.sessions.forEach(s=>{let hit=false;
-    s.exercises.forEach(e=>{if(e.id!==id)return;e.sets.forEach(st=>{if(st.nc){delete st.nc;hit=true;n++;}});});
-    if(hit){s.updatedAt=Date.now();S.upsertSession(s,false);}});
-  if(!n){toast('Nothing was set aside');return;}
+  const p=A.personalRecords(state.sessions,bw(),999).filter(x=>x.id===id)[0];
+  let restored=0;
+  if(p&&p.adjusted){
+    const s=state.sessions.find(x=>x.date===p.adjusted.date&&x.exercises.some(e=>e.id===id));
+    const e=s&&(s.exercises.find(x=>x.id===id&&modeOf(x)===p.mode)||s.exercises.find(x=>x.id===id));
+    const st=e&&e.sets.find(x=>x.nc&&(+x.w||0)===p.adjusted.w&&(+x.r||0)===p.adjusted.r);
+    if(st){delete st.nc;s.updatedAt=Date.now();S.upsertSession(s,false);restored=1;}
+  }
+  if(!restored){   // nothing on display to restore — clear any remaining set-aside sets for this lift
+    state.sessions.forEach(s=>{let hit=false;
+      s.exercises.forEach(e=>{if(e.id!==id)return;e.sets.forEach(st=>{if(st.nc){delete st.nc;hit=true;restored++;}});});
+      if(hit){s.updatedAt=Date.now();S.upsertSession(s,false);}});
+  }
+  if(!restored){toast('Nothing was set aside');return;}
   render();openSheet(EX[id]?EX[id].name:id,exerciseDetail(id));
-  toast(n>1?'Counting them again':'Counting it again');
+  toast('Counting it again');
 }
 function discardActive(){showConfirm('Discard workout?','Nothing from this session will be saved.','Discard',()=>{
   stopRest();stopElapsed();const copy=state.active;state.active=null;S.persistActive();todayScreen='home';render();

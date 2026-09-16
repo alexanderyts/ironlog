@@ -60,15 +60,21 @@ function closeConfirm(){$('#cdialog').classList.remove('on');$('#cscrim').classL
    still held focus painted it below the visible area, above the band the keyboard occupies. Dropping
    focus first lets iOS restore the viewport before the sheet slides up. Deliberately touches nothing
    in the tab-bar / safe-area model (--deficit, --screen-h) — see the invariant note in styles.css. */
+let _sheetReturnY=null;   // background scroll position stashed when a sheet had to scroll the page to top
 function openSheet(title,body){
   // Only when a field actually had focus — blurring/scrolling unconditionally would throw away the
-  // reader's scroll position every time they tap a PR row or an exercise from a scrolled list.
+  // reader's scroll position every time they tap a PR row or an exercise from a scrolled list. When we
+  // DO scroll to top (the iOS keyboard fix), remember where they were so closeSheet can put them back —
+  // otherwise opening a Note or the ⓘ mid-set dumped them at the top of a long workout.
   try{const ae=document.activeElement;
-    if(ae&&/^(INPUT|TEXTAREA)$/.test(ae.tagName)){ae.blur();if(window.scrollY)window.scrollTo(0,0);}
+    if(ae&&/^(INPUT|TEXTAREA)$/.test(ae.tagName)){ae.blur();
+      if(window.scrollY){if(_sheetReturnY==null)_sheetReturnY=window.scrollY;window.scrollTo(0,0);}}
   }catch(e){}
   $('#sheetTitle').textContent=title;const b=$('#sheetBody');b.innerHTML=body;b.scrollTop=0;$('#sheet').classList.add('on');$('#scrim').classList.add('on');
 }
-function closeSheet(){$('#sheet').classList.remove('on');$('#scrim').classList.remove('on');}
+function closeSheet(){$('#sheet').classList.remove('on');$('#scrim').classList.remove('on');
+  if(_sheetReturnY!=null){const y=_sheetReturnY;_sheetReturnY=null;try{window.scrollTo(0,y);}catch(e){}}   // restore the pre-sheet scroll position
+}
 function applyTheme(){const t=state.settings.theme;if(t==='system')document.documentElement.removeAttribute('data-theme');else document.documentElement.setAttribute('data-theme',t);}
 function updateCloud(){
   const el=$('#cloudStatus'),t=$('#cloudText');if(!el)return;

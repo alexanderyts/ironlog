@@ -112,6 +112,7 @@ function volumeChart(){
 // screen. Same dismiss-once pattern as the coaching notes' "Got it"; rides the synced `seen` map.
 function prTip(){
   if(seenFlag('prAdjustTip'))return '';
+  if(!A.personalRecords(state.sessions,bw(),1).length)return '';   // nothing to tap yet — don't tell a new user to tap a record
   return `<div class="card" style="padding:11px 14px;margin:0 0 9px;background:var(--surface-2);border:none;display:flex;gap:10px;align-items:center">
     <div class="dim" style="font-size:12.5px;line-height:1.45;flex:1">Tap a record for its trend — or set it aside if the form wasn’t there.</div>
     <button class="linkbtn dim" data-seentip="prAdjustTip" style="font-size:12px;padding:2px 4px;flex-shrink:0">Got it</button></div>`;
@@ -126,7 +127,7 @@ function prList(){
   // is distinguishable from the default; ordinary PRs stay uncluttered)
   const modeTag=p=>{const ex=EX[p.id];const native=ex&&EQUIP_MODE[ex.equip];return p.mode&&p.mode!==native?` <span class="pill" style="font-size:10px;padding:1px 7px">${esc(MODES[p.mode].label)}</span>`:'';};
   return arr.map(p=>`<div class="ex-row" data-openex="${p.id}" style="cursor:pointer"><div style="flex:1;min-width:0"><div class="ex-name">${esc(p.name)}${modeTag(p)}</div>
-    <div class="ex-sub">Best set ${setStr(p)}</div>${p.adjusted?`<div class="ex-sub" style="color:var(--warn)">PR adjusted · ${p.adjusted.w}${U()} × ${p.adjusted.r} on ${fmtDate(p.adjusted.date)} set aside</div>`:''}</div>
+    <div class="ex-sub">Best set ${setStr(p)}</div>${p.adjusted?`<div class="ex-sub" style="color:var(--warn)">PR adjusted · ${setStr({...p,w:p.adjusted.w,r:p.adjusted.r})} on ${fmtDate(p.adjusted.date)} set aside</div>`:''}</div>
     <div style="text-align:right">${p.showEst?`<div class="mono" style="font-weight:700;font-size:16px">${p.est}<span class="dim" style="font-size:11px"> ${U()} e1RM</span></div>`:`<div class="mono dim" style="font-weight:600;font-size:13px">${p.load}${U()}</div>`}</div>${CHEV_R}</div>`).join('');
 }
 function balBar(l,lv,r,rv){
@@ -257,20 +258,23 @@ function trendCard(id){
 /* Your best set on this lift, with the one-tap escape hatch for a rep you don't want to be held to.
    Marking DELETES NOTHING: the set stays in History and keeps counting toward your volume — it just
    stops being the bar, both here and in what the app prefills next time (see lastPerf's `clean`).
-   Mode-scoped like the PR itself, so a Smith variant's record is adjusted separately. */
+   "That rep wasn't clean" sets aside the record shown here (that record's exact set); "Count it again"
+   restores it. Both operate a set at a time; a lift trained in two modalities can be adjusted in each. */
 const markedSets=id=>{let n=0;state.sessions.forEach(s=>s.exercises.forEach(e=>{if(e.id===id)e.sets.forEach(st=>{if(st.nc)n++;});}));return n;};
 function prAdjustCard(id){
   const p=A.personalRecords(state.sessions,bw(),999).filter(x=>x.id===id)[0];
   const marked=markedSets(id);
   if(!p&&!marked)return '';
-  const rsuf=p&&p.time?'s':'';
+  // Format a w×r the same way the record itself reads: seconds for time-held lifts, "Bodyweight" moves,
+  // per-hand dumbbells — so a set-aside plank shows "45s", not "0lb × 45".
+  const fmt=p?((w,r)=>p.bodyweight?(w?'Bodyweight +'+w+U():'Bodyweight')+' × '+r+(p.time?'s':''):w+U()+(MODES[p.mode]&&MODES[p.mode].perHand?'/ea':'')+' × '+r+(p.time?'s':'')):null;
   return `<div class="card" style="padding:12px 15px;margin:0 0 12px">
     <div class="row-between"><span class="eyebrow">Your best set</span>
-      <span class="mono" style="font-weight:600">${p?esc(p.w+U()+(MODES[p.mode]&&MODES[p.mode].perHand?'/ea':'')+' × '+p.r+rsuf):'—'}</span></div>
-    ${p&&p.adjusted?`<div class="dim" style="font-size:12px;margin-top:7px;line-height:1.45"><b style="color:var(--warn)">PR adjusted.</b> ${esc(p.adjusted.w+U()+' × '+p.adjusted.r)} on ${fmtDate(p.adjusted.date)} is set aside — still in your history and still counted in your volume.</div>`:''}
+      <span class="mono" style="font-weight:600">${p?esc(fmt(p.w,p.r)):'—'}</span></div>
+    ${p&&p.adjusted?`<div class="dim" style="font-size:12px;margin-top:7px;line-height:1.45"><b style="color:var(--warn)">PR adjusted.</b> ${esc(fmt(p.adjusted.w,p.adjusted.r))} on ${fmtDate(p.adjusted.date)} is set aside — still in your history and still counted in your volume.</div>`:''}
     <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
       ${p?`<button class="btn sm ghost" data-prmark="${id}">That rep wasn’t clean</button>`:''}
-      ${marked?`<button class="btn sm ghost" data-prunmark="${id}">Count ${marked>1?'them':'it'} again</button>`:''}
+      ${marked?`<button class="btn sm ghost" data-prunmark="${id}">Count it again</button>`:''}
     </div></div>`;
 }
 // The last few notes ever left on this lift (deloads included — a note is a note), newest first.

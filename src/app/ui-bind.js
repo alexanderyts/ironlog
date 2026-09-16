@@ -142,14 +142,27 @@ function markBestSet(id,btn){
   else openSheet(EX[id]?EX[id].name:id,exerciseDetail(id));
   toast('Set aside — it still counts toward your volume');
 }
+// The mirror of markBestSet: restore the single set the card is showing as "PR adjusted" (the disowned
+// set that currently beats the record, in that record's modality). Walking back several is one tap
+// each. Fallback: if there's no beating-set on display but sets are still set aside (a lower one, or
+// one in another modality the card can't surface), clear whatever's left so nothing can strand.
 function unmarkSets(id){
-  let n=0;
-  state.sessions.forEach(s=>{let hit=false;
-    s.exercises.forEach(e=>{if(e.id!==id)return;e.sets.forEach(st=>{if(st.nc){delete st.nc;hit=true;n++;}});});
-    if(hit){s.updatedAt=Date.now();S.upsertSession(s,false);}});
-  if(!n){toast('Nothing was set aside');return;}
+  const p=A.personalRecords(state.sessions,bw(),999).filter(x=>x.id===id)[0];
+  let restored=0;
+  if(p&&p.adjusted){
+    const s=state.sessions.find(x=>x.date===p.adjusted.date&&x.exercises.some(e=>e.id===id));
+    const e=s&&(s.exercises.find(x=>x.id===id&&modeOf(x)===p.mode)||s.exercises.find(x=>x.id===id));
+    const st=e&&e.sets.find(x=>x.nc&&(+x.w||0)===p.adjusted.w&&(+x.r||0)===p.adjusted.r);
+    if(st){delete st.nc;s.updatedAt=Date.now();S.upsertSession(s,false);restored=1;}
+  }
+  if(!restored){   // nothing on display to restore — clear any remaining set-aside sets for this lift
+    state.sessions.forEach(s=>{let hit=false;
+      s.exercises.forEach(e=>{if(e.id!==id)return;e.sets.forEach(st=>{if(st.nc){delete st.nc;hit=true;restored++;}});});
+      if(hit){s.updatedAt=Date.now();S.upsertSession(s,false);}});
+  }
+  if(!restored){toast('Nothing was set aside');return;}
   render();openSheet(EX[id]?EX[id].name:id,exerciseDetail(id));
-  toast(n>1?'Counting them again':'Counting it again');
+  toast('Counting it again');
 }
 function discardActive(){showConfirm('Discard workout?','Nothing from this session will be saved.','Discard',()=>{
   stopRest();stopElapsed();const copy=state.active;state.active=null;S.persistActive();todayScreen='home';render();
