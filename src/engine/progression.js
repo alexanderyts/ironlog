@@ -17,13 +17,17 @@ function e1rm(w,r){return r<=1?w:Math.round(w*(1+r/30));}
 function isWorking(st){return st.done!==false&&!st.warm;}
 // Load moved in a set: entered weight plus a share of bodyweight on bodyweight moves
 function setLoad(exId,w,bw){const f=BW_FACTOR[exId]||0;return (+w||0)+(bw&&f?Math.round(bw*f):0);}
-function sessionVolume(s,bw){let v=0;s.exercises.forEach(e=>{
+// The bodyweight to score a session by: the one recorded ON that session (D-1) if present, else the
+// caller's fallback (today's). This is what stops a pull-up logged at an old bodyweight from being
+// re-scored with today's number every time your weight changes.
+function sbw(s,bw){return (+(s&&s.bw)||0)||(+bw||0);}
+function sessionVolume(s,bw){const b=sbw(s,bw);let v=0;s.exercises.forEach(e=>{
   if(TIME_METRIC&&TIME_METRIC.has(e.id))return;   // time-held lifts (planks, carries) count seconds, not weight×reps
   // Assisted machines: the logged number is the ASSISTANCE, so the resistance actually moved is
   // bodyweight − assist (mirrors a weighted bodyweight lift, which is bodyweight + added). Needs a
   // bodyweight; without one it's unknowable and contributes 0 rather than counting the machine's help.
   const inv=INVERTED_LOAD&&INVERTED_LOAD.has(e.id);
-  e.sets.forEach(st=>{if(isWorking(st)){const load=inv?Math.max(0,(+bw||0)-(+st.w||0)):setLoad(e.id,st.w,bw);v+=load*(+st.r||0);}});
+  e.sets.forEach(st=>{if(isWorking(st)){const load=inv?Math.max(0,b-(+st.w||0)):setLoad(e.id,st.w,b);v+=load*(+st.r||0);}});
 });return v;}
 function sessionSets(s){let n=0;s.exercises.forEach(e=>e.sets.forEach(st=>{if(isWorking(st))n++;}));return n;}
 // How long a finished workout took, in whole minutes. `date` is the start (set at newSession); a set
@@ -126,11 +130,12 @@ function exerciseSeries(sessions,exId,opts){
     // has disowned reads as their level, and every honest session after it looks like a decline. But
     // the point is never DROPPED: if that session has no clean set at all it still plots, flagged, so
     // the history stays visible. `adj` tells the view to mark the point "PR adjusted".
+    const b=sbw(s,bw);   // score each session by ITS bodyweight (D-1)
     let best=-1,w=0,r=0,ncBest=-1,ncW=0,ncR=0;   // -1 so a legitimate score of 0 (e.g. assist == bodyweight) still plots
     e.sets.forEach(st=>{if(!isWorking(st))return;
-      const r0=+st.r||0,load=setLoad(exId,st.w,bw);
+      const r0=+st.r||0,load=setLoad(exId,st.w,b);
       if(!r0||(!load&&metric!=='time'&&metric!=='resist'))return;   // same "real set" gate as personalRecords — junk (0-rep / no-load non-time) sets don't plot; but an assist machine at load 0 is an unassisted rep and DOES plot
-      const sc=setScore(exId,st,bw);
+      const sc=setScore(exId,st,b);
       if(st.nc){if(sc>ncBest){ncBest=sc;ncW=+st.w||0;ncR=+st.r||0;}return;}
       if(sc>best){best=sc;w=+st.w||0;r=+st.r||0;}});
     if(best>=0)out.push({date:s.date,est:best,w,r,metric,adj:ncBest>best||undefined});
@@ -148,7 +153,8 @@ function bestE1rmBefore(sessions,exId,opts){
     if(opts.beforeTs&&s.date>=opts.beforeTs)continue;
     const e=s.exercises.find(x=>x.id===exId&&(!opts.mode||modeOf(x)===opts.mode));
     if(!e)continue;
-    e.sets.forEach(st=>{if(st.nc||!isWorking(st))return;const est=e1rm(setLoad(exId,st.w,bw),+st.r||0);if(est>best)best=est;});   // a disowned set is not a bar the next PR has to clear
+    const b=sbw(s,bw);   // each session scored by its own bodyweight (D-1)
+    e.sets.forEach(st=>{if(st.nc||!isWorking(st))return;const est=e1rm(setLoad(exId,st.w,b),+st.r||0);if(est>best)best=est;});   // a disowned set is not a bar the next PR has to clear
   }
   return best;
 }
@@ -321,7 +327,7 @@ function convertWeight(n,from,to){
 // look newer than your local edits and resurrect sessions you'd deleted (#20).
 function convertSessions(sessions,from,to,now,stamp){
   if(from===to)return [];const ids=[];
-  sessions.forEach(s=>{s.exercises.forEach(e=>e.sets.forEach(st=>{st.w=convertWeight(st.w,from,to);}));if(stamp)s.updatedAt=now||Date.now();ids.push(s.id);});
+  sessions.forEach(s=>{s.exercises.forEach(e=>e.sets.forEach(st=>{st.w=convertWeight(st.w,from,to);}));if(+s.bw>0)s.bw=convertWeight(s.bw,from,to);if(stamp)s.updatedAt=now||Date.now();ids.push(s.id);});   // convert the per-session bodyweight too (D-1) or a kg/lb switch would misread it
   return ids;
 }
 // Local calendar week, MONDAY start. weekStart(ts) = local-midnight timestamp of that week's Monday;
@@ -356,5 +362,5 @@ function calcStreak(sessions,now){
   return n;
 }
 
-IL.prog={DAY,startOfDay,e1rm,isWorking,setLoad,sessionVolume,sessionSets,sessionDuration,MAX_SESSION_MIN,setTimeline,lastSetAt,staleness,STALE_AFTER_MIN,LONG_SESSION_MIN,STALE_CONFIRM_MIN,END_PAD_MIN,finalizeSets,parseWeightInput,fmtVol,modeOf,real,lastPerf,lastModeFor,exerciseSeries,setScore,scoreMetric,bestE1rmBefore,setPattern,fmtPerf,repRange,nextSets,deloadSets,suggestion,unitIncrement,convertWeight,convertSessions,calcStreak,weekIndex,weekStart};
+IL.prog={DAY,startOfDay,e1rm,isWorking,setLoad,sbw,sessionVolume,sessionSets,sessionDuration,MAX_SESSION_MIN,setTimeline,lastSetAt,staleness,STALE_AFTER_MIN,LONG_SESSION_MIN,STALE_CONFIRM_MIN,END_PAD_MIN,finalizeSets,parseWeightInput,fmtVol,modeOf,real,lastPerf,lastModeFor,exerciseSeries,setScore,scoreMetric,bestE1rmBefore,setPattern,fmtPerf,repRange,nextSets,deloadSets,suggestion,unitIncrement,convertWeight,convertSessions,calcStreak,weekIndex,weekStart};
 if(typeof module!=='undefined')module.exports=IL.prog;

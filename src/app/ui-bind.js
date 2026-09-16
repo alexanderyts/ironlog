@@ -111,6 +111,7 @@ function commitFinish(s,endedAt,estimated){
   if(!s.exercises.length){toast('Log at least one set first');return;}
   const sm=workoutSummary(s);
   s.completed=true;s.updatedAt=Date.now();
+  if(bw()>0&&!(+s.bw>0))s.bw=bw();   // snapshot the bodyweight this workout was done at, so its bodyweight-lift math stays put as your weight changes later (D-1)
   if(!S.upsertSession(s,false)){
     // Storage is full: the sessions blob didn't save. DON'T clear the active workout — it stays on
     // this device (il_active still holds it) and, if cloud is on, was already pushed, so nothing is

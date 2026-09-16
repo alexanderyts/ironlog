@@ -2,6 +2,16 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.56.0 — 2026-09-16 · Your bodyweight is remembered per workout
+Bodyweight lifts (pull-ups, dips, assisted machines, planks) are scored partly by your bodyweight. Until now the app used your *current* weight for your *entire* history — so updating your weight quietly shifted every past pull-up number. Fixed:
+- **Each workout now remembers the bodyweight you did it at.** Your history stops moving when you update your weight — an old pull-up session keeps the numbers it earned, and a new one is scored at your new weight. Your progress chart for these lifts is finally accurate over time.
+- **Your existing workouts are frozen at your current weight** (a one-time step), so they don't drift from here on. New workouts save their own bodyweight automatically when you finish.
+- **Carry records now match the chart.** A farmer's/suitcase carry's personal best is ranked by longest hold (heavier load breaks a tie) — the same way the progress chart ranks it, so the PR card and the chart always agree.
+
+Note: history before this update is set to your current weight, so very old bodyweight-lift numbers are approximate; everything from here forward is exact.
+
+Not verified on-device.
+
 ## v0.55.0 — 2026-09-16 · Review polish (small correctness + feedback fixes)
 A follow-up review of the last three updates turned up a few small things, now fixed:
 - **An unassisted rep on an assist machine now counts as your record.** Working an assisted pull-up/dip down to zero assist is the strongest you can do — it used to be dropped from your PR and progress chart; now it's the top of both.

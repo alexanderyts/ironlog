@@ -14,11 +14,16 @@ test('C1: a bodyweight plank produces a PR ranked by seconds',()=>{
   assert.equal(pr.showEst,false,'no bogus e1RM for a hold');
 });
 
-test('C1: a heavier loaded carry outranks a lighter one; ties break on seconds',()=>{
+test('C1: a longer-held carry outranks a shorter one; ties break on load',()=>{
+  // seconds-primary so the PR card agrees with the progress chart (which ranks by seconds/setScore)
   const h=history(session(1,[['farmers-carry',[set(50,40),set(60,30),set(60,35)]]]));
   const pr=A.personalRecords(h,200,8).filter(p=>p.id==='farmers-carry')[0];
-  assert.equal(pr.w,60,'heaviest load wins');
-  assert.equal(pr.r,35,'ties on load break to the longer hold');
+  assert.equal(pr.r,40,'the longest hold wins');
+  assert.equal(pr.w,50,'even though it was lighter');
+  // a genuine tie on time breaks to the heavier load
+  const h2=history(session(1,[['farmers-carry',[set(55,35),set(60,35)]]]));
+  const pr2=A.personalRecords(h2,200,8).filter(p=>p.id==='farmers-carry')[0];
+  assert.equal(pr2.w,60,'equal holds → heavier load wins');
 });
 
 test('C1 CONTROL: an ordinary bodyweight lift with no bodyweight set still yields no PR',()=>{

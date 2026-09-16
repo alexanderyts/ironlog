@@ -41,6 +41,16 @@ if(CFG.DEMO&&IL.seed&&!state.sessions.length&&!lsGet('il_seeded',false)){
   state.justSeeded=true;
 }
 function resetDemo(){try{Object.values(LS).forEach(k=>localStorage.removeItem(k));localStorage.removeItem('il_seeded');}catch(e){}location.reload();}
+// D-1 one-time freeze: stamp already-logged workouts with the current bodyweight so their bodyweight-lift
+// math stops drifting as you update your weight later. Runs once a bodyweight is known; workouts logged
+// after this snapshot their own at finish. Local (per-device) marker — not synced, so each device freezes
+// its own copy with its own number, and it doesn't bump updatedAt (no mass cloud re-push for a local fill).
+(function freezeBodyweight(){
+  try{if(lsGet('il_bwfrozen',false))return;const b=+state.settings.bodyweight||0;if(b<=0)return;
+    let changed=false;state.sessions.forEach(s=>{if(s&&s.completed&&!(+s.bw>0)){s.bw=b;changed=true;}});
+    if(changed)lsSet(LS.sessions,state.sessions);lsSet('il_bwfrozen',1);
+  }catch(e){}
+})();
 
 const saveSessions=()=>{const ok=lsSet(LS.sessions,state.sessions);state.storageError=!ok;return ok;};   // the big blob is where the quota bites; track it so the UI can warn
 const saveActive=()=>{const a=lsSet(LS.active,state.active);const b=lsSet(LS.activeCleared,state.activeClearedAt||0);return a&&b;};   // the active workout is the SOLE copy of live data until Finish — report if it didn't land

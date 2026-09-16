@@ -3,7 +3,7 @@ var IL=globalThis.IL||(globalThis.IL={});
 if(typeof require==='function'&&!IL.data)require('../data/exercises.js');
 if(typeof require==='function'&&!IL.prog)require('./progression.js');
 const {EX,EXERCISES,REGIONS,IDEAL_PATS,LOWER_GROUPS,MODES,INVERTED_LOAD,TIME_METRIC,regLabel,patLabel,exampleFor,hashId}=IL.data;
-const {DAY,startOfDay,e1rm,isWorking,setLoad,setScore,sessionVolume,sessionSets,sessionDuration,setTimeline,modeOf,calcStreak,real,weekIndex,weekStart,lastPerf}=IL.prog;
+const {DAY,startOfDay,e1rm,isWorking,setLoad,setScore,sbw,sessionVolume,sessionSets,sessionDuration,setTimeline,modeOf,calcStreak,real,weekIndex,weekStart,lastPerf}=IL.prog;
 
 // completed() INCLUDES deloads on purpose — volume/frequency/PR-window analysis wants everything the
 // user actually did. Progression-only scans use real() (completed AND not a deload) instead.
@@ -51,7 +51,7 @@ function progressionStat(sessions,now,bw){
   now=now||Date.now();
   const done=real(sessions).filter(s=>s.date>=now-28*DAY&&s.date<now).sort((x,y)=>x.date-y.date);
   const byEx={};
-  done.forEach(s=>s.exercises.forEach(e=>{const best=Math.max(0,...e.sets.filter(st=>!st.nc&&isWorking(st)).map(st=>setScore(e.id,st,bw)));if(best)(byEx[e.id]=byEx[e.id]||[]).push(best);}));
+  done.forEach(s=>{const b=sbw(s,bw);s.exercises.forEach(e=>{const best=Math.max(0,...e.sets.filter(st=>!st.nc&&isWorking(st)).map(st=>setScore(e.id,st,b)));if(best)(byEx[e.id]=byEx[e.id]||[]).push(best);});});
   let n=0,up=0;Object.values(byEx).forEach(arr=>{if(arr.length>=2){n++;if(arr[arr.length-1]>arr[0])up++;}});
   return {n,up};
 }
@@ -318,12 +318,14 @@ function buildHints(sessions,now,bw,profile){
 function personalRecords(sessions,bw,limit){
   const best={},set_aside={};
   // Ranking rule for a key, shared by the live best and the set-aside best so they can't drift apart
-  const beats=(c,b,inverted,time)=>inverted?(!b||c.load<b.load):time?(!b||c.load>b.load||(c.load===b.load&&c.r>b.r)):(!b||c.est>b.est);
-  real(sessions).forEach(s=>{s.exercises.forEach(e=>{const mode=modeOf(e),key=e.id+':'+mode,ex=EX[e.id];
+  // Time-held: longest hold first, heavier load as the tiebreak — matches setScore (seconds) so the PR
+  // card and the progress trend never disagree about the same lift (a weighted carry included).
+  const beats=(c,b,inverted,time)=>inverted?(!b||c.load<b.load):time?(!b||c.r>b.r||(c.r===b.r&&c.load>b.load)):(!b||c.est>b.est);
+  real(sessions).forEach(s=>{const sb=sbw(s,bw);s.exercises.forEach(e=>{const mode=modeOf(e),key=e.id+':'+mode,ex=EX[e.id];
     const inverted=!!(ex&&INVERTED_LOAD&&INVERTED_LOAD.has(e.id));   // assist machine: the PR is the LEAST assist, and no 1RM estimate (#16)
     const time=!!(TIME_METRIC&&TIME_METRIC.has(e.id));   // time-held: "reps" are seconds → no 1RM; best = longest, then heaviest
     e.sets.forEach(st=>{
-    if(!isWorking(st))return;const w=setLoad(e.id,st.w,bw),r=+st.r||0;
+    if(!isWorking(st))return;const w=setLoad(e.id,st.w,sb),r=+st.r||0;   // sb = this session's bodyweight (D-1)
     // A time-held lift is a real record at load 0 (a bodyweight plank), and an assist machine at load 0
     // is an UNASSISTED rep — the strongest possible, so it must qualify too. Only an ordinary lift needs
     // a real load (a pull-up with no bodyweight set stays out — analysis.test.js:112).

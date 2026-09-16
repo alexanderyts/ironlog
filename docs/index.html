@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-/0DTAqKajyzBqUzL08dLUb+I1NtH/kxhvdMxCtS5fVI=' 'sha256-WPBob/luB2k1aalTWXpi6zk3SrIbj8GlZV7AlFdG7oA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-reUVLj52My3PH6HxfbOIPMD3Ar6+pxH7h30ZGYZS8+I=' 'sha256-WPBob/luB2k1aalTWXpi6zk3SrIbj8GlZV7AlFdG7oA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Ironlog</title>
@@ -424,8 +424,8 @@ html.kb-open .tabbar{display:none}
 </div>
 
 <script>
-/* Ironlog v0.55.0 · site build */
-var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.55.0",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
+/* Ironlog v0.56.0 · site build */
+var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.56.0",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
 
 /* ===== src/data/exercises.js ===== */
 (function(){'use strict';
@@ -731,13 +731,17 @@ function e1rm(w,r){return r<=1?w:Math.round(w*(1+r/30));}
 function isWorking(st){return st.done!==false&&!st.warm;}
 // Load moved in a set: entered weight plus a share of bodyweight on bodyweight moves
 function setLoad(exId,w,bw){const f=BW_FACTOR[exId]||0;return (+w||0)+(bw&&f?Math.round(bw*f):0);}
-function sessionVolume(s,bw){let v=0;s.exercises.forEach(e=>{
+// The bodyweight to score a session by: the one recorded ON that session (D-1) if present, else the
+// caller's fallback (today's). This is what stops a pull-up logged at an old bodyweight from being
+// re-scored with today's number every time your weight changes.
+function sbw(s,bw){return (+(s&&s.bw)||0)||(+bw||0);}
+function sessionVolume(s,bw){const b=sbw(s,bw);let v=0;s.exercises.forEach(e=>{
   if(TIME_METRIC&&TIME_METRIC.has(e.id))return;   // time-held lifts (planks, carries) count seconds, not weight×reps
   // Assisted machines: the logged number is the ASSISTANCE, so the resistance actually moved is
   // bodyweight − assist (mirrors a weighted bodyweight lift, which is bodyweight + added). Needs a
   // bodyweight; without one it's unknowable and contributes 0 rather than counting the machine's help.
   const inv=INVERTED_LOAD&&INVERTED_LOAD.has(e.id);
-  e.sets.forEach(st=>{if(isWorking(st)){const load=inv?Math.max(0,(+bw||0)-(+st.w||0)):setLoad(e.id,st.w,bw);v+=load*(+st.r||0);}});
+  e.sets.forEach(st=>{if(isWorking(st)){const load=inv?Math.max(0,b-(+st.w||0)):setLoad(e.id,st.w,b);v+=load*(+st.r||0);}});
 });return v;}
 function sessionSets(s){let n=0;s.exercises.forEach(e=>e.sets.forEach(st=>{if(isWorking(st))n++;}));return n;}
 // How long a finished workout took, in whole minutes. `date` is the start (set at newSession); a set
@@ -840,11 +844,12 @@ function exerciseSeries(sessions,exId,opts){
     // has disowned reads as their level, and every honest session after it looks like a decline. But
     // the point is never DROPPED: if that session has no clean set at all it still plots, flagged, so
     // the history stays visible. `adj` tells the view to mark the point "PR adjusted".
+    const b=sbw(s,bw);   // score each session by ITS bodyweight (D-1)
     let best=-1,w=0,r=0,ncBest=-1,ncW=0,ncR=0;   // -1 so a legitimate score of 0 (e.g. assist == bodyweight) still plots
     e.sets.forEach(st=>{if(!isWorking(st))return;
-      const r0=+st.r||0,load=setLoad(exId,st.w,bw);
+      const r0=+st.r||0,load=setLoad(exId,st.w,b);
       if(!r0||(!load&&metric!=='time'&&metric!=='resist'))return;   // same "real set" gate as personalRecords — junk (0-rep / no-load non-time) sets don't plot; but an assist machine at load 0 is an unassisted rep and DOES plot
-      const sc=setScore(exId,st,bw);
+      const sc=setScore(exId,st,b);
       if(st.nc){if(sc>ncBest){ncBest=sc;ncW=+st.w||0;ncR=+st.r||0;}return;}
       if(sc>best){best=sc;w=+st.w||0;r=+st.r||0;}});
     if(best>=0)out.push({date:s.date,est:best,w,r,metric,adj:ncBest>best||undefined});
@@ -862,7 +867,8 @@ function bestE1rmBefore(sessions,exId,opts){
     if(opts.beforeTs&&s.date>=opts.beforeTs)continue;
     const e=s.exercises.find(x=>x.id===exId&&(!opts.mode||modeOf(x)===opts.mode));
     if(!e)continue;
-    e.sets.forEach(st=>{if(st.nc||!isWorking(st))return;const est=e1rm(setLoad(exId,st.w,bw),+st.r||0);if(est>best)best=est;});   // a disowned set is not a bar the next PR has to clear
+    const b=sbw(s,bw);   // each session scored by its own bodyweight (D-1)
+    e.sets.forEach(st=>{if(st.nc||!isWorking(st))return;const est=e1rm(setLoad(exId,st.w,b),+st.r||0);if(est>best)best=est;});   // a disowned set is not a bar the next PR has to clear
   }
   return best;
 }
@@ -1035,7 +1041,7 @@ function convertWeight(n,from,to){
 // look newer than your local edits and resurrect sessions you'd deleted (#20).
 function convertSessions(sessions,from,to,now,stamp){
   if(from===to)return [];const ids=[];
-  sessions.forEach(s=>{s.exercises.forEach(e=>e.sets.forEach(st=>{st.w=convertWeight(st.w,from,to);}));if(stamp)s.updatedAt=now||Date.now();ids.push(s.id);});
+  sessions.forEach(s=>{s.exercises.forEach(e=>e.sets.forEach(st=>{st.w=convertWeight(st.w,from,to);}));if(+s.bw>0)s.bw=convertWeight(s.bw,from,to);if(stamp)s.updatedAt=now||Date.now();ids.push(s.id);});   // convert the per-session bodyweight too (D-1) or a kg/lb switch would misread it
   return ids;
 }
 // Local calendar week, MONDAY start. weekStart(ts) = local-midnight timestamp of that week's Monday;
@@ -1070,7 +1076,7 @@ function calcStreak(sessions,now){
   return n;
 }
 
-IL.prog={DAY,startOfDay,e1rm,isWorking,setLoad,sessionVolume,sessionSets,sessionDuration,MAX_SESSION_MIN,setTimeline,lastSetAt,staleness,STALE_AFTER_MIN,LONG_SESSION_MIN,STALE_CONFIRM_MIN,END_PAD_MIN,finalizeSets,parseWeightInput,fmtVol,modeOf,real,lastPerf,lastModeFor,exerciseSeries,setScore,scoreMetric,bestE1rmBefore,setPattern,fmtPerf,repRange,nextSets,deloadSets,suggestion,unitIncrement,convertWeight,convertSessions,calcStreak,weekIndex,weekStart};
+IL.prog={DAY,startOfDay,e1rm,isWorking,setLoad,sbw,sessionVolume,sessionSets,sessionDuration,MAX_SESSION_MIN,setTimeline,lastSetAt,staleness,STALE_AFTER_MIN,LONG_SESSION_MIN,STALE_CONFIRM_MIN,END_PAD_MIN,finalizeSets,parseWeightInput,fmtVol,modeOf,real,lastPerf,lastModeFor,exerciseSeries,setScore,scoreMetric,bestE1rmBefore,setPattern,fmtPerf,repRange,nextSets,deloadSets,suggestion,unitIncrement,convertWeight,convertSessions,calcStreak,weekIndex,weekStart};
 if(typeof module!=='undefined')module.exports=IL.prog;
 
 })();
@@ -1576,7 +1582,7 @@ var IL=globalThis.IL||(globalThis.IL={});
 if(typeof require==='function'&&!IL.data)require('../data/exercises.js');
 if(typeof require==='function'&&!IL.prog)require('./progression.js');
 const {EX,EXERCISES,REGIONS,IDEAL_PATS,LOWER_GROUPS,MODES,INVERTED_LOAD,TIME_METRIC,regLabel,patLabel,exampleFor,hashId}=IL.data;
-const {DAY,startOfDay,e1rm,isWorking,setLoad,setScore,sessionVolume,sessionSets,sessionDuration,setTimeline,modeOf,calcStreak,real,weekIndex,weekStart,lastPerf}=IL.prog;
+const {DAY,startOfDay,e1rm,isWorking,setLoad,setScore,sbw,sessionVolume,sessionSets,sessionDuration,setTimeline,modeOf,calcStreak,real,weekIndex,weekStart,lastPerf}=IL.prog;
 
 // completed() INCLUDES deloads on purpose — volume/frequency/PR-window analysis wants everything the
 // user actually did. Progression-only scans use real() (completed AND not a deload) instead.
@@ -1624,7 +1630,7 @@ function progressionStat(sessions,now,bw){
   now=now||Date.now();
   const done=real(sessions).filter(s=>s.date>=now-28*DAY&&s.date<now).sort((x,y)=>x.date-y.date);
   const byEx={};
-  done.forEach(s=>s.exercises.forEach(e=>{const best=Math.max(0,...e.sets.filter(st=>!st.nc&&isWorking(st)).map(st=>setScore(e.id,st,bw)));if(best)(byEx[e.id]=byEx[e.id]||[]).push(best);}));
+  done.forEach(s=>{const b=sbw(s,bw);s.exercises.forEach(e=>{const best=Math.max(0,...e.sets.filter(st=>!st.nc&&isWorking(st)).map(st=>setScore(e.id,st,b)));if(best)(byEx[e.id]=byEx[e.id]||[]).push(best);});});
   let n=0,up=0;Object.values(byEx).forEach(arr=>{if(arr.length>=2){n++;if(arr[arr.length-1]>arr[0])up++;}});
   return {n,up};
 }
@@ -1891,12 +1897,14 @@ function buildHints(sessions,now,bw,profile){
 function personalRecords(sessions,bw,limit){
   const best={},set_aside={};
   // Ranking rule for a key, shared by the live best and the set-aside best so they can't drift apart
-  const beats=(c,b,inverted,time)=>inverted?(!b||c.load<b.load):time?(!b||c.load>b.load||(c.load===b.load&&c.r>b.r)):(!b||c.est>b.est);
-  real(sessions).forEach(s=>{s.exercises.forEach(e=>{const mode=modeOf(e),key=e.id+':'+mode,ex=EX[e.id];
+  // Time-held: longest hold first, heavier load as the tiebreak — matches setScore (seconds) so the PR
+  // card and the progress trend never disagree about the same lift (a weighted carry included).
+  const beats=(c,b,inverted,time)=>inverted?(!b||c.load<b.load):time?(!b||c.r>b.r||(c.r===b.r&&c.load>b.load)):(!b||c.est>b.est);
+  real(sessions).forEach(s=>{const sb=sbw(s,bw);s.exercises.forEach(e=>{const mode=modeOf(e),key=e.id+':'+mode,ex=EX[e.id];
     const inverted=!!(ex&&INVERTED_LOAD&&INVERTED_LOAD.has(e.id));   // assist machine: the PR is the LEAST assist, and no 1RM estimate (#16)
     const time=!!(TIME_METRIC&&TIME_METRIC.has(e.id));   // time-held: "reps" are seconds → no 1RM; best = longest, then heaviest
     e.sets.forEach(st=>{
-    if(!isWorking(st))return;const w=setLoad(e.id,st.w,bw),r=+st.r||0;
+    if(!isWorking(st))return;const w=setLoad(e.id,st.w,sb),r=+st.r||0;   // sb = this session's bodyweight (D-1)
     // A time-held lift is a real record at load 0 (a bodyweight plank), and an assist machine at load 0
     // is an UNASSISTED rep — the strongest possible, so it must qualify too. Only an ordinary lift needs
     // a real load (a pull-up with no bodyweight set stays out — analysis.test.js:112).
@@ -2099,7 +2107,7 @@ const rid=p=>p+Math.random().toString(36).slice(2,9);
 
 function cleanSet(st){st=st&&typeof st==='object'?st:{};const o={w:sNumBlank(st.w),r:sNumBlank(st.r),done:st.done!==false};if(st.warm)o.warm=true;if(st.nc)o.nc=true;const at=+st.at;if(Number.isFinite(at)&&at>0)o.at=at;return o;}   // missing done => done; `at` (check timestamp) kept if a real number; `nc` = "doesn't count as a record"
 function cleanExercise(e){e=e&&typeof e==='object'?e:{};const o={id:sId(e.id),name:sStr(e.name),sets:sArr(e.sets,MAX_SETS).map(cleanSet)};if(e.mode&&MODES[e.mode])o.mode=sId(e.mode);if(typeof e.note==='string'&&e.note.trim())o.note=sStr(e.note,500);return o;}   // drop an unknown mode (a bad import would white-screen Progress via MODES[mode].label)
-function cleanSession(s){s=s&&typeof s==='object'?s:{};const o={id:sId(s.id)||rid('imp'),schema:sNum(s.schema)||1,date:sNum(s.date)||Date.now(),updatedAt:sNum(s.updatedAt)||sNum(s.date)||Date.now(),completed:s.completed!==false,exercises:sArr(s.exercises,MAX_EX).map(cleanExercise)};if(s.deload)o.deload=true;const end=+s.endedAt;if(Number.isFinite(end)&&end>0){o.endedAt=end;if(s.endEstimated===true)o.endEstimated=true;}
+function cleanSession(s){s=s&&typeof s==='object'?s:{};const o={id:sId(s.id)||rid('imp'),schema:sNum(s.schema)||1,date:sNum(s.date)||Date.now(),updatedAt:sNum(s.updatedAt)||sNum(s.date)||Date.now(),completed:s.completed!==false,exercises:sArr(s.exercises,MAX_EX).map(cleanExercise)};if(s.deload)o.deload=true;const b=sNum(s.bw);if(b>0)o.bw=Math.min(2000,b);/* per-session bodyweight snapshot (D-1) — preserve through cloud/import */const end=+s.endedAt;if(Number.isFinite(end)&&end>0){o.endedAt=end;if(s.endEstimated===true)o.endEstimated=true;}
   if(s.kind==='cardio'){o.kind='cardio';o.exercises=[];o.cardio=cleanCardio(s.cardio);}   // cardio never carries exercises → every strength filter drops it
   return o;}
 function cleanRoutine(r){r=r&&typeof r==='object'?r:{};return {id:sId(r.id)||rid('r'),name:sStr(r.name),exIds:sArr(r.exIds,MAX_EX).map(sId).filter(Boolean),updatedAt:sNum(r.updatedAt)||Date.now()};}
@@ -2275,6 +2283,16 @@ if(CFG.DEMO&&IL.seed&&!state.sessions.length&&!lsGet('il_seeded',false)){
   state.justSeeded=true;
 }
 function resetDemo(){try{Object.values(LS).forEach(k=>localStorage.removeItem(k));localStorage.removeItem('il_seeded');}catch(e){}location.reload();}
+// D-1 one-time freeze: stamp already-logged workouts with the current bodyweight so their bodyweight-lift
+// math stops drifting as you update your weight later. Runs once a bodyweight is known; workouts logged
+// after this snapshot their own at finish. Local (per-device) marker — not synced, so each device freezes
+// its own copy with its own number, and it doesn't bump updatedAt (no mass cloud re-push for a local fill).
+(function freezeBodyweight(){
+  try{if(lsGet('il_bwfrozen',false))return;const b=+state.settings.bodyweight||0;if(b<=0)return;
+    let changed=false;state.sessions.forEach(s=>{if(s&&s.completed&&!(+s.bw>0)){s.bw=b;changed=true;}});
+    if(changed)lsSet(LS.sessions,state.sessions);lsSet('il_bwfrozen',1);
+  }catch(e){}
+})();
 
 const saveSessions=()=>{const ok=lsSet(LS.sessions,state.sessions);state.storageError=!ok;return ok;};   // the big blob is where the quota bites; track it so the UI can warn
 const saveActive=()=>{const a=lsSet(LS.active,state.active);const b=lsSet(LS.activeCleared,state.activeClearedAt||0);return a&&b;};   // the active workout is the SOLE copy of live data until Finish — report if it didn't land
@@ -3854,6 +3872,7 @@ function commitFinish(s,endedAt,estimated){
   if(!s.exercises.length){toast('Log at least one set first');return;}
   const sm=workoutSummary(s);
   s.completed=true;s.updatedAt=Date.now();
+  if(bw()>0&&!(+s.bw>0))s.bw=bw();   // snapshot the bodyweight this workout was done at, so its bodyweight-lift math stays put as your weight changes later (D-1)
   if(!S.upsertSession(s,false)){
     // Storage is full: the sessions blob didn't save. DON'T clear the active workout — it stays on
     // this device (il_active still holds it) and, if cloud is on, was already pushed, so nothing is
