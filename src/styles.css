@@ -216,6 +216,8 @@ html.kb-open .tabbar{display:none}
 .stat .k{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
 .stat .v{font-family:var(--font-display);font-weight:800;font-size:27px;letter-spacing:-.02em;margin-top:5px;line-height:1}
 .stat .v small{font-size:14px;font-weight:600;color:var(--ink-3);margin-left:3px}
+.statdelta{font-size:11px;font-weight:600;color:var(--ink-3);margin-top:5px;letter-spacing:.01em}
+.statdelta.up{color:var(--good)}
 
 /* bar chart */
 .chart{display:flex;align-items:flex-end;gap:7px;height:150px;padding:6px 2px 0}

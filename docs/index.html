@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-OSopTkAFR3bHjeTeSLjskWsWtQQ3mdrLpXzLEeBTim8=' 'sha256-WPBob/luB2k1aalTWXpi6zk3SrIbj8GlZV7AlFdG7oA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-LUlbvgP5jpYoh8pyCw1onJHWx0EXKhp+FB5xESdFJyM=' 'sha256-WPBob/luB2k1aalTWXpi6zk3SrIbj8GlZV7AlFdG7oA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Ironlog</title>
@@ -238,6 +238,8 @@ html.kb-open .tabbar{display:none}
 .stat .k{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
 .stat .v{font-family:var(--font-display);font-weight:800;font-size:27px;letter-spacing:-.02em;margin-top:5px;line-height:1}
 .stat .v small{font-size:14px;font-weight:600;color:var(--ink-3);margin-left:3px}
+.statdelta{font-size:11px;font-weight:600;color:var(--ink-3);margin-top:5px;letter-spacing:.01em}
+.statdelta.up{color:var(--good)}
 
 /* bar chart */
 .chart{display:flex;align-items:flex-end;gap:7px;height:150px;padding:6px 2px 0}
@@ -422,8 +424,8 @@ html.kb-open .tabbar{display:none}
 </div>
 
 <script>
-/* Ironlog v0.50.0 · site build */
-var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.50.0",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
+/* Ironlog v0.51.0 · site build */
+var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.51.0",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
 
 /* ===== src/data/exercises.js ===== */
 (function(){'use strict';
@@ -1643,7 +1645,7 @@ function findings(a,sessions,now,bw,profile){
   }
   const lastDeload=completed(sessions).filter(s=>s.deload&&s.date<now).sort((x,y)=>y.date-x.date)[0];
   const sinceDeload=lastDeload?Math.round((now-lastDeload.date)/DAY):Infinity;
-  if(sinceDeload<=14)F.push({type:'deload-taken',lv:'good',days:sinceDeload});
+  if(sinceDeload<=14)F.push({type:'deload-taken',lv:'good',days:sinceDeload,wk:weekIndex(lastDeload.date)});   // wk = the deload's Monday-week, so the tense matches the rest of the app (this week / last week / N days ago)
   else{const streakWk=calcStreak(sessions,now),weeksSince=Math.floor(sinceDeload/7);
     // Count from the LAST deload, not the training streak (which runs through deloads), so it can't say
     // "12 weeks without a deload" three weeks after one. Fire once per ~6-week block (weeks 6–7, 12–13…),
@@ -1753,11 +1755,15 @@ function renderFinding(f,week){
         `${pre} — <b>${f.lower}</b> lower-body sets to <b>${f.upper}</b> upper. A squat or hinge day would even you out.`,
         `${pre}: <b>${f.lower}</b> vs <b>${f.upper}</b> upper sets. Time to give them their own day.`])};
     }
-    case 'deload-taken':{const w=f.days<=7;return {lv:'good',x:pickVariant(f,week,[
-      `<b>Deload</b> ${w?'this week':'recently'} — good call. That's where the last block turns into strength.`,
-      `You eased off with a <b>deload</b> ${w?'this week':'lately'}. Come back fresh and the loads climb.`,
-      `A <b>deload</b> ${w?'this week':'recently'} — recovery's doing its job. Back to full loads when you're ready.`,
-      `Smart <b>deload</b> ${w?'this week':'lately'}. Let the fatigue drain, then pick it back up.`])};}
+    case 'deload-taken':{
+      // Tense from the Monday-week gap, not a rolling 7 days — so it never says "this week" for a deload
+      // that was actually last week (the bug: the Recovery card said "6d ago" while this said "this week").
+      const rel=(week||0)-(f.wk||0),when=rel<=0?'this week':rel===1?'last week':f.days+' days ago';
+      return {lv:'good',x:pickVariant(f,week,[
+      `<b>Deload</b> ${when} — good call. That's where the last block turns into strength.`,
+      `You eased off with a <b>deload</b> ${when}. Come back fresh and the loads climb.`,
+      `A <b>deload</b> ${when} — recovery's doing its job. Back to full loads when you're ready.`,
+      `Smart <b>deload</b> ${when}. Let the fatigue drain, then pick it back up.`])};}
     case 'deload-due':return {lv:'info',x:pickVariant(f,week,[
       `<b>${f.weeks} weeks</b> straight — an easy <b>deload</b> week now clears fatigue for the next push.`,
       `You've trained hard <b>${f.weeks} weeks</b> running. A recovery week sets up your next jump.`,
@@ -3069,18 +3075,35 @@ function libRow(e,attr){
 }
 
 /* ---------------- PROGRESS ---------------- */
+// A "+N vs last week" line under a stat. Rule: only shown when last week had a real value to compare
+// against (no "+3 vs 0" for someone's first week). A down week is muted, never alarming — an easy week
+// isn't a failure. Rendered as its own line so it never disturbs the big number a test/reader reads.
+function statDelta(cur,prev,fmtFn){
+  if(!prev)return '';   // nothing meaningful to compare to yet
+  const d=cur-prev;if(d===0)return `<div class="statdelta">— same as last week</div>`;
+  const f=fmtFn?fmtFn(Math.abs(d)):Math.abs(d);
+  return `<div class="statdelta ${d>0?'up':''}">${d>0?'+':'−'}${f} vs last week</div>`;
+}
 function viewProgress(){
   const done=completedSessions(),anyDone=completedAny(),now=Date.now();
-  const wk=done.filter(s=>s.date>=P.weekStart(now)),mo=done.filter(s=>s.date>=now-30*DAY);   // strength this week/month (for volume + muscle breakdown)
-  const wkVol=wk.reduce((a,s)=>a+volOf(s),0);
-  // counts include cardio (activity), the strength math above does not
-  const wkAny=anyDone.filter(s=>s.date>=P.weekStart(now)).length,moAny=anyDone.filter(s=>s.date>=now-30*DAY).length;
+  const ws=P.weekStart(now),lwStart=ws-7*DAY,elapsed=now-ws;   // this-week start (Mon), last-week start, and how far into the week we are
+  // Compare against last week THROUGH THE SAME POINT, not the whole week — otherwise a Tuesday (a
+  // partial week) always shows a big drop against a full one. This Mon–Tue vs last Mon–Tue is fair,
+  // and by Sunday it's the full week either way.
+  const inWk=arr=>arr.filter(s=>s.date>=ws),inLw=arr=>arr.filter(s=>s.date>=lwStart&&s.date<lwStart+elapsed);
+  const mo=done.filter(s=>s.date>=now-30*DAY);   // strength last 30d — for the muscle breakdown only
+  // Rule (stated once): COUNT tiles (sessions, streak) include cardio — showing up is showing up.
+  // MAGNITUDE tiles (volume, sets) are strength only, because cardio has no load or working sets.
+  const wkAny=inWk(anyDone).length,lwAny=inLw(anyDone).length;
+  const wkStr=inWk(done),lwStr=inLw(done);
+  const wkVol=wkStr.reduce((a,s)=>a+volOf(s),0),lwVol=lwStr.reduce((a,s)=>a+volOf(s),0);
+  const wkSets=wkStr.reduce((a,s)=>a+setsOf(s),0),lwSets=lwStr.reduce((a,s)=>a+setsOf(s),0);
   return `<div class="section">
     <div class="view-title" style="margin:0 2px 14px;font-size:22px">Progress</div>
     <div class="statgrid">
-      <div class="card stat"><div class="k">This week</div><div class="v mono">${wkAny}<small>session${wkAny!==1?'s':''}</small></div></div>
-      <div class="card stat"><div class="k">${volLabel('Week volume')}</div><div class="v mono">${fmtVol(wkVol)}<small>${U()}</small></div></div>
-      <div class="card stat"><div class="k">30-day sessions</div><div class="v mono">${moAny}</div></div>
+      <div class="card stat"><div class="k">This week</div><div class="v mono">${wkAny}<small>session${wkAny!==1?'s':''}</small></div>${statDelta(wkAny,lwAny)}</div>
+      <div class="card stat"><div class="k">${volLabel('Week volume')}</div><div class="v mono">${fmtVol(wkVol)}<small>${U()}</small></div>${statDelta(wkVol,lwVol,fmtVol)}</div>
+      <div class="card stat"><div class="k">Sets this week</div><div class="v mono">${wkSets}<small>set${wkSets!==1?'s':''}</small></div>${statDelta(wkSets,lwSets)}</div>
       <div class="card stat"><div class="k">Current streak</div><div class="v mono">${P.calcStreak(anyDone,now)}<small>wk</small></div></div>
     </div>
     ${coachCard(done)}

@@ -2,6 +2,14 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.51.0 — 2026-09-16 · Progress tab: clearer numbers, honest comparisons
+The Progress tab's top numbers now move with what you actually did, and a long-standing wording bug is fixed.
+- **Every stat now shows how it compares to last week** — e.g. "5 sessions · +4 vs last week." It compares fairly: early in the week it measures against the *same point* last week, not a finished week, so a Tuesday never looks like a slump.
+- **The confusing "30-day sessions" box is gone.** In its place: **Sets this week** — so the four tiles each tell you something different (sessions, volume, sets, streak) instead of three that all just count how often you showed up.
+- **Fixed: Coach's Notes said "Deload this week" when it was actually last week.** It now uses the same Monday-to-Sunday weeks as everywhere else and reads "this week," "last week," or "N days ago" — matching the Recovery card instead of contradicting it.
+- Sessions and streak count all activity (lifts and cardio); volume and sets are lifting-only — a down week is shown in calm grey, never as a red failure.
+- Not verified on-device (tested in a desktop browser at iPhone size, against your 2026-09-16 backup — 240 tests green; review snapshot unchanged).
+
 ## v0.50.0 — 2026-09-16 · A built-in stopwatch for planks, carries and holds
 For anything measured by time instead of reps — planks, farmer's carries, dead hangs — you can now time it in the app instead of watching a separate clock.
 - **⏱ Stopwatch button** on those exercises' cards during a workout. Tap it → a 5-second "get set" countdown → it counts up while you hold → **Stop & log** drops the seconds straight into your next set and checks it off.

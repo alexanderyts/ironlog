@@ -93,7 +93,7 @@ function findings(a,sessions,now,bw,profile){
   }
   const lastDeload=completed(sessions).filter(s=>s.deload&&s.date<now).sort((x,y)=>y.date-x.date)[0];
   const sinceDeload=lastDeload?Math.round((now-lastDeload.date)/DAY):Infinity;
-  if(sinceDeload<=14)F.push({type:'deload-taken',lv:'good',days:sinceDeload});
+  if(sinceDeload<=14)F.push({type:'deload-taken',lv:'good',days:sinceDeload,wk:weekIndex(lastDeload.date)});   // wk = the deload's Monday-week, so the tense matches the rest of the app (this week / last week / N days ago)
   else{const streakWk=calcStreak(sessions,now),weeksSince=Math.floor(sinceDeload/7);
     // Count from the LAST deload, not the training streak (which runs through deloads), so it can't say
     // "12 weeks without a deload" three weeks after one. Fire once per ~6-week block (weeks 6–7, 12–13…),
@@ -203,11 +203,15 @@ function renderFinding(f,week){
         `${pre} — <b>${f.lower}</b> lower-body sets to <b>${f.upper}</b> upper. A squat or hinge day would even you out.`,
         `${pre}: <b>${f.lower}</b> vs <b>${f.upper}</b> upper sets. Time to give them their own day.`])};
     }
-    case 'deload-taken':{const w=f.days<=7;return {lv:'good',x:pickVariant(f,week,[
-      `<b>Deload</b> ${w?'this week':'recently'} — good call. That's where the last block turns into strength.`,
-      `You eased off with a <b>deload</b> ${w?'this week':'lately'}. Come back fresh and the loads climb.`,
-      `A <b>deload</b> ${w?'this week':'recently'} — recovery's doing its job. Back to full loads when you're ready.`,
-      `Smart <b>deload</b> ${w?'this week':'lately'}. Let the fatigue drain, then pick it back up.`])};}
+    case 'deload-taken':{
+      // Tense from the Monday-week gap, not a rolling 7 days — so it never says "this week" for a deload
+      // that was actually last week (the bug: the Recovery card said "6d ago" while this said "this week").
+      const rel=(week||0)-(f.wk||0),when=rel<=0?'this week':rel===1?'last week':f.days+' days ago';
+      return {lv:'good',x:pickVariant(f,week,[
+      `<b>Deload</b> ${when} — good call. That's where the last block turns into strength.`,
+      `You eased off with a <b>deload</b> ${when}. Come back fresh and the loads climb.`,
+      `A <b>deload</b> ${when} — recovery's doing its job. Back to full loads when you're ready.`,
+      `Smart <b>deload</b> ${when}. Let the fatigue drain, then pick it back up.`])};}
     case 'deload-due':return {lv:'info',x:pickVariant(f,week,[
       `<b>${f.weeks} weeks</b> straight — an easy <b>deload</b> week now clears fatigue for the next push.`,
       `You've trained hard <b>${f.weeks} weeks</b> running. A recovery week sets up your next jump.`,

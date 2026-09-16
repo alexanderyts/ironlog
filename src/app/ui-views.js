@@ -68,18 +68,35 @@ function libRow(e,attr){
 }
 
 /* ---------------- PROGRESS ---------------- */
+// A "+N vs last week" line under a stat. Rule: only shown when last week had a real value to compare
+// against (no "+3 vs 0" for someone's first week). A down week is muted, never alarming — an easy week
+// isn't a failure. Rendered as its own line so it never disturbs the big number a test/reader reads.
+function statDelta(cur,prev,fmtFn){
+  if(!prev)return '';   // nothing meaningful to compare to yet
+  const d=cur-prev;if(d===0)return `<div class="statdelta">— same as last week</div>`;
+  const f=fmtFn?fmtFn(Math.abs(d)):Math.abs(d);
+  return `<div class="statdelta ${d>0?'up':''}">${d>0?'+':'−'}${f} vs last week</div>`;
+}
 function viewProgress(){
   const done=completedSessions(),anyDone=completedAny(),now=Date.now();
-  const wk=done.filter(s=>s.date>=P.weekStart(now)),mo=done.filter(s=>s.date>=now-30*DAY);   // strength this week/month (for volume + muscle breakdown)
-  const wkVol=wk.reduce((a,s)=>a+volOf(s),0);
-  // counts include cardio (activity), the strength math above does not
-  const wkAny=anyDone.filter(s=>s.date>=P.weekStart(now)).length,moAny=anyDone.filter(s=>s.date>=now-30*DAY).length;
+  const ws=P.weekStart(now),lwStart=ws-7*DAY,elapsed=now-ws;   // this-week start (Mon), last-week start, and how far into the week we are
+  // Compare against last week THROUGH THE SAME POINT, not the whole week — otherwise a Tuesday (a
+  // partial week) always shows a big drop against a full one. This Mon–Tue vs last Mon–Tue is fair,
+  // and by Sunday it's the full week either way.
+  const inWk=arr=>arr.filter(s=>s.date>=ws),inLw=arr=>arr.filter(s=>s.date>=lwStart&&s.date<lwStart+elapsed);
+  const mo=done.filter(s=>s.date>=now-30*DAY);   // strength last 30d — for the muscle breakdown only
+  // Rule (stated once): COUNT tiles (sessions, streak) include cardio — showing up is showing up.
+  // MAGNITUDE tiles (volume, sets) are strength only, because cardio has no load or working sets.
+  const wkAny=inWk(anyDone).length,lwAny=inLw(anyDone).length;
+  const wkStr=inWk(done),lwStr=inLw(done);
+  const wkVol=wkStr.reduce((a,s)=>a+volOf(s),0),lwVol=lwStr.reduce((a,s)=>a+volOf(s),0);
+  const wkSets=wkStr.reduce((a,s)=>a+setsOf(s),0),lwSets=lwStr.reduce((a,s)=>a+setsOf(s),0);
   return `<div class="section">
     <div class="view-title" style="margin:0 2px 14px;font-size:22px">Progress</div>
     <div class="statgrid">
-      <div class="card stat"><div class="k">This week</div><div class="v mono">${wkAny}<small>session${wkAny!==1?'s':''}</small></div></div>
-      <div class="card stat"><div class="k">${volLabel('Week volume')}</div><div class="v mono">${fmtVol(wkVol)}<small>${U()}</small></div></div>
-      <div class="card stat"><div class="k">30-day sessions</div><div class="v mono">${moAny}</div></div>
+      <div class="card stat"><div class="k">This week</div><div class="v mono">${wkAny}<small>session${wkAny!==1?'s':''}</small></div>${statDelta(wkAny,lwAny)}</div>
+      <div class="card stat"><div class="k">${volLabel('Week volume')}</div><div class="v mono">${fmtVol(wkVol)}<small>${U()}</small></div>${statDelta(wkVol,lwVol,fmtVol)}</div>
+      <div class="card stat"><div class="k">Sets this week</div><div class="v mono">${wkSets}<small>set${wkSets!==1?'s':''}</small></div>${statDelta(wkSets,lwSets)}</div>
       <div class="card stat"><div class="k">Current streak</div><div class="v mono">${P.calcStreak(anyDone,now)}<small>wk</small></div></div>
     </div>
     ${coachCard(done)}
