@@ -2,6 +2,11 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.58.0 — 2026-09-16 · Swipe a pop-up down to close it
+- **Pop-up panels now close with a swipe.** The little bar at the top of a pop-up finally does what it looks like it should — drag the panel down to dismiss it (or flick it), instead of reaching for the ✕. A small drag springs back. The ✕ still works too.
+
+Not verified on-device.
+
 ## v0.57.0 — 2026-09-16 · Workout notes, and move a workout to another day
 Two long-wanted additions:
 - **Add a note to a whole workout.** Tap "📝 Workout note" in the editor to jot how the session felt — sleep, energy, a tweak — separate from the per-exercise notes. It shows on the workout's card in History and in its details.

@@ -72,8 +72,45 @@ function openSheet(title,body){
   }catch(e){}
   $('#sheetTitle').textContent=title;const b=$('#sheetBody');b.innerHTML=body;b.scrollTop=0;$('#sheet').classList.add('on');$('#scrim').classList.add('on');
 }
-function closeSheet(){$('#sheet').classList.remove('on');$('#scrim').classList.remove('on');
+function closeSheet(){const sh=$('#sheet'),sc=$('#scrim');
+  sh.style.transition='';sh.style.transform='';if(sc)sc.style.opacity='';   // drop any leftover swipe-drag inline styles so the CSS slide-out runs
+  sh.classList.remove('on');sc.classList.remove('on');
   if(_sheetReturnY!=null){const y=_sheetReturnY;_sheetReturnY=null;try{window.scrollTo(0,y);}catch(e){}}   // restore the pre-sheet scroll position
+}
+// Swipe-down-to-dismiss for the bottom sheet (the grab bar promised this). Drag from the grab bar/header,
+// or from the body when it's scrolled to the top; a horizontal swipe (chip rows) or a drag on a text
+// field is ignored. Past ~28% of the height, or a quick flick, it closes; otherwise it springs back.
+function initSheetGestures(){
+  const sheet=$('#sheet');if(!sheet)return;
+  let startY=0,startX=0,dy=0,active=false,committed=false,t0=0;
+  const H=()=>sheet.getBoundingClientRect().height||1;
+  sheet.addEventListener('touchstart',e=>{
+    if(!sheet.classList.contains('on')||e.touches.length!==1)return;
+    const tgt=e.target,onHandle=tgt.closest&&tgt.closest('.sheet-grab,.sheet-head');
+    const body=$('#sheetBody'),atTop=body&&body.contains(tgt)&&body.scrollTop<=0;
+    const isField=tgt.closest&&tgt.closest('input,textarea,select,[contenteditable]');
+    if(!onHandle&&(!atTop||isField))return;   // let the body scroll / the field be used
+    active=true;committed=false;dy=0;startY=e.touches[0].clientY;startX=e.touches[0].clientX;t0=Date.now();
+  },{passive:true});
+  sheet.addEventListener('touchmove',e=>{
+    if(!active)return;const y=e.touches[0].clientY,dx=e.touches[0].clientX-startX;dy=y-startY;
+    if(!committed){
+      if(Math.abs(dx)>Math.abs(dy)&&Math.abs(dx)>6){active=false;return;}   // horizontal gesture → not a dismiss
+      if(dy>6){committed=true;sheet.style.transition='none';}else return;
+    }
+    if(dy<0)dy=0;e.preventDefault();
+    sheet.style.transform='translateY('+dy+'px)';
+    const sc=$('#scrim');if(sc)sc.style.opacity=String(Math.max(0,1-dy/H()));
+  },{passive:false});
+  const end=()=>{
+    if(!active)return;active=false;if(!committed){dy=0;return;}
+    sheet.style.transition='';   // hand back to the CSS spring
+    const flick=(Date.now()-t0)<300&&dy>60;
+    if(dy>H()*0.28||flick){closeSheet();}
+    else{sheet.style.transform='';const sc=$('#scrim');if(sc)sc.style.opacity='';}   // snap back
+    dy=0;committed=false;
+  };
+  sheet.addEventListener('touchend',end);sheet.addEventListener('touchcancel',end);
 }
 function applyTheme(){const t=state.settings.theme;if(t==='system')document.documentElement.removeAttribute('data-theme');else document.documentElement.setAttribute('data-theme',t);}
 function updateCloud(){
