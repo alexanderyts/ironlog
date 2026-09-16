@@ -115,7 +115,7 @@ function prList(){
   // is distinguishable from the default; ordinary PRs stay uncluttered)
   const modeTag=p=>{const ex=EX[p.id];const native=ex&&EQUIP_MODE[ex.equip];return p.mode&&p.mode!==native?` <span class="pill" style="font-size:10px;padding:1px 7px">${esc(MODES[p.mode].label)}</span>`:'';};
   return arr.map(p=>`<div class="ex-row" data-openex="${p.id}" style="cursor:pointer"><div style="flex:1;min-width:0"><div class="ex-name">${esc(p.name)}${modeTag(p)}</div>
-    <div class="ex-sub">Best set ${setStr(p)}</div></div>
+    <div class="ex-sub">Best set ${setStr(p)}</div>${p.adjusted?`<div class="ex-sub" style="color:var(--warn)">PR adjusted · ${p.adjusted.w}${U()} × ${p.adjusted.r} on ${fmtDate(p.adjusted.date)} set aside</div>`:''}</div>
     <div style="text-align:right">${p.showEst?`<div class="mono" style="font-weight:700;font-size:16px">${p.est}<span class="dim" style="font-size:11px"> ${U()} e1RM</span></div>`:`<div class="mono dim" style="font-weight:600;font-size:13px">${p.load}${U()}</div>`}</div></div>`).join('');
 }
 function balBar(l,lv,r,rv){
@@ -229,15 +229,38 @@ function trendCard(id){
   const pts=series.map((p,i)=>[pad+(W-2*pad)*(series.length===1?0:i/(series.length-1)),pad+(H-2*pad)*(1-(p.est-min)/range)]);
   const d=pts.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1)).join(' ');
   const last=pts[pts.length-1],delta=Math.round(vals[vals.length-1]-vals[0]);
-  const col=delta>0?'var(--good)':delta<0?'var(--warn)':'var(--ink-3)';
+  // A dip caused by the user setting their own record aside is not a decline, and must not be painted
+  // like one. When the latest point is adjusted, the delta goes neutral and says why — that is the
+  // whole point of the flag: going lighter on purpose should never read as losing ground.
+  const adjusted=!!series[series.length-1].adj, anyAdj=series.some(p=>p.adj);
+  const col=adjusted?'var(--ink-3)':delta>0?'var(--good)':delta<0?'var(--warn)':'var(--ink-3)';
   const arrow=delta>0?'▲ +'+delta:delta<0?'▼ '+Math.abs(delta):'— flat';
   return `<div class="card" style="padding:14px 15px;margin:0 0 12px">
     <div class="row-between" style="margin-bottom:9px"><span class="eyebrow">Progress · est. 1RM</span>
       <span class="mono" style="font-weight:700;color:${col}">${vals[vals.length-1]}${U()} <span style="font-size:12px">${arrow}</span></span></div>
     <svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" preserveAspectRatio="none" style="display:block;overflow:visible">
       <path d="${d}" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
-      <circle cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="3.5" fill="var(--accent)"/></svg>
-    <div class="dim" style="font-size:11.5px;margin-top:7px">Best set each session · last ${series.length}</div></div>`;
+      <circle cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="3.5" fill="${adjusted?'var(--ink-3)':'var(--accent)'}"/></svg>
+    <div class="dim" style="font-size:11.5px;margin-top:7px">Best set each session · last ${series.length}${anyAdj?' · <span style="color:var(--warn)">PR adjusted</span> — a set you set aside isn’t counted here':''}</div></div>`;
+}
+/* Your best set on this lift, with the one-tap escape hatch for a rep you don't want to be held to.
+   Marking DELETES NOTHING: the set stays in History and keeps counting toward your volume — it just
+   stops being the bar, both here and in what the app prefills next time (see lastPerf's `clean`).
+   Mode-scoped like the PR itself, so a Smith variant's record is adjusted separately. */
+const markedSets=id=>{let n=0;state.sessions.forEach(s=>s.exercises.forEach(e=>{if(e.id===id)e.sets.forEach(st=>{if(st.nc)n++;});}));return n;};
+function prAdjustCard(id){
+  const p=A.personalRecords(state.sessions,bw(),999).filter(x=>x.id===id)[0];
+  const marked=markedSets(id);
+  if(!p&&!marked)return '';
+  const rsuf=p&&p.time?'s':'';
+  return `<div class="card" style="padding:12px 15px;margin:0 0 12px">
+    <div class="row-between"><span class="eyebrow">Your best set</span>
+      <span class="mono" style="font-weight:600">${p?esc(p.w+U()+(MODES[p.mode]&&MODES[p.mode].perHand?'/ea':'')+' × '+p.r+rsuf):'—'}</span></div>
+    ${p&&p.adjusted?`<div class="dim" style="font-size:12px;margin-top:7px;line-height:1.45"><b style="color:var(--warn)">PR adjusted.</b> ${esc(p.adjusted.w+U()+' × '+p.adjusted.r)} on ${fmtDate(p.adjusted.date)} is set aside — still in your history and still counted in your volume.</div>`:''}
+    <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+      ${p?`<button class="btn sm ghost" data-prmark="${id}">That rep wasn’t clean</button>`:''}
+      ${marked?`<button class="btn sm ghost" data-prunmark="${id}">Count ${marked>1?'them':'it'} again</button>`:''}
+    </div></div>`;
 }
 // The last few notes ever left on this lift (deloads included — a note is a note), newest first.
 function notesCard(id){
@@ -259,6 +282,7 @@ function exerciseDetail(id){
       <div class="chips" style="margin-top:6px">${e.muscles.map(m=>`<span class="pill">${m}</span>`).join('')}</div></div></div>
     <p class="instr">${esc(e.instr)}</p>
     ${trendCard(id)}
+    ${prAdjustCard(id)}
     ${notesCard(id)}
     <div class="card" style="padding:12px 15px;margin:16px 0">
       <div class="row-between"><span class="eyebrow">Target rep range</span><span class="mono" style="font-weight:600">${e.rr[0]}–${e.rr[1]}</span></div>

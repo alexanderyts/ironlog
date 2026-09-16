@@ -53,7 +53,21 @@ function showConfirm(title,msg,okLabel,cb,kind){
   _confirmCb=cb;$('#cdialog').classList.add('on');$('#cscrim').classList.add('on');
 }
 function closeConfirm(){$('#cdialog').classList.remove('on');$('#cscrim').classList.remove('on');_confirmCb=null;}
-function openSheet(title,body){$('#sheetTitle').textContent=title;const b=$('#sheetBody');b.innerHTML=body;b.scrollTop=0;$('#sheet').classList.add('on');$('#scrim').classList.add('on');}   // scrollTop=0: a reused sheet must open at its top (search bar), not wherever the last one was scrolled
+/* scrollTop=0: a reused sheet must open at its top (search bar), not wherever the last one was scrolled.
+   The blur + scroll-to-top is the fix for "I tapped Add exercise and nothing happened": the sheet is
+   position:fixed, i.e. anchored to the LAYOUT viewport, and iOS does not shrink that viewport for the
+   keyboard — it scrolls the visual viewport up over it. So opening a sheet while a weight/name field
+   still held focus painted it below the visible area, above the band the keyboard occupies. Dropping
+   focus first lets iOS restore the viewport before the sheet slides up. Deliberately touches nothing
+   in the tab-bar / safe-area model (--deficit, --screen-h) — see the invariant note in styles.css. */
+function openSheet(title,body){
+  // Only when a field actually had focus — blurring/scrolling unconditionally would throw away the
+  // reader's scroll position every time they tap a PR row or an exercise from a scrolled list.
+  try{const ae=document.activeElement;
+    if(ae&&/^(INPUT|TEXTAREA)$/.test(ae.tagName)){ae.blur();if(window.scrollY)window.scrollTo(0,0);}
+  }catch(e){}
+  $('#sheetTitle').textContent=title;const b=$('#sheetBody');b.innerHTML=body;b.scrollTop=0;$('#sheet').classList.add('on');$('#scrim').classList.add('on');
+}
 function closeSheet(){$('#sheet').classList.remove('on');$('#scrim').classList.remove('on');}
 function applyTheme(){const t=state.settings.theme;if(t==='system')document.documentElement.removeAttribute('data-theme');else document.documentElement.setAttribute('data-theme',t);}
 function updateCloud(){

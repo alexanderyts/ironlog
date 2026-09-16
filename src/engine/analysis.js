@@ -310,16 +310,25 @@ function buildHints(sessions,now,bw,profile){
 // estimated 1RM. `showEst` is true only for compound lifts done with equipment whose 1RM estimate
 // is meaningful (barbell/smith/bodyweight) — cable/machine stacks show load instead of a bogus 1RM.
 function personalRecords(sessions,bw,limit){
-  const best={};
+  const best={},set_aside={};
+  // Ranking rule for a key, shared by the live best and the set-aside best so they can't drift apart
+  const beats=(c,b,inverted,time)=>inverted?(!b||c.load<b.load):time?(!b||c.load>b.load||(c.load===b.load&&c.r>b.r)):(!b||c.est>b.est);
   real(sessions).forEach(s=>{s.exercises.forEach(e=>{const mode=modeOf(e);e.sets.forEach(st=>{
     if(!isWorking(st))return;const w=setLoad(e.id,st.w,bw),r=+st.r||0;if(!w||!r)return;
     const est=e1rm(w,r);const ex=EX[e.id];const key=e.id+':'+mode;
     const inverted=!!(ex&&INVERTED_LOAD&&INVERTED_LOAD.has(e.id));   // assist machine: the PR is the LEAST assist, and no 1RM estimate (#16)
     const time=!!(TIME_METRIC&&TIME_METRIC.has(e.id));   // time-held: "reps" are seconds → no 1RM; best = heaviest, then longest
+    const cand={w:+st.w||0,load:w,r,est,date:s.date};
+    // "Doesn't count as a record" (#PR-adjust): the user has disowned this rep, so it can never BE the
+    // PR — but it is remembered here so the row can show what was set aside. The set itself is
+    // untouched everywhere else: it still counts for volume, sets-per-muscle, rest and history.
+    if(st.nc){if(beats(cand,set_aside[key],inverted,time))set_aside[key]=cand;return;}
     const showEst=!!ex&&ex.type==='compound'&&!inverted&&!time&&!!(MODES[mode]&&MODES[mode].e1rm);
-    const better=inverted?(!best[key]||w<best[key].load):time?(!best[key]||w>best[key].load||(w===best[key].load&&r>best[key].r)):(!best[key]||est>best[key].est);
-    if(better)best[key]={id:e.id,mode,w:+st.w||0,load:w,r,est,name:ex?ex.name:e.name,date:s.date,compound:!!ex&&ex.type==='compound',showEst,inverted,time,bodyweight:mode==='bodyweight'};
+    if(beats(cand,best[key],inverted,time))best[key]={id:e.id,mode,w:cand.w,load:w,r,est,name:ex?ex.name:e.name,date:s.date,compound:!!ex&&ex.type==='compound',showEst,inverted,time,bodyweight:mode==='bodyweight'};
   })})});
+  // Attach the set-aside set only where it WOULD have been the PR — marking an ordinary set says nothing
+  Object.keys(best).forEach(k=>{const a=set_aside[k],b=best[k];
+    if(a&&beats(a,b,b.inverted,b.time))b.adjusted={w:a.w,r:a.r,date:a.date};});
   // e1RM-comparable lifts first (by e1RM); the rest after, by load
   return Object.values(best).sort((a,b)=>(b.showEst-a.showEst)||(a.showEst?b.est-a.est:b.load-a.load)).slice(0,limit||8);
 }

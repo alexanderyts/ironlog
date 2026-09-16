@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-bFhCWGpuyjp+wohfQFBOwXgT2jxF+TsRyLYDRfH3OuM=' 'sha256-WPBob/luB2k1aalTWXpi6zk3SrIbj8GlZV7AlFdG7oA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-IjJaNlXeX2NcoNeNGQk9BgaMtzMkid8WPKwJFdF3owc=' 'sha256-WPBob/luB2k1aalTWXpi6zk3SrIbj8GlZV7AlFdG7oA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Ironlog</title>
@@ -412,8 +412,8 @@ html.kb-open .tabbar{display:none}
 </div>
 
 <script>
-/* Ironlog v0.48.2 · site build */
-var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.48.2",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
+/* Ironlog v0.49.0 · site build */
+var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.49.0",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
 
 /* ===== src/data/exercises.js ===== */
 (function(){'use strict';
@@ -785,8 +785,13 @@ function lastPerf(sessions,exId,opts){
     if(s.deload&&!opts.includeDeload)continue;   // a deload is a recovery detour, not a progression data point
     if(opts.beforeTs&&s.date>=opts.beforeTs)continue;
     if(opts.excludeId&&s.id===opts.excludeId)continue;
-    // a checked set with zero reps (an old junk record) is not a performance — never carry it forward
-    const perfSet=st=>isWorking(st)&&(+st.r||0)>0;
+    // a checked set with zero reps (an old junk record) is not a performance — never carry it forward.
+    // opts.clean also skips sets the user marked "doesn't count as a record" (st.nc): the weight WAS
+    // moved (it still counts for volume and history), but the user has said it shouldn't set the bar,
+    // so it must not seed the next workout or anchor the next suggestion. Because `some(perfSet)` uses
+    // the same predicate, a session whose every working set is marked is skipped whole and the scan
+    // falls through to the one before it — the fallback chain costs no extra code.
+    const perfSet=st=>isWorking(st)&&(+st.r||0)>0&&!(opts.clean&&st.nc);
     const e=s.exercises.find(x=>x.id===exId&&(!opts.mode||modeOf(x)===opts.mode)&&x.sets.some(perfSet));
     if(e)return{date:s.date,mode:modeOf(e),sets:e.sets.filter(perfSet).map(st=>({w:+st.w||0,r:+st.r||0})),note:e.note||''};
   }
@@ -799,9 +804,16 @@ function exerciseSeries(sessions,exId,opts){
   for(const s of real(sessions)){
     const e=s.exercises.find(x=>x.id===exId&&(!opts.mode||modeOf(x)===opts.mode));
     if(!e)continue;
-    let best=0,w=0,r=0;
-    e.sets.forEach(st=>{if(!isWorking(st))return;const est=e1rm(setLoad(exId,st.w,bw),+st.r||0);if(est>best){best=est;w=+st.w||0;r=+st.r||0;}});
-    if(best>0)out.push({date:s.date,est:best,w,r});
+    // A set marked "doesn't count" (st.nc) must not define the trend line — otherwise a rep the user
+    // has disowned reads as their level, and every honest session after it looks like a decline. But
+    // the point is never DROPPED: if that session has no clean set at all it still plots, flagged, so
+    // the history stays visible. `adj` tells the view to mark the point "PR adjusted".
+    let best=0,w=0,r=0,ncBest=0,ncW=0,ncR=0;
+    e.sets.forEach(st=>{if(!isWorking(st))return;const est=e1rm(setLoad(exId,st.w,bw),+st.r||0);
+      if(st.nc){if(est>ncBest){ncBest=est;ncW=+st.w||0;ncR=+st.r||0;}return;}
+      if(est>best){best=est;w=+st.w||0;r=+st.r||0;}});
+    if(best>0)out.push({date:s.date,est:best,w,r,adj:ncBest>best||undefined});
+    else if(ncBest>0)out.push({date:s.date,est:ncBest,w:ncW,r:ncR,adj:true});
   }
   out.sort((a,b)=>a.date-b.date);
   return opts.limit?out.slice(-opts.limit):out;
@@ -815,7 +827,7 @@ function bestE1rmBefore(sessions,exId,opts){
     if(opts.beforeTs&&s.date>=opts.beforeTs)continue;
     const e=s.exercises.find(x=>x.id===exId&&(!opts.mode||modeOf(x)===opts.mode));
     if(!e)continue;
-    e.sets.forEach(st=>{if(!isWorking(st))return;const est=e1rm(setLoad(exId,st.w,bw),+st.r||0);if(est>best)best=est;});
+    e.sets.forEach(st=>{if(st.nc||!isWorking(st))return;const est=e1rm(setLoad(exId,st.w,bw),+st.r||0);if(est>best)best=est;});   // a disowned set is not a bar the next PR has to clear
   }
   return best;
 }
@@ -943,7 +955,7 @@ function deloadSets(last,ex,unit){
 // real session exists, the suggestion mentions the last deload for reference and leaves it at that.
 function suggestion(sessions,exId,opts){
   opts=opts||{};const unit=opts.unit||'lb';
-  const scope={beforeTs:opts.activeDate,excludeId:opts.activeId,mode:opts.mode};
+  const scope={beforeTs:opts.activeDate,excludeId:opts.activeId,mode:opts.mode,clean:true};   // never suggest off a set the user disowned
   const lp=lastPerf(sessions,exId,scope);
   const ex=EX[exId];
   if(!lp||!lp.sets.length){
@@ -1100,7 +1112,7 @@ function seedExercise(id,sessions,opts){
   opts=opts||{};const {excludeId,unit,deload,extraSet,goal,setStyle,push}=opts;   // goal/setStyle/push: profile levers
   const ex=EX[id];const mode=lastModeFor(sessions,id);
   const inst={id,name:ex?ex.name:id};if(mode)inst.mode=mode;
-  const lp=lastPerf(sessions||[],id,{excludeId,mode:mode||undefined});   // real sessions only — a deload is never a baseline
+  const lp=lastPerf(sessions||[],id,{excludeId,mode:mode||undefined,clean:true});   // real sessions only — a deload is never a baseline; `clean` so a set marked "doesn't count" is never prefilled back at you
   const rr=goal?repRange(ex,goal):(ex?ex.rr:[8,12]);   // goal shifts the target range in one place
   let sets;
   // push:'quiet' — "just record": the rows mirror last time exactly, never a bump. Must agree with
@@ -1366,7 +1378,7 @@ function exerciseStreak(sessions,exId){return exerciseTenure(sessions,exId).sess
 function recentPerfs(sessions,exId,opts){
   opts=opts||{};const n=opts.n||3,out=[];let before;
   for(let i=0;i<n;i++){
-    const lp=lastPerf(sessions,exId,{beforeTs:before,mode:opts.mode});if(!lp)break;
+    const lp=lastPerf(sessions,exId,{beforeTs:before,mode:opts.mode,clean:true});if(!lp)break;   // a disowned set is not evidence of progress OR of a stall
     if(opts.since&&lp.date<opts.since)break;
     const top=Math.max(...lp.sets.map(s=>+s.w||0));
     const topR=Math.max(...lp.sets.filter(s=>(+s.w||0)===top).map(s=>+s.r||0));   // reps at the top weight — for double-progression detection
@@ -1830,16 +1842,25 @@ function buildHints(sessions,now,bw,profile){
 // estimated 1RM. `showEst` is true only for compound lifts done with equipment whose 1RM estimate
 // is meaningful (barbell/smith/bodyweight) — cable/machine stacks show load instead of a bogus 1RM.
 function personalRecords(sessions,bw,limit){
-  const best={};
+  const best={},set_aside={};
+  // Ranking rule for a key, shared by the live best and the set-aside best so they can't drift apart
+  const beats=(c,b,inverted,time)=>inverted?(!b||c.load<b.load):time?(!b||c.load>b.load||(c.load===b.load&&c.r>b.r)):(!b||c.est>b.est);
   real(sessions).forEach(s=>{s.exercises.forEach(e=>{const mode=modeOf(e);e.sets.forEach(st=>{
     if(!isWorking(st))return;const w=setLoad(e.id,st.w,bw),r=+st.r||0;if(!w||!r)return;
     const est=e1rm(w,r);const ex=EX[e.id];const key=e.id+':'+mode;
     const inverted=!!(ex&&INVERTED_LOAD&&INVERTED_LOAD.has(e.id));   // assist machine: the PR is the LEAST assist, and no 1RM estimate (#16)
     const time=!!(TIME_METRIC&&TIME_METRIC.has(e.id));   // time-held: "reps" are seconds → no 1RM; best = heaviest, then longest
+    const cand={w:+st.w||0,load:w,r,est,date:s.date};
+    // "Doesn't count as a record" (#PR-adjust): the user has disowned this rep, so it can never BE the
+    // PR — but it is remembered here so the row can show what was set aside. The set itself is
+    // untouched everywhere else: it still counts for volume, sets-per-muscle, rest and history.
+    if(st.nc){if(beats(cand,set_aside[key],inverted,time))set_aside[key]=cand;return;}
     const showEst=!!ex&&ex.type==='compound'&&!inverted&&!time&&!!(MODES[mode]&&MODES[mode].e1rm);
-    const better=inverted?(!best[key]||w<best[key].load):time?(!best[key]||w>best[key].load||(w===best[key].load&&r>best[key].r)):(!best[key]||est>best[key].est);
-    if(better)best[key]={id:e.id,mode,w:+st.w||0,load:w,r,est,name:ex?ex.name:e.name,date:s.date,compound:!!ex&&ex.type==='compound',showEst,inverted,time,bodyweight:mode==='bodyweight'};
+    if(beats(cand,best[key],inverted,time))best[key]={id:e.id,mode,w:cand.w,load:w,r,est,name:ex?ex.name:e.name,date:s.date,compound:!!ex&&ex.type==='compound',showEst,inverted,time,bodyweight:mode==='bodyweight'};
   })})});
+  // Attach the set-aside set only where it WOULD have been the PR — marking an ordinary set says nothing
+  Object.keys(best).forEach(k=>{const a=set_aside[k],b=best[k];
+    if(a&&beats(a,b,b.inverted,b.time))b.adjusted={w:a.w,r:a.r,date:a.date};});
   // e1RM-comparable lifts first (by e1RM); the rest after, by load
   return Object.values(best).sort((a,b)=>(b.showEst-a.showEst)||(a.showEst?b.est-a.est:b.load-a.load)).slice(0,limit||8);
 }
@@ -2024,7 +2045,7 @@ function sNumBlank(v){if(v===''||v==null)return '';const n=+v;return Number.isFi
 function sArr(v,max){return Array.isArray(v)?v.slice(0,max||MAX_ARR):[];}
 const rid=p=>p+Math.random().toString(36).slice(2,9);
 
-function cleanSet(st){st=st&&typeof st==='object'?st:{};const o={w:sNumBlank(st.w),r:sNumBlank(st.r),done:st.done!==false};if(st.warm)o.warm=true;const at=+st.at;if(Number.isFinite(at)&&at>0)o.at=at;return o;}   // missing done => done; `at` (check timestamp) kept if a real number
+function cleanSet(st){st=st&&typeof st==='object'?st:{};const o={w:sNumBlank(st.w),r:sNumBlank(st.r),done:st.done!==false};if(st.warm)o.warm=true;if(st.nc)o.nc=true;const at=+st.at;if(Number.isFinite(at)&&at>0)o.at=at;return o;}   // missing done => done; `at` (check timestamp) kept if a real number; `nc` = "doesn't count as a record"
 function cleanExercise(e){e=e&&typeof e==='object'?e:{};const o={id:sId(e.id),name:sStr(e.name),sets:sArr(e.sets,MAX_SETS).map(cleanSet)};if(e.mode&&MODES[e.mode])o.mode=sId(e.mode);if(typeof e.note==='string'&&e.note.trim())o.note=sStr(e.note,500);return o;}   // drop an unknown mode (a bad import would white-screen Progress via MODES[mode].label)
 function cleanSession(s){s=s&&typeof s==='object'?s:{};const o={id:sId(s.id)||rid('imp'),schema:sNum(s.schema)||1,date:sNum(s.date)||Date.now(),updatedAt:sNum(s.updatedAt)||sNum(s.date)||Date.now(),completed:s.completed!==false,exercises:sArr(s.exercises,MAX_EX).map(cleanExercise)};if(s.deload)o.deload=true;const end=+s.endedAt;if(Number.isFinite(end)&&end>0){o.endedAt=end;if(s.endEstimated===true)o.endEstimated=true;}
   if(s.kind==='cardio'){o.kind='cardio';o.exercises=[];o.cardio=cleanCardio(s.cardio);}   // cardio never carries exercises → every strength filter drops it
@@ -2482,7 +2503,21 @@ function showConfirm(title,msg,okLabel,cb,kind){
   _confirmCb=cb;$('#cdialog').classList.add('on');$('#cscrim').classList.add('on');
 }
 function closeConfirm(){$('#cdialog').classList.remove('on');$('#cscrim').classList.remove('on');_confirmCb=null;}
-function openSheet(title,body){$('#sheetTitle').textContent=title;const b=$('#sheetBody');b.innerHTML=body;b.scrollTop=0;$('#sheet').classList.add('on');$('#scrim').classList.add('on');}   // scrollTop=0: a reused sheet must open at its top (search bar), not wherever the last one was scrolled
+/* scrollTop=0: a reused sheet must open at its top (search bar), not wherever the last one was scrolled.
+   The blur + scroll-to-top is the fix for "I tapped Add exercise and nothing happened": the sheet is
+   position:fixed, i.e. anchored to the LAYOUT viewport, and iOS does not shrink that viewport for the
+   keyboard — it scrolls the visual viewport up over it. So opening a sheet while a weight/name field
+   still held focus painted it below the visible area, above the band the keyboard occupies. Dropping
+   focus first lets iOS restore the viewport before the sheet slides up. Deliberately touches nothing
+   in the tab-bar / safe-area model (--deficit, --screen-h) — see the invariant note in styles.css. */
+function openSheet(title,body){
+  // Only when a field actually had focus — blurring/scrolling unconditionally would throw away the
+  // reader's scroll position every time they tap a PR row or an exercise from a scrolled list.
+  try{const ae=document.activeElement;
+    if(ae&&/^(INPUT|TEXTAREA)$/.test(ae.tagName)){ae.blur();if(window.scrollY)window.scrollTo(0,0);}
+  }catch(e){}
+  $('#sheetTitle').textContent=title;const b=$('#sheetBody');b.innerHTML=body;b.scrollTop=0;$('#sheet').classList.add('on');$('#scrim').classList.add('on');
+}
 function closeSheet(){$('#sheet').classList.remove('on');$('#scrim').classList.remove('on');}
 function applyTheme(){const t=state.settings.theme;if(t==='system')document.documentElement.removeAttribute('data-theme');else document.documentElement.setAttribute('data-theme',t);}
 function updateCloud(){
@@ -2877,10 +2912,13 @@ function topSuggestionHTML(){
 }
 function logExercise(s,e,ei,mode){
   const ex=EX[e.id];let sugg='',prLine='';const emode=modeOf(e);
-  if(mode==='active'&&!s.deload){
+  // No live PR line for assist machines or time-held lifts: an e1RM comparison is backwards for the
+  // first (less weight = harder) and meaningless for the second (the "reps" are seconds), so it would
+  // miss real improvements AND flash fake ones. The Progress PR list ranks both correctly.
+  if(mode==='active'&&!s.deload&&!D.INVERTED_LOAD.has(e.id)&&!D.TIME_METRIC.has(e.id)){
     // Live PR recognition: the session's best working set beating this lift's all-time best (same mode)
     const histBest=P.bestE1rmBefore(state.sessions,e.id,{mode:emode,bw:bw(),excludeId:s.id});
-    if(histBest>0){let best=0,bs=null;e.sets.forEach(st=>{if(st.warm||!P.isWorking(st))return;const est=P.e1rm(P.setLoad(e.id,st.w,bw()),+st.r||0);if((+st.r)&&est>best){best=est;bs=st;}});
+    if(histBest>0){let best=0,bs=null;e.sets.forEach(st=>{if(st.warm||st.nc||!P.isWorking(st))return;const est=P.e1rm(P.setLoad(e.id,st.w,bw()),+st.r||0);if((+st.r)&&est>best){best=est;bs=st;}});
       if(bs&&best>histBest)prLine=`<div class="sugg" style="color:var(--good);background:var(--good-soft)"><span>★ New PR — ${bs.w}${U()}${MODES[emode]&&MODES[emode].perHand?'/ea':''} × ${bs.r} <span class="dim">est ${Math.round(best)}${U()}</span></span></div>`;}
   }
   if(mode==='active'&&s.deload){
@@ -3053,7 +3091,7 @@ function prList(){
   // is distinguishable from the default; ordinary PRs stay uncluttered)
   const modeTag=p=>{const ex=EX[p.id];const native=ex&&EQUIP_MODE[ex.equip];return p.mode&&p.mode!==native?` <span class="pill" style="font-size:10px;padding:1px 7px">${esc(MODES[p.mode].label)}</span>`:'';};
   return arr.map(p=>`<div class="ex-row" data-openex="${p.id}" style="cursor:pointer"><div style="flex:1;min-width:0"><div class="ex-name">${esc(p.name)}${modeTag(p)}</div>
-    <div class="ex-sub">Best set ${setStr(p)}</div></div>
+    <div class="ex-sub">Best set ${setStr(p)}</div>${p.adjusted?`<div class="ex-sub" style="color:var(--warn)">PR adjusted · ${p.adjusted.w}${U()} × ${p.adjusted.r} on ${fmtDate(p.adjusted.date)} set aside</div>`:''}</div>
     <div style="text-align:right">${p.showEst?`<div class="mono" style="font-weight:700;font-size:16px">${p.est}<span class="dim" style="font-size:11px"> ${U()} e1RM</span></div>`:`<div class="mono dim" style="font-weight:600;font-size:13px">${p.load}${U()}</div>`}</div></div>`).join('');
 }
 function balBar(l,lv,r,rv){
@@ -3167,15 +3205,38 @@ function trendCard(id){
   const pts=series.map((p,i)=>[pad+(W-2*pad)*(series.length===1?0:i/(series.length-1)),pad+(H-2*pad)*(1-(p.est-min)/range)]);
   const d=pts.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1)).join(' ');
   const last=pts[pts.length-1],delta=Math.round(vals[vals.length-1]-vals[0]);
-  const col=delta>0?'var(--good)':delta<0?'var(--warn)':'var(--ink-3)';
+  // A dip caused by the user setting their own record aside is not a decline, and must not be painted
+  // like one. When the latest point is adjusted, the delta goes neutral and says why — that is the
+  // whole point of the flag: going lighter on purpose should never read as losing ground.
+  const adjusted=!!series[series.length-1].adj, anyAdj=series.some(p=>p.adj);
+  const col=adjusted?'var(--ink-3)':delta>0?'var(--good)':delta<0?'var(--warn)':'var(--ink-3)';
   const arrow=delta>0?'▲ +'+delta:delta<0?'▼ '+Math.abs(delta):'— flat';
   return `<div class="card" style="padding:14px 15px;margin:0 0 12px">
     <div class="row-between" style="margin-bottom:9px"><span class="eyebrow">Progress · est. 1RM</span>
       <span class="mono" style="font-weight:700;color:${col}">${vals[vals.length-1]}${U()} <span style="font-size:12px">${arrow}</span></span></div>
     <svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" preserveAspectRatio="none" style="display:block;overflow:visible">
       <path d="${d}" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
-      <circle cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="3.5" fill="var(--accent)"/></svg>
-    <div class="dim" style="font-size:11.5px;margin-top:7px">Best set each session · last ${series.length}</div></div>`;
+      <circle cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="3.5" fill="${adjusted?'var(--ink-3)':'var(--accent)'}"/></svg>
+    <div class="dim" style="font-size:11.5px;margin-top:7px">Best set each session · last ${series.length}${anyAdj?' · <span style="color:var(--warn)">PR adjusted</span> — a set you set aside isn’t counted here':''}</div></div>`;
+}
+/* Your best set on this lift, with the one-tap escape hatch for a rep you don't want to be held to.
+   Marking DELETES NOTHING: the set stays in History and keeps counting toward your volume — it just
+   stops being the bar, both here and in what the app prefills next time (see lastPerf's `clean`).
+   Mode-scoped like the PR itself, so a Smith variant's record is adjusted separately. */
+const markedSets=id=>{let n=0;state.sessions.forEach(s=>s.exercises.forEach(e=>{if(e.id===id)e.sets.forEach(st=>{if(st.nc)n++;});}));return n;};
+function prAdjustCard(id){
+  const p=A.personalRecords(state.sessions,bw(),999).filter(x=>x.id===id)[0];
+  const marked=markedSets(id);
+  if(!p&&!marked)return '';
+  const rsuf=p&&p.time?'s':'';
+  return `<div class="card" style="padding:12px 15px;margin:0 0 12px">
+    <div class="row-between"><span class="eyebrow">Your best set</span>
+      <span class="mono" style="font-weight:600">${p?esc(p.w+U()+(MODES[p.mode]&&MODES[p.mode].perHand?'/ea':'')+' × '+p.r+rsuf):'—'}</span></div>
+    ${p&&p.adjusted?`<div class="dim" style="font-size:12px;margin-top:7px;line-height:1.45"><b style="color:var(--warn)">PR adjusted.</b> ${esc(p.adjusted.w+U()+' × '+p.adjusted.r)} on ${fmtDate(p.adjusted.date)} is set aside — still in your history and still counted in your volume.</div>`:''}
+    <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+      ${p?`<button class="btn sm ghost" data-prmark="${id}">That rep wasn’t clean</button>`:''}
+      ${marked?`<button class="btn sm ghost" data-prunmark="${id}">Count ${marked>1?'them':'it'} again</button>`:''}
+    </div></div>`;
 }
 // The last few notes ever left on this lift (deloads included — a note is a note), newest first.
 function notesCard(id){
@@ -3197,6 +3258,7 @@ function exerciseDetail(id){
       <div class="chips" style="margin-top:6px">${e.muscles.map(m=>`<span class="pill">${m}</span>`).join('')}</div></div></div>
     <p class="instr">${esc(e.instr)}</p>
     ${trendCard(id)}
+    ${prAdjustCard(id)}
     ${notesCard(id)}
     <div class="card" style="padding:12px 15px;margin:16px 0">
       <div class="row-between"><span class="eyebrow">Target rep range</span><span class="mono" style="font-weight:600">${e.rr[0]}–${e.rr[1]}</span></div>
@@ -3559,9 +3621,14 @@ function confirmUnchecked(s,commit){
 // Recap of a just-finished session, computed BEFORE it's saved (so history = prior sessions).
 function workoutSummary(s){
   const prs=[];
-  s.exercises.forEach(e=>{const emode=modeOf(e);const histBest=P.bestE1rmBefore(state.sessions,e.id,{mode:emode,bw:bw(),excludeId:s.id});if(histBest<=0)return;
-    let best=0,bs=null;e.sets.forEach(st=>{if(st.warm||!P.isWorking(st))return;const est=P.e1rm(P.setLoad(e.id,st.w,bw()),+st.r||0);if((+st.r)&&est>best){best=est;bs=st;}});
-    if(bs&&best>histBest)prs.push({name:EX[e.id]?EX[e.id].name:e.name,w:bs.w,r:bs.r,perHand:MODES[emode]&&MODES[emode].perHand});});
+  s.exercises.forEach(e=>{
+    // An e1RM comparison is meaningless for an assist machine (less weight = harder) and for a
+    // time-held lift ("reps" are seconds) — it would both miss real improvements and invent fake ones.
+    // The Progress PR list ranks those correctly; here we simply stay quiet rather than lie.
+    if(D.INVERTED_LOAD.has(e.id)||D.TIME_METRIC.has(e.id))return;
+    const emode=modeOf(e);const histBest=P.bestE1rmBefore(state.sessions,e.id,{mode:emode,bw:bw(),excludeId:s.id});if(histBest<=0)return;
+    let best=0,bs=null;e.sets.forEach(st=>{if(st.warm||st.nc||!P.isWorking(st))return;const est=P.e1rm(P.setLoad(e.id,st.w,bw()),+st.r||0);if((+st.r)&&est>best){best=est;bs=st;}});
+    if(bs&&best>histBest)prs.push({id:e.id,name:EX[e.id]?EX[e.id].name:e.name,w:bs.w,r:bs.r,perHand:MODES[emode]&&MODES[emode].perHand});});
   return {sets:setsOf(s),vol:volOf(s),prs,deload:!!s.deload,dur:P.sessionDuration(s),estimated:!!s.endEstimated};
 }
 function showSummary(sm){
@@ -3573,7 +3640,8 @@ function showSummary(sm){
     body+=`<div class="card" style="padding:14px 15px;background:var(--good-soft);border:1px solid color-mix(in srgb,var(--good) 30%,transparent)"><div style="color:var(--good);font-weight:600;font-size:13.5px">🌿 Recovery in the bank</div><div class="dim" style="font-size:12.5px;margin-top:3px">Fatigue's clearing — ease back to full loads when you feel fresh. This won't affect your progression.</div></div>`;
   }else if(sm.prs.length){
     body+=`<div class="eyebrow" style="margin:2px 2px 8px">🎉 New personal record${sm.prs.length>1?'s':''}</div>
-      <div class="card list">${sm.prs.map(p=>`<div class="ex-row"><span style="color:var(--good);font-size:18px;flex-shrink:0">★</span><div style="flex:1;min-width:0"><div class="ex-name">${esc(p.name)}</div><div class="ex-sub">${p.w}${U()}${p.perHand?'/ea':''} × ${p.r}</div></div></div>`).join('')}</div>`;
+      <div class="card list">${sm.prs.map(p=>`<div class="ex-row"><span style="color:var(--good);font-size:18px;flex-shrink:0">★</span><div style="flex:1;min-width:0"><div class="ex-name">${esc(p.name)}</div><div class="ex-sub">${p.w}${U()}${p.perHand?'/ea':''} × ${p.r}</div></div>
+        <button class="btn sm ghost" data-prmark="${p.id}" style="flex-shrink:0">Wasn’t clean</button></div>`).join('')}</div>`;
   }else{
     body+=`<div class="dim" style="font-size:13.5px;line-height:1.5;padding:0 2px">Logged and saved. Consistency is what moves the numbers — every session counts.</div>`;
   }
@@ -3632,6 +3700,30 @@ function commitFinish(s,endedAt,estimated){
   }
   state.active=null;S.persistActive();todayScreen='home';
   render();showSummary(sm);
+}
+/* "That rep wasn't clean" — set the current record aside. Finds the exact set behind the PR (same
+   session, same modality, same weight × reps) and flags it `nc`. Nothing is deleted: the set keeps its
+   place in History and its share of your volume; it just stops being the bar the app measures you
+   against, and stops seeding the next workout. Re-openable both ways. */
+function markBestSet(id){
+  const p=A.personalRecords(state.sessions,bw(),999).filter(x=>x.id===id)[0];
+  if(!p){toast('No record to adjust');return;}
+  const s=state.sessions.find(x=>x.date===p.date&&x.exercises.some(e=>e.id===id));
+  const e=s&&(s.exercises.find(x=>x.id===id&&modeOf(x)===p.mode)||s.exercises.find(x=>x.id===id));
+  const st=e&&e.sets.find(x=>!x.nc&&P.isWorking(x)&&(+x.w||0)===p.w&&(+x.r||0)===p.r);
+  if(!st){toast('Couldn’t find that set');return;}
+  st.nc=true;s.updatedAt=Date.now();S.upsertSession(s,false);
+  render();openSheet(EX[id]?EX[id].name:id,exerciseDetail(id));
+  toast('Set aside — it still counts toward your volume');
+}
+function unmarkSets(id){
+  let n=0;
+  state.sessions.forEach(s=>{let hit=false;
+    s.exercises.forEach(e=>{if(e.id!==id)return;e.sets.forEach(st=>{if(st.nc){delete st.nc;hit=true;n++;}});});
+    if(hit){s.updatedAt=Date.now();S.upsertSession(s,false);}});
+  if(!n){toast('Nothing was set aside');return;}
+  render();openSheet(EX[id]?EX[id].name:id,exerciseDetail(id));
+  toast(n>1?'Counting them again':'Counting it again');
 }
 function discardActive(){showConfirm('Discard workout?','Nothing from this session will be saved.','Discard',()=>{
   stopRest();stopElapsed();const copy=state.active;state.active=null;S.persistActive();todayScreen='home';render();
@@ -3964,7 +4056,9 @@ function boot(){
   $('#sheetClose').addEventListener('click',closeSheet);$('#scrim').addEventListener('click',closeSheet);
   $('#cdCancel').addEventListener('click',closeConfirm);$('#cscrim').addEventListener('click',closeConfirm);
   $('#cdOk').addEventListener('click',()=>{const cb=_confirmCb;closeConfirm();if(cb)cb();});
-  $('#sheetBody').addEventListener('click',e=>{const a=e.target.closest('[data-addto]');if(a){addExerciseToCur(a.dataset.addto);closeSheet();}});
+  $('#sheetBody').addEventListener('click',e=>{const a=e.target.closest('[data-addto]');if(a){addExerciseToCur(a.dataset.addto);closeSheet();return;}
+    const pm=e.target.closest('[data-prmark]');if(pm){markBestSet(pm.dataset.prmark);return;}
+    const pu=e.target.closest('[data-prunmark]');if(pu){unmarkSets(pu.dataset.prunmark);return;}});
   $('#btnSettings').addEventListener('click',openSettings);
   $('#restSkip').addEventListener('click',stopRest);
   $('#restAdd').addEventListener('click',()=>{

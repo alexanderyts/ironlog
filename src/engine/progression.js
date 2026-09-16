@@ -91,8 +91,13 @@ function lastPerf(sessions,exId,opts){
     if(s.deload&&!opts.includeDeload)continue;   // a deload is a recovery detour, not a progression data point
     if(opts.beforeTs&&s.date>=opts.beforeTs)continue;
     if(opts.excludeId&&s.id===opts.excludeId)continue;
-    // a checked set with zero reps (an old junk record) is not a performance — never carry it forward
-    const perfSet=st=>isWorking(st)&&(+st.r||0)>0;
+    // a checked set with zero reps (an old junk record) is not a performance — never carry it forward.
+    // opts.clean also skips sets the user marked "doesn't count as a record" (st.nc): the weight WAS
+    // moved (it still counts for volume and history), but the user has said it shouldn't set the bar,
+    // so it must not seed the next workout or anchor the next suggestion. Because `some(perfSet)` uses
+    // the same predicate, a session whose every working set is marked is skipped whole and the scan
+    // falls through to the one before it — the fallback chain costs no extra code.
+    const perfSet=st=>isWorking(st)&&(+st.r||0)>0&&!(opts.clean&&st.nc);
     const e=s.exercises.find(x=>x.id===exId&&(!opts.mode||modeOf(x)===opts.mode)&&x.sets.some(perfSet));
     if(e)return{date:s.date,mode:modeOf(e),sets:e.sets.filter(perfSet).map(st=>({w:+st.w||0,r:+st.r||0})),note:e.note||''};
   }
@@ -105,9 +110,16 @@ function exerciseSeries(sessions,exId,opts){
   for(const s of real(sessions)){
     const e=s.exercises.find(x=>x.id===exId&&(!opts.mode||modeOf(x)===opts.mode));
     if(!e)continue;
-    let best=0,w=0,r=0;
-    e.sets.forEach(st=>{if(!isWorking(st))return;const est=e1rm(setLoad(exId,st.w,bw),+st.r||0);if(est>best){best=est;w=+st.w||0;r=+st.r||0;}});
-    if(best>0)out.push({date:s.date,est:best,w,r});
+    // A set marked "doesn't count" (st.nc) must not define the trend line — otherwise a rep the user
+    // has disowned reads as their level, and every honest session after it looks like a decline. But
+    // the point is never DROPPED: if that session has no clean set at all it still plots, flagged, so
+    // the history stays visible. `adj` tells the view to mark the point "PR adjusted".
+    let best=0,w=0,r=0,ncBest=0,ncW=0,ncR=0;
+    e.sets.forEach(st=>{if(!isWorking(st))return;const est=e1rm(setLoad(exId,st.w,bw),+st.r||0);
+      if(st.nc){if(est>ncBest){ncBest=est;ncW=+st.w||0;ncR=+st.r||0;}return;}
+      if(est>best){best=est;w=+st.w||0;r=+st.r||0;}});
+    if(best>0)out.push({date:s.date,est:best,w,r,adj:ncBest>best||undefined});
+    else if(ncBest>0)out.push({date:s.date,est:ncBest,w:ncW,r:ncR,adj:true});
   }
   out.sort((a,b)=>a.date-b.date);
   return opts.limit?out.slice(-opts.limit):out;
@@ -121,7 +133,7 @@ function bestE1rmBefore(sessions,exId,opts){
     if(opts.beforeTs&&s.date>=opts.beforeTs)continue;
     const e=s.exercises.find(x=>x.id===exId&&(!opts.mode||modeOf(x)===opts.mode));
     if(!e)continue;
-    e.sets.forEach(st=>{if(!isWorking(st))return;const est=e1rm(setLoad(exId,st.w,bw),+st.r||0);if(est>best)best=est;});
+    e.sets.forEach(st=>{if(st.nc||!isWorking(st))return;const est=e1rm(setLoad(exId,st.w,bw),+st.r||0);if(est>best)best=est;});   // a disowned set is not a bar the next PR has to clear
   }
   return best;
 }
@@ -249,7 +261,7 @@ function deloadSets(last,ex,unit){
 // real session exists, the suggestion mentions the last deload for reference and leaves it at that.
 function suggestion(sessions,exId,opts){
   opts=opts||{};const unit=opts.unit||'lb';
-  const scope={beforeTs:opts.activeDate,excludeId:opts.activeId,mode:opts.mode};
+  const scope={beforeTs:opts.activeDate,excludeId:opts.activeId,mode:opts.mode,clean:true};   // never suggest off a set the user disowned
   const lp=lastPerf(sessions,exId,scope);
   const ex=EX[exId];
   if(!lp||!lp.sets.length){

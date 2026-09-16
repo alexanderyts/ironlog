@@ -43,9 +43,14 @@ function confirmUnchecked(s,commit){
 // Recap of a just-finished session, computed BEFORE it's saved (so history = prior sessions).
 function workoutSummary(s){
   const prs=[];
-  s.exercises.forEach(e=>{const emode=modeOf(e);const histBest=P.bestE1rmBefore(state.sessions,e.id,{mode:emode,bw:bw(),excludeId:s.id});if(histBest<=0)return;
-    let best=0,bs=null;e.sets.forEach(st=>{if(st.warm||!P.isWorking(st))return;const est=P.e1rm(P.setLoad(e.id,st.w,bw()),+st.r||0);if((+st.r)&&est>best){best=est;bs=st;}});
-    if(bs&&best>histBest)prs.push({name:EX[e.id]?EX[e.id].name:e.name,w:bs.w,r:bs.r,perHand:MODES[emode]&&MODES[emode].perHand});});
+  s.exercises.forEach(e=>{
+    // An e1RM comparison is meaningless for an assist machine (less weight = harder) and for a
+    // time-held lift ("reps" are seconds) — it would both miss real improvements and invent fake ones.
+    // The Progress PR list ranks those correctly; here we simply stay quiet rather than lie.
+    if(D.INVERTED_LOAD.has(e.id)||D.TIME_METRIC.has(e.id))return;
+    const emode=modeOf(e);const histBest=P.bestE1rmBefore(state.sessions,e.id,{mode:emode,bw:bw(),excludeId:s.id});if(histBest<=0)return;
+    let best=0,bs=null;e.sets.forEach(st=>{if(st.warm||st.nc||!P.isWorking(st))return;const est=P.e1rm(P.setLoad(e.id,st.w,bw()),+st.r||0);if((+st.r)&&est>best){best=est;bs=st;}});
+    if(bs&&best>histBest)prs.push({id:e.id,name:EX[e.id]?EX[e.id].name:e.name,w:bs.w,r:bs.r,perHand:MODES[emode]&&MODES[emode].perHand});});
   return {sets:setsOf(s),vol:volOf(s),prs,deload:!!s.deload,dur:P.sessionDuration(s),estimated:!!s.endEstimated};
 }
 function showSummary(sm){
@@ -57,7 +62,8 @@ function showSummary(sm){
     body+=`<div class="card" style="padding:14px 15px;background:var(--good-soft);border:1px solid color-mix(in srgb,var(--good) 30%,transparent)"><div style="color:var(--good);font-weight:600;font-size:13.5px">🌿 Recovery in the bank</div><div class="dim" style="font-size:12.5px;margin-top:3px">Fatigue's clearing — ease back to full loads when you feel fresh. This won't affect your progression.</div></div>`;
   }else if(sm.prs.length){
     body+=`<div class="eyebrow" style="margin:2px 2px 8px">🎉 New personal record${sm.prs.length>1?'s':''}</div>
-      <div class="card list">${sm.prs.map(p=>`<div class="ex-row"><span style="color:var(--good);font-size:18px;flex-shrink:0">★</span><div style="flex:1;min-width:0"><div class="ex-name">${esc(p.name)}</div><div class="ex-sub">${p.w}${U()}${p.perHand?'/ea':''} × ${p.r}</div></div></div>`).join('')}</div>`;
+      <div class="card list">${sm.prs.map(p=>`<div class="ex-row"><span style="color:var(--good);font-size:18px;flex-shrink:0">★</span><div style="flex:1;min-width:0"><div class="ex-name">${esc(p.name)}</div><div class="ex-sub">${p.w}${U()}${p.perHand?'/ea':''} × ${p.r}</div></div>
+        <button class="btn sm ghost" data-prmark="${p.id}" style="flex-shrink:0">Wasn’t clean</button></div>`).join('')}</div>`;
   }else{
     body+=`<div class="dim" style="font-size:13.5px;line-height:1.5;padding:0 2px">Logged and saved. Consistency is what moves the numbers — every session counts.</div>`;
   }
@@ -116,6 +122,30 @@ function commitFinish(s,endedAt,estimated){
   }
   state.active=null;S.persistActive();todayScreen='home';
   render();showSummary(sm);
+}
+/* "That rep wasn't clean" — set the current record aside. Finds the exact set behind the PR (same
+   session, same modality, same weight × reps) and flags it `nc`. Nothing is deleted: the set keeps its
+   place in History and its share of your volume; it just stops being the bar the app measures you
+   against, and stops seeding the next workout. Re-openable both ways. */
+function markBestSet(id){
+  const p=A.personalRecords(state.sessions,bw(),999).filter(x=>x.id===id)[0];
+  if(!p){toast('No record to adjust');return;}
+  const s=state.sessions.find(x=>x.date===p.date&&x.exercises.some(e=>e.id===id));
+  const e=s&&(s.exercises.find(x=>x.id===id&&modeOf(x)===p.mode)||s.exercises.find(x=>x.id===id));
+  const st=e&&e.sets.find(x=>!x.nc&&P.isWorking(x)&&(+x.w||0)===p.w&&(+x.r||0)===p.r);
+  if(!st){toast('Couldn’t find that set');return;}
+  st.nc=true;s.updatedAt=Date.now();S.upsertSession(s,false);
+  render();openSheet(EX[id]?EX[id].name:id,exerciseDetail(id));
+  toast('Set aside — it still counts toward your volume');
+}
+function unmarkSets(id){
+  let n=0;
+  state.sessions.forEach(s=>{let hit=false;
+    s.exercises.forEach(e=>{if(e.id!==id)return;e.sets.forEach(st=>{if(st.nc){delete st.nc;hit=true;n++;}});});
+    if(hit){s.updatedAt=Date.now();S.upsertSession(s,false);}});
+  if(!n){toast('Nothing was set aside');return;}
+  render();openSheet(EX[id]?EX[id].name:id,exerciseDetail(id));
+  toast(n>1?'Counting them again':'Counting it again');
 }
 function discardActive(){showConfirm('Discard workout?','Nothing from this session will be saved.','Discard',()=>{
   stopRest();stopElapsed();const copy=state.active;state.active=null;S.persistActive();todayScreen='home';render();
@@ -448,7 +478,9 @@ function boot(){
   $('#sheetClose').addEventListener('click',closeSheet);$('#scrim').addEventListener('click',closeSheet);
   $('#cdCancel').addEventListener('click',closeConfirm);$('#cscrim').addEventListener('click',closeConfirm);
   $('#cdOk').addEventListener('click',()=>{const cb=_confirmCb;closeConfirm();if(cb)cb();});
-  $('#sheetBody').addEventListener('click',e=>{const a=e.target.closest('[data-addto]');if(a){addExerciseToCur(a.dataset.addto);closeSheet();}});
+  $('#sheetBody').addEventListener('click',e=>{const a=e.target.closest('[data-addto]');if(a){addExerciseToCur(a.dataset.addto);closeSheet();return;}
+    const pm=e.target.closest('[data-prmark]');if(pm){markBestSet(pm.dataset.prmark);return;}
+    const pu=e.target.closest('[data-prunmark]');if(pu){unmarkSets(pu.dataset.prunmark);return;}});
   $('#btnSettings').addEventListener('click',openSettings);
   $('#restSkip').addEventListener('click',stopRest);
   $('#restAdd').addEventListener('click',()=>{

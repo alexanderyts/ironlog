@@ -2,6 +2,17 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.49.0 — 2026-09-16 · Adjust a PR, and the sheet that wouldn't appear
+Sometimes you hit a number your form didn't earn. Now you can say so, without losing the fact that you hit it.
+- **"That rep wasn't clean."** Open a lift from your Personal Records (or tap it right after the workout announces it) and set the record aside in one tap. Your PR falls back to your previous best, and the row shows **PR adjusted** with the set-aside lift and its date — so the history is still right there.
+- **Nothing is deleted.** The set stays in your History and keeps counting toward your volume and your sets-per-muscle. It just stops being the bar.
+- **The app stops pushing you off it.** Your next suggestion — and the weights the builder prefills — come from your last *clean* set instead. Real example: barbell row 75→90→110 with the 110 set aside now prefills **95**, not 115. If every set that day was set aside, it falls back to the workout before; if you've never logged a clean one, nothing changes.
+- **A deliberate step back no longer looks like decline.** On the lift's trend, an adjusted point turns the arrow neutral instead of warning-orange and says why.
+- **Changed your mind?** "Count it again" puts it straight back.
+- **Fixed: tapping something that opens a panel while the keyboard was up did nothing.** The exercise library (and every other panel) was opening below the visible screen, leaving a blank band where the keyboard sits. Panels now drop the keyboard first and open at the top, on the search bar.
+- **Fixed: a fake "★ New PR" on assisted and timed lifts.** An assist machine (less weight = harder) and a plank or carry (where "reps" are seconds) can't be ranked by an estimated 1-rep max, so the in-workout PR flash could both miss real improvements and invent fake ones. It now stays quiet on those lifts — your Personal Records list already ranked them correctly and still does.
+- Not verified on-device (tested in a desktop browser at iPhone size, against your 2026-09-16 backup, plus the automated suite — 223 tests green; review snapshot unchanged).
+
 ## v0.48.2 — 2026-09-15 · Assisted-lift volume counts the real work
 Follow-up to v0.48.0: the assisted-dip *progression and PRs* were fixed, but its **volume** still counted the machine's assistance as the load. Now an assisted lift counts the resistance you actually moved.
 - **Assisted Dip / Assisted Pull-Up volume = bodyweight − assist.** Just like a *weighted* dip counts bodyweight + the added plate, an *assisted* dip now counts bodyweight minus the help. So a 216 lb lifter with 70 lb of assist counts 146 lb per rep, not 70. Your weekly volume, session totals and the volume chart all reflect the true work now — and the harder set (less assist) correctly counts as *more* volume, not less.

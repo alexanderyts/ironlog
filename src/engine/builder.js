@@ -38,7 +38,7 @@ function seedExercise(id,sessions,opts){
   opts=opts||{};const {excludeId,unit,deload,extraSet,goal,setStyle,push}=opts;   // goal/setStyle/push: profile levers
   const ex=EX[id];const mode=lastModeFor(sessions,id);
   const inst={id,name:ex?ex.name:id};if(mode)inst.mode=mode;
-  const lp=lastPerf(sessions||[],id,{excludeId,mode:mode||undefined});   // real sessions only — a deload is never a baseline
+  const lp=lastPerf(sessions||[],id,{excludeId,mode:mode||undefined,clean:true});   // real sessions only — a deload is never a baseline; `clean` so a set marked "doesn't count" is never prefilled back at you
   const rr=goal?repRange(ex,goal):(ex?ex.rr:[8,12]);   // goal shifts the target range in one place
   let sets;
   // push:'quiet' — "just record": the rows mirror last time exactly, never a bump. Must agree with
@@ -304,7 +304,7 @@ function exerciseStreak(sessions,exId){return exerciseTenure(sessions,exId).sess
 function recentPerfs(sessions,exId,opts){
   opts=opts||{};const n=opts.n||3,out=[];let before;
   for(let i=0;i<n;i++){
-    const lp=lastPerf(sessions,exId,{beforeTs:before,mode:opts.mode});if(!lp)break;
+    const lp=lastPerf(sessions,exId,{beforeTs:before,mode:opts.mode,clean:true});if(!lp)break;   // a disowned set is not evidence of progress OR of a stall
     if(opts.since&&lp.date<opts.since)break;
     const top=Math.max(...lp.sets.map(s=>+s.w||0));
     const topR=Math.max(...lp.sets.filter(s=>(+s.w||0)===top).map(s=>+s.r||0));   // reps at the top weight — for double-progression detection
