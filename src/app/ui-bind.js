@@ -227,6 +227,15 @@ function logCardioManual(){
   commitCardio(s,end,false);
 }
 function startEdit(s){editSession=JSON.parse(JSON.stringify(s));editDirty=false;todayScreen='edit';setTab('today');}
+// Move a past workout to another day (D-4). Keeps the original time-of-day, and shifts endedAt by the
+// same delta so the recorded duration is unchanged. Edit mode only.
+function changeEditDate(iso){
+  const s=cur();if(!s||!iso)return;const parts=iso.split('-').map(Number);if(parts.length!==3||!parts[0])return;
+  const old=new Date(s.date),nd=new Date(parts[0],parts[1]-1,parts[2],old.getHours(),old.getMinutes(),old.getSeconds(),old.getMilliseconds());
+  const t=nd.getTime();if(t>Date.now()||t===s.date)return;   // no future-dating, no-op if unchanged
+  const delta=t-s.date;s.date=t;if(+s.endedAt>0)s.endedAt+=delta;
+  editDirty=true;render();toast('Moved to '+nd.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'}));
+}
 function finishEdit(){
   const s=editSession;
   confirmUnchecked(s,()=>{
@@ -366,6 +375,8 @@ function bind(){
   const sg=v.querySelector('[data-suggest]');if(sg)sg.addEventListener('click',()=>addExerciseToCur(sg.dataset.suggest));
   bindClick('#btnReorder',reorderCur);
   bindClick('#btnSaveRoutine',()=>saveAsRoutine(cur()));
+  bindClick('#btnSessNote',openSessionNote);bindClick('#sessNoteShow',openSessionNote);
+  const ed=$('#editDate');if(ed)ed.addEventListener('change',()=>changeEditDate(ed.value));
   bindClick('#btnFinish',finishWorkout);bindClick('#btnFinishTop',finishWorkout);   // two routes, one function
   bindClick('#btnSaveEdit',finishEdit);
   bindClick('#btnDiscard',discardActive);

@@ -90,7 +90,8 @@ function cardioFields(c,ctx){
 // mm:ss elapsed for the live clock (updated by the second in bindCardio).
 function fmtClockElapsed(startTs){const t=Math.max(0,Math.floor((Date.now()-startTs)/1000));const m=Math.floor(t/60),ss=t%60;return m+':'+(ss<10?'0':'')+ss;}
 // The manual / start sheet: pick type+intensity+distance, then either Start the timer or log minutes.
-function todayISO(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function dateISO(ts){const d=new Date(ts);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}   // local YYYY-MM-DD for a <input type=date>
+function todayISO(){return dateISO(Date.now());}
 function openCardioSheet(){
   cardioDraft={type:lastCardioType(),intensity:'easy',distance:'',mins:30,when:todayISO()};
   openSheet('Cardio',cardioSheetBody());
@@ -264,6 +265,18 @@ function openNote(ei){
   $('#noteSave').addEventListener('click',()=>{const v=(ta.value||'').trim();if(v)ex.note=v.slice(0,500);else delete ex.note;persistCur();closeSheet();render();toast(v?'Note saved':'Note removed');});
   const nc=$('#noteClear');if(nc)nc.addEventListener('click',()=>{delete ex.note;persistCur();closeSheet();render();toast('Note removed');});
 }
+// A note for the whole workout (D-4) — how the session felt, sleep, an injury flare. Kept on the session
+// and shown in History. Works on the live workout or a past one being edited (cur()).
+function openSessionNote(){
+  const t=cur();if(!t)return;
+  openSheet('Workout note',`<div class="dim" style="font-size:13px;margin:-4px 2px 12px">A note for this whole session — how it felt, sleep, energy. Shown in your History.</div>
+    <textarea id="snoteText" class="field" style="height:110px;padding:12px 14px;resize:none;line-height:1.45" maxlength="500" placeholder="e.g. slept badly, everything felt heavy — still hit the numbers">${esc(t.note||'')}</textarea>
+    <button class="btn primary block" id="snoteSave" style="margin-top:12px">Save note</button>
+    ${t.note?'<button class="btn ghost block" id="snoteClear" style="margin-top:8px">Remove note</button>':''}`);
+  const ta=$('#snoteText');if(ta){ta.focus();ta.setSelectionRange(ta.value.length,ta.value.length);}
+  $('#snoteSave').addEventListener('click',()=>{const v=(ta.value||'').trim();if(v)t.note=v.slice(0,500);else delete t.note;persistCur();closeSheet();render();toast(v?'Note saved':'Note removed');});
+  const nc=$('#snoteClear');if(nc)nc.addEventListener('click',()=>{delete t.note;persistCur();closeSheet();render();toast('Note removed');});
+}
 function buildAndStart(fresh){
   const dl=draft.deload;
   // Coach's findings feed the builder (Phase C). The engine ignores them on a deload (recovery isn't
@@ -311,14 +324,18 @@ function editorView(s,mode){
       ${edit?'':`<span style="display:flex;gap:10px;align-items:center"><button class="linkbtn dim" id="btnDiscard">Discard</button><button class="btn good sm" id="btnFinishTop" ${sets===0?'disabled style="opacity:.5"':''}>Finish</button></span>`}</div>
     <div style="padding:0 2px 2px"><div class="eyebrow">${edit?'Editing · '+fmtDate(s.date):`Workout in progress · saves automatically · <span id="elapsedLbl">${fmtElapsed(s.date)}</span>`}</div>
       <h2 style="font-size:23px;margin-top:4px">${new Date(s.date).toLocaleDateString(undefined,{weekday:'long'})}'s session${s.deload?' <span class="deload-badge">Deload</span>':''}</h2></div>
+    ${edit?`<div class="settingrow" style="border:none;padding:8px 2px;margin:2px 0 0"><div><div style="font-weight:600;font-size:13.5px">Date</div><div class="dim" style="font-size:12px">Move this workout to another day</div></div>
+      <input type="date" id="editDate" value="${dateISO(s.date)}" max="${todayISO()}" class="field" style="width:auto;height:38px;padding:0 12px"></div>`:''}
     ${edit?'':staleBanner(s)}
     ${s.deload?`<div class="card" style="margin:0 0 14px;padding:12px 14px;background:var(--good-soft);border:1px solid color-mix(in srgb,var(--good) 30%,transparent)"><div style="font-weight:600;color:var(--good);font-size:13.5px">🌿 Recovery session</div><div class="dim" style="font-size:12.5px;margin-top:3px">Lighter loads on purpose — take each rep through a full range, feel the stretch, and stop 3–4 reps shy of failure. This won't affect your progression or PRs.</div></div>`:''}
     <div class="statgrid" style="margin:14px 0 18px">
       <div class="card stat"><div class="k">Working sets</div><div class="v mono" id="stSets">${sets}</div></div>
       <div class="card stat"><div class="k">${volLabel()}</div><div class="v mono" id="stVol">${fmtVol(vol)}<small>${U()}</small></div></div>
     </div>
+    ${s.note?`<button class="sugg match" id="sessNoteShow" style="width:100%;text-align:left;color:var(--ink-2);margin:0 0 14px"><span>📝 ${esc(s.note)}</span></button>`:''}
     <div id="logList">${s.exercises.map((e,i)=>logExercise(s,e,i,mode)).join('')||emptyLog()}</div>
     <div style="display:flex;gap:4px;flex-wrap:wrap;margin:0 0 6px">
+      <button class="linkbtn" id="btnSessNote">📝 ${s.note?'Edit note':'Workout note'}</button>
       ${s.exercises.length>=3?`<button class="linkbtn" id="btnReorder">↕ Auto-order</button>`:''}
       ${s.exercises.length?`<button class="linkbtn" id="btnSaveRoutine">★ Save as routine</button>`:''}
     </div>

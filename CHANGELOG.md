@@ -2,6 +2,13 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.57.0 — 2026-09-16 · Workout notes, and move a workout to another day
+Two long-wanted additions:
+- **Add a note to a whole workout.** Tap "📝 Workout note" in the editor to jot how the session felt — sleep, energy, a tweak — separate from the per-exercise notes. It shows on the workout's card in History and in its details.
+- **Move a past workout to another day.** Open a past workout → Edit, and there's now a date field. Forgot to log Monday's session until Wednesday? Set it to the right day. Its duration is kept, and History re-sorts automatically.
+
+Not verified on-device.
+
 ## v0.56.0 — 2026-09-16 · Your bodyweight is remembered per workout
 Bodyweight lifts (pull-ups, dips, assisted machines, planks) are scored partly by your bodyweight. Until now the app used your *current* weight for your *entire* history — so updating your weight quietly shifted every past pull-up number. Fixed:
 - **Each workout now remembers the bodyweight you did it at.** Your history stops moving when you update your weight — an old pull-up session keeps the numbers it earned, and a new one is scored at your new weight. Your progress chart for these lifts is finally accurate over time.
