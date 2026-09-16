@@ -2,6 +2,16 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.53.0 — 2026-09-16 · Data safety: nothing gets lost or resurrected
+Under-the-hood fixes so your log stays intact in the corners that could bite. Nothing to learn — it just behaves better.
+- **A workout in progress can no longer disappear silently.** If your phone's storage fills up mid-session, you now get a clear "Storage is full — export a backup" warning instead of edits quietly failing and the session being lost on reload.
+- **The stopwatch and rest timer never stack.** Starting a rest now closes a running plank stopwatch (they share the same spot), and leaving the workout screen — tapping Home or another tab — stops the stopwatch instead of letting it count on in the background.
+- **A timed set won't slip through empty.** Ticking a plank or carry with no seconds entered now asks for the seconds first, instead of accepting it and dropping it at Finish.
+- **A deleted workout stays deleted across devices.** On the built-in cloud, deleting a session on one phone now reliably removes it on your others — before, another device could quietly bring it back.
+- **A corrupt backup can't bloat sync forever.** The internal "deleted" and "seen" lists are now size-capped.
+
+Not verified on-device.
+
 ## v0.52.0 — 2026-09-16 · Planks, carries and assisted machines are now first-class
 A review turned up that the time-held and assist-machine lifts were only half-wired into the stats. Fixed:
 - **Bodyweight holds now get a personal record.** A plank, wall sit, dead hang, side plank or hollow hold now shows a best (longest hold) on your PR board — before, they silently never did.

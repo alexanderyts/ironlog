@@ -122,5 +122,8 @@ function render(){
 }
 // current session being edited on the Today tab (the live workout or a past one)
 const cur=()=>todayScreen==='edit'?editSession:state.active;
-function persistCur(){if(todayScreen==='edit')editDirty=true;else S.persistActive();}
+function persistCur(){if(todayScreen==='edit'){editDirty=true;return;}
+  const was=state.storageError;
+  if(!S.persistActive()&&!was)toast('Storage is full — this workout isn’t being saved. Export a backup from Settings.');   // warn once on the transition, not every tap
+}
 

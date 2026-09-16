@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-Bw8oP5pLxQ8R/LnyAH5+73yAtOo1gw551eft7mXhKSo=' 'sha256-WPBob/luB2k1aalTWXpi6zk3SrIbj8GlZV7AlFdG7oA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-KZFHYO/3NYM1jYCONpDgd9oFuS4SabakcTGh1JOv1Ug=' 'sha256-WPBob/luB2k1aalTWXpi6zk3SrIbj8GlZV7AlFdG7oA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Ironlog</title>
@@ -424,8 +424,8 @@ html.kb-open .tabbar{display:none}
 </div>
 
 <script>
-/* Ironlog v0.52.0 · site build */
-var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.52.0",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
+/* Ironlog v0.53.0 · site build */
+var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.53.0",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
 
 /* ===== src/data/exercises.js ===== */
 (function(){'use strict';
@@ -2038,9 +2038,9 @@ function cleanProfile(p){if(!p||typeof p!=='object')return undefined;const o={};
   if(Array.isArray(p.protect)){const g=p.protect.filter(x=>GROUPS.indexOf(x)>=0).slice(0,GROUPS.length);if(g.length)o.protect=g;}
   return Object.keys(o).length?o:undefined;}
 // "Seen this announcement once" flags (e.g. the profile intro), synced so a dismissal sticks everywhere.
-function cleanSeen(v){if(!v||typeof v!=='object')return undefined;const o={};
+function cleanSeen(v){if(!v||typeof v!=='object')return undefined;const o={};let n=0;
   // keys are one-time flags (e.g. 'profileIntro') and coaching mutes ('mute:volume-low:Chest') — allow ':' and '-'
-  Object.keys(v).forEach(k=>{if(v[k]===true&&/^[A-Za-z0-9_:-]{1,60}$/.test(k))o[k]=true;});
+  Object.keys(v).forEach(k=>{if(n>=MAX_KEYS)return;if(v[k]===true&&/^[A-Za-z0-9_:-]{1,60}$/.test(k)){o[k]=true;n++;}});   // cap so a corrupt map can't be absorbed and re-uploaded forever (D6)
   return Object.keys(o).length?o:undefined;}
 
 const TOMB_KEEP=400*86400000;   // remember deletions ~13 months — longer than a phone left off for a season, so a device coming back online can't resurrect a delete (a tombstone is ~30 B; 500 of them is 15 KB)
@@ -2088,7 +2088,7 @@ function exportPayload(st,version){
    known literal keys to fresh objects, this is structurally immune to prototype pollution
    (__proto__/constructor keys in the JSON are simply never copied). Escaping in the views and the CSP
    are defense-in-depth on top of this. */
-const MAX_STR=120, MAX_ARR=2000, MAX_SETS=100, MAX_EX=60;
+const MAX_STR=120, MAX_ARR=2000, MAX_SETS=100, MAX_EX=60, MAX_KEYS=5000;   // key-count cap for the deleted/seen maps
 function sStr(v,max){return typeof v==='string'?v.slice(0,max||MAX_STR):'';}
 function sId(v){return (typeof v==='string'?v:'').replace(/[^A-Za-z0-9_:.-]/g,'').slice(0,64);}
 function sNum(v){const n=typeof v==='number'?v:(typeof v==='string'&&v.trim()!==''?+v:NaN);return Number.isFinite(n)?n:0;}
@@ -2115,7 +2115,10 @@ function cleanSettings(o){if(!o||typeof o!=='object')return null;
   return s;
 }
 const DANGER_KEY=/^(__proto__|constructor|prototype)$/;
-function cleanDeleted(o){const out=Object.create(null);if(o&&typeof o==='object')Object.keys(o).forEach(k=>{if(DANGER_KEY.test(k))return;const key=sId(k),at=sNum(o[k]);if(key&&!DANGER_KEY.test(key)&&at)out[key]=at;});return out;}
+function cleanDeleted(o){const out=Object.create(null);if(!o||typeof o!=='object')return out;
+  let keys=Object.keys(o);
+  if(keys.length>MAX_KEYS)keys=keys.sort((a,b)=>(sNum(o[b])||0)-(sNum(o[a])||0)).slice(0,MAX_KEYS);   // keep the most-recent tombstones; drop the overflow so a corrupt map can't be re-uploaded forever (D6)
+  keys.forEach(k=>{if(DANGER_KEY.test(k))return;const key=sId(k),at=sNum(o[k]);if(key&&!DANGER_KEY.test(key)&&at)out[key]=at;});return out;}
 
 function parseImport(json){
   const d=typeof json==='string'?JSON.parse(json):json;
@@ -2142,7 +2145,7 @@ function resolveActive(local,remote){
   return {active:local.active,activeClearedAt:lc,changed:false,pushNeeded:remoteEvt<localEvt};
 }
 
-IL.sync={mergeSessions,applyTombstones,pruneTombstones,exportPayload,parseImport,resolveActive,cleanSession,cleanRoutine,cleanSettings,cleanProfile,cleanCardio,PROFILE_ENUM,CARDIO_ENUM,TOMB_KEEP};
+IL.sync={mergeSessions,applyTombstones,pruneTombstones,cleanDeleted,exportPayload,parseImport,resolveActive,cleanSession,cleanRoutine,cleanSettings,cleanProfile,cleanCardio,PROFILE_ENUM,CARDIO_ENUM,TOMB_KEEP};
 if(typeof module!=='undefined')module.exports=IL.sync;
 
 })();
@@ -2233,7 +2236,7 @@ IL.dropbox={isConfigured,isConnected,connect,disconnect,handleRedirect,getMetada
 //   dropbox   → one JSON file in the user's Dropbox app folder (standalone / GitHub Pages build)
 //   none      → on-device only
 var IL=globalThis.IL||(globalThis.IL={});
-const {mergeSessions,applyTombstones,pruneTombstones,exportPayload,parseImport,cleanSession,cleanRoutine,cleanSettings}=IL.sync;
+const {mergeSessions,applyTombstones,pruneTombstones,cleanDeleted,exportPayload,parseImport,cleanSession,cleanRoutine,cleanSettings}=IL.sync;
 const CFG=IL.config||{};
 
 const LS={sessions:'il_sessions',active:'il_active',settings:'il_settings',dirty:'il_dirty',routines:'il_routines',deleted:'il_deleted',dbxRev:'il_dbx_rev',activeCleared:'il_active_cleared',pushPending:'il_push_pending',blockedVer:'il_blocked_ver'};
@@ -2273,7 +2276,7 @@ if(CFG.DEMO&&IL.seed&&!state.sessions.length&&!lsGet('il_seeded',false)){
 function resetDemo(){try{Object.values(LS).forEach(k=>localStorage.removeItem(k));localStorage.removeItem('il_seeded');}catch(e){}location.reload();}
 
 const saveSessions=()=>{const ok=lsSet(LS.sessions,state.sessions);state.storageError=!ok;return ok;};   // the big blob is where the quota bites; track it so the UI can warn
-const saveActive=()=>{lsSet(LS.active,state.active);lsSet(LS.activeCleared,state.activeClearedAt||0);};
+const saveActive=()=>{const a=lsSet(LS.active,state.active);const b=lsSet(LS.activeCleared,state.activeClearedAt||0);return a&&b;};   // the active workout is the SOLE copy of live data until Finish — report if it didn't land
 const saveSettings=()=>lsSet(LS.settings,state.settings);
 const saveRoutines=()=>lsSet(LS.routines,state.routines);
 const saveDeleted=()=>lsSet(LS.deleted,state.deleted);
@@ -2323,8 +2326,10 @@ let activeTimer=null;
 function persistActive(){
   if(state.active)state.active.updatedAt=Date.now();
   else state.activeClearedAt=Date.now();   // record WHEN we cleared it, so the newer event (active vs cleared) wins on merge
-  saveActive();
+  const ok=saveActive();
+  if(state.active)state.storageError=!ok;   // a live workout that failed to save is at risk; flag it (clearing writes are safe to lose)
   if(state.cloud){clearTimeout(activeTimer);activeTimer=setTimeout(()=>state.cloud.pushActive(),1500);}
+  return ok;
 }
 function setActive(s){state.active=s;persistActive();}
 
@@ -2393,12 +2398,24 @@ function artifactAdapter(){
       await A.flush();
       db.collection('sessions').onSnapshot(qs=>{
         const remote=[];qs.docs.forEach(d=>{const data=d.data();if(data){data.id=d.id;remote.push(cleanSession(data));}});
-        const t=applyTombstones(state.sessions,state.deleted,{});
         const m=mergeSessions(state.sessions,remote,state.deleted);
         // sessions we deleted locally but the cloud still has → delete there too
         remote.forEach(r=>{if(state.deleted[r.id]&&state.deleted[r.id]>=(r.updatedAt||0))db.doc('sessions/'+r.id).delete().catch(()=>{});});
         if(m.changedLocal){state.sessions=m.merged;saveSessions();emit();}
         state.lastSync=Date.now();emit();
+      },()=>{});
+      // Shared tombstone doc: mergeSessions can add/update but never REMOVE, so without this a delete on one
+      // device is undone the moment another device touches the row (pushSession re-creates it). This doc
+      // carries the deletions across, mirroring the Dropbox file's `deleted` map. (D2)
+      db.doc('meta/deleted').onSnapshot(snap=>{
+        if(!snap.exists)return;
+        const rd=cleanDeleted((snap.data()||{}).map);if(!Object.keys(rd).length)return;
+        const ts=applyTombstones(state.sessions,state.deleted,rd);   // ts.tomb = merged map; ts.sessions = survivors
+        const rt=applyTombstones(state.routines.map(r=>Object.assign({},r,{id:'r:'+r.id})),{},rd).sessions.map(r=>Object.assign({},r,{id:r.id.slice(2)}));
+        const newTomb=pruneTombstones(ts.tomb);
+        const changed=ts.changed||rt.length!==state.routines.length||Object.keys(newTomb).length!==Object.keys(state.deleted).length;
+        state.sessions=ts.sessions;state.routines=rt;state.deleted=newTomb;
+        if(changed){saveSessions();saveRoutines();saveDeleted();emit();}
       },()=>{});
       db.collection('routines').onSnapshot(qs=>{
         const remote=[];qs.docs.forEach(d=>{const data=d.data();if(data){data.id=d.id;remote.push(cleanRoutine(data));}});
@@ -2409,10 +2426,11 @@ function artifactAdapter(){
       return true;
     },
     async pushSession(s){try{await db.doc('sessions/'+s.id).set(s);state.dirty.delete(s.id);saveDirty();state.lastSync=Date.now();state.cloudError='';emit();}catch(e){state.cloudError='Sync failed';emit();}},
-    deleteSession(id){db.doc('sessions/'+id).delete().catch(()=>{});},
+    deleteSession(id){db.doc('sessions/'+id).delete().catch(()=>{});A.pushTombstones();},
+    pushTombstones(){db.doc('meta/deleted').set({map:state.deleted,updatedAt:Date.now()}).catch(()=>{});},   // publish the deletion so other devices don't resurrect it (D2)
     pushSettings(){db.doc('settings/app').set(state.settings).catch(()=>{});},
     pushRoutine(r){db.doc('routines/'+r.id).set(r).catch(()=>{});},
-    deleteRoutine(id){db.doc('routines/'+id).delete().catch(()=>{});},
+    deleteRoutine(id){db.doc('routines/'+id).delete().catch(()=>{});A.pushTombstones();},
     pushActive(){db.doc('active/current').set(state.active||{empty:true,updatedAt:state.activeClearedAt||Date.now(),activeClearedAt:state.activeClearedAt||Date.now()}).catch(()=>{});},
     async flush(){for(const id of [...state.dirty]){const s=state.sessions.find(x=>x.id===id);if(s)await A.pushSession(s);else{state.dirty.delete(id);saveDirty();}}},
     syncNow(){return A.flush();}
@@ -2623,7 +2641,10 @@ function render(){
 }
 // current session being edited on the Today tab (the live workout or a past one)
 const cur=()=>todayScreen==='edit'?editSession:state.active;
-function persistCur(){if(todayScreen==='edit')editDirty=true;else S.persistActive();}
+function persistCur(){if(todayScreen==='edit'){editDirty=true;return;}
+  const was=state.storageError;
+  if(!S.persistActive()&&!was)toast('Storage is full — this workout isn’t being saved. Export a backup from Settings.');   // warn once on the transition, not every tap
+}
 
 
 /* ----- src/app/ui-today.js ----- */
@@ -4101,7 +4122,10 @@ function bindLog(root){
         // Ticking a loaded lift with no weight would save a 0-volume "working" set and poison "last time".
         // Point the user at the weight field instead of silently accepting it. Bodyweight moves are exempt,
         // and so are time-held lifts (a carry can be logged by time alone; load is optional).
-        if(cex&&cex.equip!=='Bodyweight'&&!D.TIME_METRIC.has(cex.id)&&!(+st.w>0)){const wi=$(`input[data-f="w"][data-ei="${ei}"][data-s="${si}"]`);if(wi){wi.focus();if(wi.select)wi.select();}toast('Add a weight first');return;}}
+        if(cex&&cex.equip!=='Bodyweight'&&!D.TIME_METRIC.has(cex.id)&&!(+st.w>0)){const wi=$(`input[data-f="w"][data-ei="${ei}"][data-s="${si}"]`);if(wi){wi.focus();if(wi.select)wi.select();}toast('Add a weight first');return;}
+        // Timed lifts log seconds in the reps field. Ticking with it empty saves a set finalizeSets then
+        // drops (r>0 required), losing the tick with no warning — require the seconds first.
+        if(cex&&D.TIME_METRIC.has(cex.id)&&!(+st.r>0)){const ri=$(`input[data-f="r"][data-ei="${ei}"][data-s="${si}"]`);if(ri){ri.focus();if(ri.select)ri.select();}toast('Add seconds first');return;}}
       st.done=!st.done;
       // T1: stamp on completion, but keep an existing stamp on un-tick → re-tick (a mis-tap corrected
       // seconds later keeps its true time, instead of jumping to "now" and skewing the rest medians).
@@ -4146,6 +4170,7 @@ function beep(){
 function restSecondsFor(exId){const ex=EX[exId];const r=state.settings.rest;return ex?(ex.type===C?r.compound:r.isolation):90;}
 function startRest(seconds){
   if(!seconds||seconds<5)return;
+  stopSw();   // rest and stopwatch share one slot — never stack them (U2)
   restState={total:seconds,end:Date.now()+seconds*1000};
   const bar=$('#restbar');bar.classList.add('on');bar.classList.remove('done');$('#restLbl').textContent='Rest';
   clearInterval(restInt);restInt=setInterval(tickRest,300);tickRest();
@@ -4182,7 +4207,9 @@ function startStopwatch(ei){
   clearInterval(swInt);swInt=setInterval(tickSw,100);tickSw();
 }
 function tickSw(){
-  if(!swState)return;const b=$('#swbar');if(!b)return;
+  if(!swState)return;
+  if(currentTab!=='today'||todayScreen!=='active'||!state.active){stopSw();return;}   // left the editor (Home, or a History/Progress/Library tab switch) → self-stop instead of counting over another screen and writing into a hidden workout (U3)
+  const b=$('#swbar');if(!b)return;
   if(swState.phase==='count'){
     const rem=Math.max(0,swState.end-Date.now()),n=Math.ceil(rem/1000);
     $('#swLbl').textContent='Get set';$('#swTime').textContent=n>0?String(n):'Go';

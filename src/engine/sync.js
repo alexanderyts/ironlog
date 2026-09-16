@@ -21,9 +21,9 @@ function cleanProfile(p){if(!p||typeof p!=='object')return undefined;const o={};
   if(Array.isArray(p.protect)){const g=p.protect.filter(x=>GROUPS.indexOf(x)>=0).slice(0,GROUPS.length);if(g.length)o.protect=g;}
   return Object.keys(o).length?o:undefined;}
 // "Seen this announcement once" flags (e.g. the profile intro), synced so a dismissal sticks everywhere.
-function cleanSeen(v){if(!v||typeof v!=='object')return undefined;const o={};
+function cleanSeen(v){if(!v||typeof v!=='object')return undefined;const o={};let n=0;
   // keys are one-time flags (e.g. 'profileIntro') and coaching mutes ('mute:volume-low:Chest') — allow ':' and '-'
-  Object.keys(v).forEach(k=>{if(v[k]===true&&/^[A-Za-z0-9_:-]{1,60}$/.test(k))o[k]=true;});
+  Object.keys(v).forEach(k=>{if(n>=MAX_KEYS)return;if(v[k]===true&&/^[A-Za-z0-9_:-]{1,60}$/.test(k)){o[k]=true;n++;}});   // cap so a corrupt map can't be absorbed and re-uploaded forever (D6)
   return Object.keys(o).length?o:undefined;}
 
 const TOMB_KEEP=400*86400000;   // remember deletions ~13 months — longer than a phone left off for a season, so a device coming back online can't resurrect a delete (a tombstone is ~30 B; 500 of them is 15 KB)
@@ -71,7 +71,7 @@ function exportPayload(st,version){
    known literal keys to fresh objects, this is structurally immune to prototype pollution
    (__proto__/constructor keys in the JSON are simply never copied). Escaping in the views and the CSP
    are defense-in-depth on top of this. */
-const MAX_STR=120, MAX_ARR=2000, MAX_SETS=100, MAX_EX=60;
+const MAX_STR=120, MAX_ARR=2000, MAX_SETS=100, MAX_EX=60, MAX_KEYS=5000;   // key-count cap for the deleted/seen maps
 function sStr(v,max){return typeof v==='string'?v.slice(0,max||MAX_STR):'';}
 function sId(v){return (typeof v==='string'?v:'').replace(/[^A-Za-z0-9_:.-]/g,'').slice(0,64);}
 function sNum(v){const n=typeof v==='number'?v:(typeof v==='string'&&v.trim()!==''?+v:NaN);return Number.isFinite(n)?n:0;}
@@ -98,7 +98,10 @@ function cleanSettings(o){if(!o||typeof o!=='object')return null;
   return s;
 }
 const DANGER_KEY=/^(__proto__|constructor|prototype)$/;
-function cleanDeleted(o){const out=Object.create(null);if(o&&typeof o==='object')Object.keys(o).forEach(k=>{if(DANGER_KEY.test(k))return;const key=sId(k),at=sNum(o[k]);if(key&&!DANGER_KEY.test(key)&&at)out[key]=at;});return out;}
+function cleanDeleted(o){const out=Object.create(null);if(!o||typeof o!=='object')return out;
+  let keys=Object.keys(o);
+  if(keys.length>MAX_KEYS)keys=keys.sort((a,b)=>(sNum(o[b])||0)-(sNum(o[a])||0)).slice(0,MAX_KEYS);   // keep the most-recent tombstones; drop the overflow so a corrupt map can't be re-uploaded forever (D6)
+  keys.forEach(k=>{if(DANGER_KEY.test(k))return;const key=sId(k),at=sNum(o[k]);if(key&&!DANGER_KEY.test(key)&&at)out[key]=at;});return out;}
 
 function parseImport(json){
   const d=typeof json==='string'?JSON.parse(json):json;
@@ -125,5 +128,5 @@ function resolveActive(local,remote){
   return {active:local.active,activeClearedAt:lc,changed:false,pushNeeded:remoteEvt<localEvt};
 }
 
-IL.sync={mergeSessions,applyTombstones,pruneTombstones,exportPayload,parseImport,resolveActive,cleanSession,cleanRoutine,cleanSettings,cleanProfile,cleanCardio,PROFILE_ENUM,CARDIO_ENUM,TOMB_KEEP};
+IL.sync={mergeSessions,applyTombstones,pruneTombstones,cleanDeleted,exportPayload,parseImport,resolveActive,cleanSession,cleanRoutine,cleanSettings,cleanProfile,cleanCardio,PROFILE_ENUM,CARDIO_ENUM,TOMB_KEEP};
 if(typeof module!=='undefined')module.exports=IL.sync;

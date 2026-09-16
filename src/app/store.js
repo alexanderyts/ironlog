@@ -3,7 +3,7 @@
 //   dropbox   → one JSON file in the user's Dropbox app folder (standalone / GitHub Pages build)
 //   none      → on-device only
 var IL=globalThis.IL||(globalThis.IL={});
-const {mergeSessions,applyTombstones,pruneTombstones,exportPayload,parseImport,cleanSession,cleanRoutine,cleanSettings}=IL.sync;
+const {mergeSessions,applyTombstones,pruneTombstones,cleanDeleted,exportPayload,parseImport,cleanSession,cleanRoutine,cleanSettings}=IL.sync;
 const CFG=IL.config||{};
 
 const LS={sessions:'il_sessions',active:'il_active',settings:'il_settings',dirty:'il_dirty',routines:'il_routines',deleted:'il_deleted',dbxRev:'il_dbx_rev',activeCleared:'il_active_cleared',pushPending:'il_push_pending',blockedVer:'il_blocked_ver'};
@@ -43,7 +43,7 @@ if(CFG.DEMO&&IL.seed&&!state.sessions.length&&!lsGet('il_seeded',false)){
 function resetDemo(){try{Object.values(LS).forEach(k=>localStorage.removeItem(k));localStorage.removeItem('il_seeded');}catch(e){}location.reload();}
 
 const saveSessions=()=>{const ok=lsSet(LS.sessions,state.sessions);state.storageError=!ok;return ok;};   // the big blob is where the quota bites; track it so the UI can warn
-const saveActive=()=>{lsSet(LS.active,state.active);lsSet(LS.activeCleared,state.activeClearedAt||0);};
+const saveActive=()=>{const a=lsSet(LS.active,state.active);const b=lsSet(LS.activeCleared,state.activeClearedAt||0);return a&&b;};   // the active workout is the SOLE copy of live data until Finish — report if it didn't land
 const saveSettings=()=>lsSet(LS.settings,state.settings);
 const saveRoutines=()=>lsSet(LS.routines,state.routines);
 const saveDeleted=()=>lsSet(LS.deleted,state.deleted);
@@ -93,8 +93,10 @@ let activeTimer=null;
 function persistActive(){
   if(state.active)state.active.updatedAt=Date.now();
   else state.activeClearedAt=Date.now();   // record WHEN we cleared it, so the newer event (active vs cleared) wins on merge
-  saveActive();
+  const ok=saveActive();
+  if(state.active)state.storageError=!ok;   // a live workout that failed to save is at risk; flag it (clearing writes are safe to lose)
   if(state.cloud){clearTimeout(activeTimer);activeTimer=setTimeout(()=>state.cloud.pushActive(),1500);}
+  return ok;
 }
 function setActive(s){state.active=s;persistActive();}
 
@@ -163,12 +165,24 @@ function artifactAdapter(){
       await A.flush();
       db.collection('sessions').onSnapshot(qs=>{
         const remote=[];qs.docs.forEach(d=>{const data=d.data();if(data){data.id=d.id;remote.push(cleanSession(data));}});
-        const t=applyTombstones(state.sessions,state.deleted,{});
         const m=mergeSessions(state.sessions,remote,state.deleted);
         // sessions we deleted locally but the cloud still has → delete there too
         remote.forEach(r=>{if(state.deleted[r.id]&&state.deleted[r.id]>=(r.updatedAt||0))db.doc('sessions/'+r.id).delete().catch(()=>{});});
         if(m.changedLocal){state.sessions=m.merged;saveSessions();emit();}
         state.lastSync=Date.now();emit();
+      },()=>{});
+      // Shared tombstone doc: mergeSessions can add/update but never REMOVE, so without this a delete on one
+      // device is undone the moment another device touches the row (pushSession re-creates it). This doc
+      // carries the deletions across, mirroring the Dropbox file's `deleted` map. (D2)
+      db.doc('meta/deleted').onSnapshot(snap=>{
+        if(!snap.exists)return;
+        const rd=cleanDeleted((snap.data()||{}).map);if(!Object.keys(rd).length)return;
+        const ts=applyTombstones(state.sessions,state.deleted,rd);   // ts.tomb = merged map; ts.sessions = survivors
+        const rt=applyTombstones(state.routines.map(r=>Object.assign({},r,{id:'r:'+r.id})),{},rd).sessions.map(r=>Object.assign({},r,{id:r.id.slice(2)}));
+        const newTomb=pruneTombstones(ts.tomb);
+        const changed=ts.changed||rt.length!==state.routines.length||Object.keys(newTomb).length!==Object.keys(state.deleted).length;
+        state.sessions=ts.sessions;state.routines=rt;state.deleted=newTomb;
+        if(changed){saveSessions();saveRoutines();saveDeleted();emit();}
       },()=>{});
       db.collection('routines').onSnapshot(qs=>{
         const remote=[];qs.docs.forEach(d=>{const data=d.data();if(data){data.id=d.id;remote.push(cleanRoutine(data));}});
@@ -179,10 +193,11 @@ function artifactAdapter(){
       return true;
     },
     async pushSession(s){try{await db.doc('sessions/'+s.id).set(s);state.dirty.delete(s.id);saveDirty();state.lastSync=Date.now();state.cloudError='';emit();}catch(e){state.cloudError='Sync failed';emit();}},
-    deleteSession(id){db.doc('sessions/'+id).delete().catch(()=>{});},
+    deleteSession(id){db.doc('sessions/'+id).delete().catch(()=>{});A.pushTombstones();},
+    pushTombstones(){db.doc('meta/deleted').set({map:state.deleted,updatedAt:Date.now()}).catch(()=>{});},   // publish the deletion so other devices don't resurrect it (D2)
     pushSettings(){db.doc('settings/app').set(state.settings).catch(()=>{});},
     pushRoutine(r){db.doc('routines/'+r.id).set(r).catch(()=>{});},
-    deleteRoutine(id){db.doc('routines/'+id).delete().catch(()=>{});},
+    deleteRoutine(id){db.doc('routines/'+id).delete().catch(()=>{});A.pushTombstones();},
     pushActive(){db.doc('active/current').set(state.active||{empty:true,updatedAt:state.activeClearedAt||Date.now(),activeClearedAt:state.activeClearedAt||Date.now()}).catch(()=>{});},
     async flush(){for(const id of [...state.dirty]){const s=state.sessions.find(x=>x.id===id);if(s)await A.pushSession(s);else{state.dirty.delete(id);saveDirty();}}},
     syncNow(){return A.flush();}

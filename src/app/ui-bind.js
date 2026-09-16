@@ -426,7 +426,10 @@ function bindLog(root){
         // Ticking a loaded lift with no weight would save a 0-volume "working" set and poison "last time".
         // Point the user at the weight field instead of silently accepting it. Bodyweight moves are exempt,
         // and so are time-held lifts (a carry can be logged by time alone; load is optional).
-        if(cex&&cex.equip!=='Bodyweight'&&!D.TIME_METRIC.has(cex.id)&&!(+st.w>0)){const wi=$(`input[data-f="w"][data-ei="${ei}"][data-s="${si}"]`);if(wi){wi.focus();if(wi.select)wi.select();}toast('Add a weight first');return;}}
+        if(cex&&cex.equip!=='Bodyweight'&&!D.TIME_METRIC.has(cex.id)&&!(+st.w>0)){const wi=$(`input[data-f="w"][data-ei="${ei}"][data-s="${si}"]`);if(wi){wi.focus();if(wi.select)wi.select();}toast('Add a weight first');return;}
+        // Timed lifts log seconds in the reps field. Ticking with it empty saves a set finalizeSets then
+        // drops (r>0 required), losing the tick with no warning — require the seconds first.
+        if(cex&&D.TIME_METRIC.has(cex.id)&&!(+st.r>0)){const ri=$(`input[data-f="r"][data-ei="${ei}"][data-s="${si}"]`);if(ri){ri.focus();if(ri.select)ri.select();}toast('Add seconds first');return;}}
       st.done=!st.done;
       // T1: stamp on completion, but keep an existing stamp on un-tick → re-tick (a mis-tap corrected
       // seconds later keeps its true time, instead of jumping to "now" and skewing the rest medians).
@@ -471,6 +474,7 @@ function beep(){
 function restSecondsFor(exId){const ex=EX[exId];const r=state.settings.rest;return ex?(ex.type===C?r.compound:r.isolation):90;}
 function startRest(seconds){
   if(!seconds||seconds<5)return;
+  stopSw();   // rest and stopwatch share one slot — never stack them (U2)
   restState={total:seconds,end:Date.now()+seconds*1000};
   const bar=$('#restbar');bar.classList.add('on');bar.classList.remove('done');$('#restLbl').textContent='Rest';
   clearInterval(restInt);restInt=setInterval(tickRest,300);tickRest();
@@ -507,7 +511,9 @@ function startStopwatch(ei){
   clearInterval(swInt);swInt=setInterval(tickSw,100);tickSw();
 }
 function tickSw(){
-  if(!swState)return;const b=$('#swbar');if(!b)return;
+  if(!swState)return;
+  if(currentTab!=='today'||todayScreen!=='active'||!state.active){stopSw();return;}   // left the editor (Home, or a History/Progress/Library tab switch) → self-stop instead of counting over another screen and writing into a hidden workout (U3)
+  const b=$('#swbar');if(!b)return;
   if(swState.phase==='count'){
     const rem=Math.max(0,swState.end-Date.now()),n=Math.ceil(rem/1000);
     $('#swLbl').textContent='Get set';$('#swTime').textContent=n>0?String(n):'Go';
