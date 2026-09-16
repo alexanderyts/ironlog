@@ -452,6 +452,22 @@ function syncKeyboard(){
   const kb=window.innerHeight-vv.height-vv.offsetTop;
   document.documentElement.classList.toggle('kb-open',kb>120);
 }
+// A SELF-STOPPING poll for WebKit's eventless viewport corrections. It runs per frame only until the
+// viewport has been stable ~2s (or a 3s hard cap), then stops — a permanent 60fps loop is pure battery/
+// main-thread waste in an installed PWA (P1). It is RE-ARMABLE: events that can be followed by an
+// eventless settle (a rotate whose dims lag the event, returning from background) restart it, so the
+// correctness the old always-on loop gave is kept where it actually matters.
+let _vpLoopOn=false;
+function armViewportLoop(){
+  if(_vpLoopOn)return;_vpLoopOn=true;
+  const t0=(window.performance&&performance.now())||Date.now();let stable=0;
+  const frame=()=>{
+    if(!document.hidden){if(syncViewportDeficit())stable=0;else stable++;}
+    const elapsed=((window.performance&&performance.now())||Date.now())-t0;
+    if(stable<120&&elapsed<3000)requestAnimationFrame(frame);else{_vpLoopOn=false;vlog('vp loop done '+Math.round(elapsed)+'ms');}
+  };
+  requestAnimationFrame(frame);
+}
 function watchViewport(){
   syncViewportDeficit();
   ['resize','orientationchange','pageshow','focus','scroll'].forEach(ev=>addEventListener(ev,syncViewportDeficit,{passive:true}));
@@ -459,17 +475,11 @@ function watchViewport(){
   if(window.visualViewport){visualViewport.addEventListener('resize',syncViewportDeficit);
     visualViewport.addEventListener('resize',syncKeyboard);visualViewport.addEventListener('scroll',syncKeyboard);}
   addEventListener('focusout',()=>setTimeout(syncKeyboard,50),{passive:true});   // catch the keyboard dismissing
-  // WebKit's launch-time correction fires no event we can hook, so we poll per frame — but ONLY until
-  // the viewport settles. Once it's been stable for ~2s (or a 5s hard cap), stop: everything after
-  // launch (rotate, keyboard, focus) already arrives through the listeners above, so a permanent
-  // 60fps loop is pure battery/main-thread waste in an installed PWA (P1).
-  const t0=(window.performance&&performance.now())||Date.now();let stable=0;
-  const frame=()=>{
-    if(!document.hidden){if(syncViewportDeficit())stable=0;else stable++;}
-    const elapsed=((window.performance&&performance.now())||Date.now())-t0;
-    if(stable<120&&elapsed<5000)requestAnimationFrame(frame);else vlog('vp loop done '+Math.round(elapsed)+'ms');
-  };
-  requestAnimationFrame(frame);
+  // Re-arm the settle poll after events whose final layout can lag the event itself (iOS fires
+  // orientationchange before innerWidth/Height update; returning from background can re-trigger a correction).
+  ['orientationchange','pageshow'].forEach(ev=>addEventListener(ev,armViewportLoop,{passive:true}));
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)armViewportLoop();});
+  armViewportLoop();
   addEventListener('touchstart',()=>vlog('touch'),{passive:true,once:true});
   addEventListener('load',()=>vlog('load'));
 }

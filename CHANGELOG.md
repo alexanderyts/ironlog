@@ -2,6 +2,15 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.55.0 — 2026-09-16 · Review polish (small correctness + feedback fixes)
+A follow-up review of the last three updates turned up a few small things, now fixed:
+- **An unassisted rep on an assist machine now counts as your record.** Working an assisted pull-up/dip down to zero assist is the strongest you can do — it used to be dropped from your PR and progress chart; now it's the top of both.
+- **Leaving a workout mid-hold tells you.** If a plank/carry stopwatch is running and you tap Home or another tab, it stops and says "Hold stopped — you left the workout," instead of quietly discarding the time.
+- **Progress stats stay fresh across midnight.** The performance cache from the last update now rolls over at your local midnight, so an app left open overnight can't show yesterday's week/day windows.
+- **The launch layout check is more robust.** After a rotation or returning from the background, the screen-fit routine briefly re-checks itself, then stops again.
+
+Not verified on-device.
+
 ## v0.54.0 — 2026-09-16 · Faster, especially as your history grows
 Performance work you won't see directly — the app just does less pointless work, which means less lag and less battery drain the more you log.
 - **The Progress tab does its number-crunching once, not over and over.** Opening a chart or expanding a section no longer re-scans your entire history each time — the results are reused until your data actually changes. The more workouts you've logged, the bigger this is.

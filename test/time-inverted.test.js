@@ -27,6 +27,20 @@ test('C1 CONTROL: an ordinary bodyweight lift with no bodyweight set still yield
   assert.equal(A.personalRecords(h,0,8).filter(p=>p.id==='pull-up').length,0);
 });
 
+test('an assist machine at zero assist (an UNASSISTED rep) is the record, not dropped as load-0',()=>{
+  // review finding #5: assist is the logged weight, so assist 0 = load 0 = the strongest performance.
+  const h=history(
+    session(9,[['assisted-pull-up',[set(40,8)]]]),   // 40 lb of help (earlier, weaker)
+    session(2,[['assisted-pull-up',[set(0,8)]]])      // no help at all (later, strongest)
+  );
+  const pr=A.personalRecords(h,200,8).filter(p=>p.id==='assisted-pull-up')[0];
+  assert.ok(pr,'the assisted lift has a PR');
+  assert.equal(pr.w,0,'the unassisted (0-assist) set is the record');
+  const s=P.exerciseSeries(h,'assisted-pull-up',{bw:200});
+  assert.equal(s.length,2,'both sessions plot — the 0-assist point is not dropped');
+  assert.ok(s[1].est>s[0].est,`trend rises to the unassisted rep: ${s[0].est} → ${s[1].est}`);
+});
+
 /* ---- C3: the trend + "lifts trending up" read the RIGHT direction for inverted/timed lifts ---- */
 test('C3: an assisted lift trends UP as the assist drops (was reading as decline)',()=>{
   const h=history(

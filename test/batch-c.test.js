@@ -78,9 +78,13 @@ test('P1: the viewport rAF loop stops itself once the viewport is stable',async(
     // frames are being scheduled — the old always-on loop would keep incrementing forever.
     let raf=0;const orig=h.win.requestAnimationFrame;
     h.win.requestAnimationFrame=function(cb){raf++;return orig.call(h.win,cb);};
-    await new Promise(r=>setTimeout(r,5600));   // past the loop's 5s elapsed cap
+    await new Promise(r=>setTimeout(r,3800));   // past the loop's 3s elapsed cap
     const a=raf;
     await new Promise(r=>setTimeout(r,500));
     assert.equal(raf-a,0,'no frames scheduled after the loop settled (delta='+(raf-a)+')');
+    // review finding #3: a rotate can be followed by an eventless settle, so it must RE-ARM the loop
+    h.win.dispatchEvent(new h.win.Event('orientationchange'));
+    await new Promise(r=>setTimeout(r,120));
+    assert.ok(raf-a>0,'the loop re-armed after orientationchange (delta='+(raf-a)+')');
   }finally{h.teardown();}
 });

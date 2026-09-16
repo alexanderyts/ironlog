@@ -128,7 +128,11 @@ function render(){
 let _memoSig='',_memo=new Map();
 function statSig(){
   const ss=state.sessions;let mx=0;for(let i=0;i<ss.length;i++){const u=ss[i].updatedAt||0;if(u>mx)mx=u;}
-  return ss.length+':'+mx+':'+bw()+':'+state.settings.unit+':'+Math.floor(Date.now()/DAY);   // day bucket so date-windowed stats refresh at a rollover even with no new data
+  // Day bucket so date-windowed stats refresh at a rollover even with no new data. Shift by the local
+  // tz offset so it rolls at LOCAL midnight (the same boundary weekStart/30-day windows use), not UTC —
+  // otherwise a PWA left open across local midnight shows stale windows until the UTC rollover.
+  const localDay=Math.floor((Date.now()-new Date().getTimezoneOffset()*60000)/DAY);
+  return ss.length+':'+mx+':'+bw()+':'+state.settings.unit+':'+localDay;
 }
 function memoStat(key,fn){
   const sig=statSig();

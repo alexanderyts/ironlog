@@ -324,9 +324,10 @@ function personalRecords(sessions,bw,limit){
     const time=!!(TIME_METRIC&&TIME_METRIC.has(e.id));   // time-held: "reps" are seconds → no 1RM; best = longest, then heaviest
     e.sets.forEach(st=>{
     if(!isWorking(st))return;const w=setLoad(e.id,st.w,bw),r=+st.r||0;
-    // A time-held lift is a real record at load 0 (a bodyweight plank) — rank it by seconds. Everything
-    // else still needs a real load, so a pull-up with no bodyweight set stays out (analysis.test.js:112).
-    if(!r||(!w&&!time))return;
+    // A time-held lift is a real record at load 0 (a bodyweight plank), and an assist machine at load 0
+    // is an UNASSISTED rep — the strongest possible, so it must qualify too. Only an ordinary lift needs
+    // a real load (a pull-up with no bodyweight set stays out — analysis.test.js:112).
+    if(!r||(!w&&!time&&!inverted))return;
     const est=e1rm(w,r);
     const cand={w:+st.w||0,load:w,r,est,date:s.date};
     // "Doesn't count as a record" (#PR-adjust): the user has disowned this rep, so it can never BE the

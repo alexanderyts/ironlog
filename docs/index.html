@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-AUeDhr4jU9VEBVq+4EJM9bs1TrvKdDrXRcIXejrGNUE=' 'sha256-WPBob/luB2k1aalTWXpi6zk3SrIbj8GlZV7AlFdG7oA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-/0DTAqKajyzBqUzL08dLUb+I1NtH/kxhvdMxCtS5fVI=' 'sha256-WPBob/luB2k1aalTWXpi6zk3SrIbj8GlZV7AlFdG7oA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Ironlog</title>
@@ -424,8 +424,8 @@ html.kb-open .tabbar{display:none}
 </div>
 
 <script>
-/* Ironlog v0.54.0 · site build */
-var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.54.0",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
+/* Ironlog v0.55.0 · site build */
+var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.55.0",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
 
 /* ===== src/data/exercises.js ===== */
 (function(){'use strict';
@@ -843,7 +843,7 @@ function exerciseSeries(sessions,exId,opts){
     let best=-1,w=0,r=0,ncBest=-1,ncW=0,ncR=0;   // -1 so a legitimate score of 0 (e.g. assist == bodyweight) still plots
     e.sets.forEach(st=>{if(!isWorking(st))return;
       const r0=+st.r||0,load=setLoad(exId,st.w,bw);
-      if(!r0||(!load&&metric!=='time'))return;   // same "real set" gate as personalRecords — junk (0-rep / no-load non-time) sets don't plot
+      if(!r0||(!load&&metric!=='time'&&metric!=='resist'))return;   // same "real set" gate as personalRecords — junk (0-rep / no-load non-time) sets don't plot; but an assist machine at load 0 is an unassisted rep and DOES plot
       const sc=setScore(exId,st,bw);
       if(st.nc){if(sc>ncBest){ncBest=sc;ncW=+st.w||0;ncR=+st.r||0;}return;}
       if(sc>best){best=sc;w=+st.w||0;r=+st.r||0;}});
@@ -1897,9 +1897,10 @@ function personalRecords(sessions,bw,limit){
     const time=!!(TIME_METRIC&&TIME_METRIC.has(e.id));   // time-held: "reps" are seconds → no 1RM; best = longest, then heaviest
     e.sets.forEach(st=>{
     if(!isWorking(st))return;const w=setLoad(e.id,st.w,bw),r=+st.r||0;
-    // A time-held lift is a real record at load 0 (a bodyweight plank) — rank it by seconds. Everything
-    // else still needs a real load, so a pull-up with no bodyweight set stays out (analysis.test.js:112).
-    if(!r||(!w&&!time))return;
+    // A time-held lift is a real record at load 0 (a bodyweight plank), and an assist machine at load 0
+    // is an UNASSISTED rep — the strongest possible, so it must qualify too. Only an ordinary lift needs
+    // a real load (a pull-up with no bodyweight set stays out — analysis.test.js:112).
+    if(!r||(!w&&!time&&!inverted))return;
     const est=e1rm(w,r);
     const cand={w:+st.w||0,load:w,r,est,date:s.date};
     // "Doesn't count as a record" (#PR-adjust): the user has disowned this rep, so it can never BE the
@@ -2647,7 +2648,11 @@ function render(){
 let _memoSig='',_memo=new Map();
 function statSig(){
   const ss=state.sessions;let mx=0;for(let i=0;i<ss.length;i++){const u=ss[i].updatedAt||0;if(u>mx)mx=u;}
-  return ss.length+':'+mx+':'+bw()+':'+state.settings.unit+':'+Math.floor(Date.now()/DAY);   // day bucket so date-windowed stats refresh at a rollover even with no new data
+  // Day bucket so date-windowed stats refresh at a rollover even with no new data. Shift by the local
+  // tz offset so it rolls at LOCAL midnight (the same boundary weekStart/30-day windows use), not UTC —
+  // otherwise a PWA left open across local midnight shows stale windows until the UTC rollover.
+  const localDay=Math.floor((Date.now()-new Date().getTimezoneOffset()*60000)/DAY);
+  return ss.length+':'+mx+':'+bw()+':'+state.settings.unit+':'+localDay;
 }
 function memoStat(key,fn){
   const sig=statSig();
@@ -3525,6 +3530,22 @@ function syncKeyboard(){
   const kb=window.innerHeight-vv.height-vv.offsetTop;
   document.documentElement.classList.toggle('kb-open',kb>120);
 }
+// A SELF-STOPPING poll for WebKit's eventless viewport corrections. It runs per frame only until the
+// viewport has been stable ~2s (or a 3s hard cap), then stops — a permanent 60fps loop is pure battery/
+// main-thread waste in an installed PWA (P1). It is RE-ARMABLE: events that can be followed by an
+// eventless settle (a rotate whose dims lag the event, returning from background) restart it, so the
+// correctness the old always-on loop gave is kept where it actually matters.
+let _vpLoopOn=false;
+function armViewportLoop(){
+  if(_vpLoopOn)return;_vpLoopOn=true;
+  const t0=(window.performance&&performance.now())||Date.now();let stable=0;
+  const frame=()=>{
+    if(!document.hidden){if(syncViewportDeficit())stable=0;else stable++;}
+    const elapsed=((window.performance&&performance.now())||Date.now())-t0;
+    if(stable<120&&elapsed<3000)requestAnimationFrame(frame);else{_vpLoopOn=false;vlog('vp loop done '+Math.round(elapsed)+'ms');}
+  };
+  requestAnimationFrame(frame);
+}
 function watchViewport(){
   syncViewportDeficit();
   ['resize','orientationchange','pageshow','focus','scroll'].forEach(ev=>addEventListener(ev,syncViewportDeficit,{passive:true}));
@@ -3532,17 +3553,11 @@ function watchViewport(){
   if(window.visualViewport){visualViewport.addEventListener('resize',syncViewportDeficit);
     visualViewport.addEventListener('resize',syncKeyboard);visualViewport.addEventListener('scroll',syncKeyboard);}
   addEventListener('focusout',()=>setTimeout(syncKeyboard,50),{passive:true});   // catch the keyboard dismissing
-  // WebKit's launch-time correction fires no event we can hook, so we poll per frame — but ONLY until
-  // the viewport settles. Once it's been stable for ~2s (or a 5s hard cap), stop: everything after
-  // launch (rotate, keyboard, focus) already arrives through the listeners above, so a permanent
-  // 60fps loop is pure battery/main-thread waste in an installed PWA (P1).
-  const t0=(window.performance&&performance.now())||Date.now();let stable=0;
-  const frame=()=>{
-    if(!document.hidden){if(syncViewportDeficit())stable=0;else stable++;}
-    const elapsed=((window.performance&&performance.now())||Date.now())-t0;
-    if(stable<120&&elapsed<5000)requestAnimationFrame(frame);else vlog('vp loop done '+Math.round(elapsed)+'ms');
-  };
-  requestAnimationFrame(frame);
+  // Re-arm the settle poll after events whose final layout can lag the event itself (iOS fires
+  // orientationchange before innerWidth/Height update; returning from background can re-trigger a correction).
+  ['orientationchange','pageshow'].forEach(ev=>addEventListener(ev,armViewportLoop,{passive:true}));
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)armViewportLoop();});
+  armViewportLoop();
   addEventListener('touchstart',()=>vlog('touch'),{passive:true,once:true});
   addEventListener('load',()=>vlog('load'));
 }
@@ -4240,7 +4255,8 @@ function startStopwatch(ei){
 }
 function tickSw(){
   if(!swState)return;
-  if(currentTab!=='today'||todayScreen!=='active'||!state.active){stopSw();return;}   // left the editor (Home, or a History/Progress/Library tab switch) → self-stop instead of counting over another screen and writing into a hidden workout (U3)
+  if(currentTab!=='today'||todayScreen!=='active'||!state.active){   // left the editor (Home, or a History/Progress/Library tab switch) → self-stop instead of counting over another screen and writing into a hidden workout (U3)
+    const wasRun=swState.phase==='run';stopSw();if(wasRun)toast('Hold stopped — you left the workout');return;}
   const b=$('#swbar');if(!b)return;
   if(swState.phase==='count'){
     const rem=Math.max(0,swState.end-Date.now()),n=Math.ceil(rem/1000);

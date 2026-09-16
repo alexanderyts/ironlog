@@ -512,7 +512,8 @@ function startStopwatch(ei){
 }
 function tickSw(){
   if(!swState)return;
-  if(currentTab!=='today'||todayScreen!=='active'||!state.active){stopSw();return;}   // left the editor (Home, or a History/Progress/Library tab switch) → self-stop instead of counting over another screen and writing into a hidden workout (U3)
+  if(currentTab!=='today'||todayScreen!=='active'||!state.active){   // left the editor (Home, or a History/Progress/Library tab switch) → self-stop instead of counting over another screen and writing into a hidden workout (U3)
+    const wasRun=swState.phase==='run';stopSw();if(wasRun)toast('Hold stopped — you left the workout');return;}
   const b=$('#swbar');if(!b)return;
   if(swState.phase==='count'){
     const rem=Math.max(0,swState.end-Date.now()),n=Math.ceil(rem/1000);

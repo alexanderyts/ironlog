@@ -129,7 +129,7 @@ function exerciseSeries(sessions,exId,opts){
     let best=-1,w=0,r=0,ncBest=-1,ncW=0,ncR=0;   // -1 so a legitimate score of 0 (e.g. assist == bodyweight) still plots
     e.sets.forEach(st=>{if(!isWorking(st))return;
       const r0=+st.r||0,load=setLoad(exId,st.w,bw);
-      if(!r0||(!load&&metric!=='time'))return;   // same "real set" gate as personalRecords — junk (0-rep / no-load non-time) sets don't plot
+      if(!r0||(!load&&metric!=='time'&&metric!=='resist'))return;   // same "real set" gate as personalRecords — junk (0-rep / no-load non-time) sets don't plot; but an assist machine at load 0 is an unassisted rep and DOES plot
       const sc=setScore(exId,st,bw);
       if(st.nc){if(sc>ncBest){ncBest=sc;ncW=+st.w||0;ncR=+st.r||0;}return;}
       if(sc>best){best=sc;w=+st.w||0;r=+st.r||0;}});

@@ -74,9 +74,13 @@ test('U3: switching tabs mid-hold self-stops the stopwatch',async()=>{
     startBlank(h,['plank']);
     h.click('#view [data-stopwatch]');
     assert.ok(h.$('#swbar').classList.contains('on'),'stopwatch running');
+    // drive the countdown into the running hold so leaving discards a real hold (and toasts)
+    await sleep(5600);
+    assert.ok(h.$('#swbar').classList.contains('run'),'the hold is running');
     h.$$('.tab').find(b=>b.dataset.tab==='history').dispatchEvent(new h.win.MouseEvent('click',{bubbles:true}));
     await sleep(250);   // let the ~100ms tick fire on the new tab
     assert.ok(!h.$('#swbar').classList.contains('on'),'the stopwatch stopped itself off the active editor');
+    assert.match(h.text('#toastMsg'),/Hold stopped/,'the user is told the hold was dropped');
   }finally{h.teardown();}
 });
 
