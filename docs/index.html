@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-jC0RFbMFu9TlsNxKCncco/7pFA0X11uccy05/f0Q5WQ=' 'sha256-WPBob/luB2k1aalTWXpi6zk3SrIbj8GlZV7AlFdG7oA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-TwQRS0sYIpUxonPjqaDYbI2AD6di3l2VSp3zDKY3SIk=' 'sha256-WPBob/luB2k1aalTWXpi6zk3SrIbj8GlZV7AlFdG7oA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Ironlog</title>
@@ -438,8 +438,8 @@ html.kb-open .tabbar{display:none}
 </div>
 
 <script>
-/* Ironlog v0.59.0 · site build */
-var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.59.0",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
+/* Ironlog v0.59.1 · site build */
+var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.59.1",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
 
 /* ===== src/data/exercises.js ===== */
 (function(){'use strict';
@@ -2145,7 +2145,9 @@ function cleanSettings(o){if(!o||typeof o!=='object')return null;
     compound:Math.max(0,Math.min(3600,sNum(r.compound)||120)),isolation:Math.max(0,Math.min(3600,sNum(r.isolation)||75))};
   const prof=cleanProfile(o.profile);if(prof)s.profile=prof;
   const seen=cleanSeen(o.seen);if(seen)s.seen=seen;
-  if(o.bar&&typeof o.bar==='object'){const bar={},lb=sNum(o.bar.lb),kg=sNum(o.bar.kg);if(lb>0)bar.lb=Math.min(200,lb);if(kg>0)bar.kg=Math.min(100,kg);if(Object.keys(bar).length)s.bar=bar;}   // remembered bar weight per unit (plate calculator, D-4)
+  // remembered empty-bar weight per unit for the plate calculator (D-4): `bar` = barbell, `smithBar` = Smith
+  const cleanBar=v=>{if(!v||typeof v!=='object')return null;const o={},lb=sNum(v.lb),kg=sNum(v.kg);if(lb>0)o.lb=Math.min(200,lb);if(kg>0)o.kg=Math.min(100,kg);return Object.keys(o).length?o:null;};
+  const bar=cleanBar(o.bar);if(bar)s.bar=bar;const sbar=cleanBar(o.smithBar);if(sbar)s.smithBar=sbar;
   return s;
 }
 const DANGER_KEY=/^(__proto__|constructor|prototype)$/;
@@ -3029,15 +3031,19 @@ function openSessionNote(){
   const nc=$('#snoteClear');if(nc)nc.addEventListener('click',()=>{delete t.note;persistCur();closeSheet();render();toast('Note removed');});
 }
 /* ---- plate calculator (D-4) ---- barbell/Smith lifts log the TOTAL bar weight, so this shows how to
-   load each side. The bar weight is remembered per unit; the sheet doubles as a calculator (± any weight). */
-function barWeight(){const b=state.settings.bar||{};const v=+b[U()];return v>0?v:(U()==='kg'?20:45);}
-function setBarWeight(v){const b=Object.assign({},state.settings.bar);b[U()]=v;state.settings.bar=b;S.saveSettingsCloud();}
+   load each side. The empty-bar weight is remembered per equipment (barbell vs Smith) AND per unit — a
+   straight bar is ~45lb/20kg, a Smith carriage varies by machine (often listed on it). Adjustable; the
+   sheet doubles as a calculator (± any weight). Settings: `bar` = barbell, `smithBar` = Smith. */
+const BAR_DEFAULT={barbell:{lb:45,kg:20},smith:{lb:25,kg:10}};
+function barKey(mode){return mode==='smith'?'smithBar':'bar';}
+function barWeight(mode){const b=state.settings[barKey(mode)]||{},v=+b[U()];return v>0?v:BAR_DEFAULT[mode==='smith'?'smith':'barbell'][U()];}
+function setBarWeight(mode,v){const k=barKey(mode),b=Object.assign({},state.settings[k]);b[U()]=v;state.settings[k]=b;S.saveSettingsCloud();}
 let plateDraft=null;
 function plateSheetBody(){
-  const w=plateDraft.weight,bar=barWeight(),u=U(),r=P.platesPerSide(w,bar,u);
+  const mode=plateDraft.mode,w=plateDraft.weight,bar=barWeight(mode),u=U(),r=P.platesPerSide(w,bar,u),smith=mode==='smith';
   const chips=r.plates.length?r.plates.map(p=>Array(p.count).fill(0).map(()=>`<span class="plate p${String(p.plate).replace('.','_')}">${p.plate}</span>`).join('')).join('')
     :`<div class="dim" style="padding:12px 2px">${r.belowBar?'That’s less than the empty bar.':'Just the empty bar — no plates.'}</div>`;
-  return `<div class="dim" style="font-size:13px;margin:-4px 2px 16px">How to load each side of the bar. Tap ± to try another weight.</div>
+  return `<div class="dim" style="font-size:13px;margin:-4px 2px 16px">How to load each side of the ${smith?'Smith bar':'bar'}. Tap ± to try another weight.</div>
     <div class="platewt">
       <button class="platestep" data-plw="-1" aria-label="Less">−</button>
       <div class="platewt-v"><span class="mono">${w}</span><small>${u}</small></div>
@@ -3046,16 +3052,17 @@ function plateSheetBody(){
     <div class="plates">${chips}</div>
     ${r.leftover>0?`<div class="dim" style="font-size:12px;margin-top:10px">+${r.leftover}${u} per side left over — no standard plate fits it.</div>`:''}
     <div class="settingrow" style="border-top:1px solid var(--line);border-bottom:none;padding:14px 2px 4px;margin-top:18px">
-      <div><div style="font-weight:600;font-size:13.5px">Bar weight</div><div class="dim" style="font-size:12px">The empty bar</div></div>
+      <div><div style="font-weight:600;font-size:13.5px">${smith?'Smith bar weight':'Bar weight'}</div><div class="dim" style="font-size:12px">${smith?'The carriage — often listed on the machine':'The empty bar'}</div></div>
       <div class="stepper"><button data-plbar="-1">−</button><button class="val mono">${bar}<small style="font-size:11px"> ${u}</small></button><button data-plbar="1">＋</button></div></div>`;
 }
 function bindPlateSheet(){
-  const step=U()==='kg'?2.5:5,rerender=()=>{$('#sheetBody').innerHTML=plateSheetBody();bindPlateSheet();};
-  $('#sheetBody').querySelectorAll('[data-plw]').forEach(b=>b.addEventListener('click',()=>{plateDraft.weight=Math.max(barWeight(),+(plateDraft.weight+(+b.dataset.plw)*step).toFixed(2));rerender();}));
-  $('#sheetBody').querySelectorAll('[data-plbar]').forEach(b=>b.addEventListener('click',()=>{setBarWeight(Math.max(5,+(barWeight()+(+b.dataset.plbar)*step).toFixed(2)));if(plateDraft.weight<barWeight())plateDraft.weight=barWeight();rerender();}));
+  const mode=plateDraft.mode,step=U()==='kg'?2.5:5,rerender=()=>{$('#sheetBody').innerHTML=plateSheetBody();bindPlateSheet();};
+  $('#sheetBody').querySelectorAll('[data-plw]').forEach(b=>b.addEventListener('click',()=>{plateDraft.weight=Math.max(barWeight(mode),+(plateDraft.weight+(+b.dataset.plw)*step).toFixed(2));rerender();}));
+  $('#sheetBody').querySelectorAll('[data-plbar]').forEach(b=>b.addEventListener('click',()=>{setBarWeight(mode,Math.max(0,+(barWeight(mode)+(+b.dataset.plbar)*step).toFixed(2)));if(plateDraft.weight<barWeight(mode))plateDraft.weight=barWeight(mode);rerender();}));
 }
-function openPlateSheet(weight){
-  const w=Math.round(+weight||0);plateDraft={weight:Math.max(barWeight(),w||barWeight())};
+function openPlateSheet(weight,mode){
+  mode=mode==='smith'?'smith':'barbell';const w=Math.round(+weight||0);
+  plateDraft={mode,weight:Math.max(barWeight(mode),w||barWeight(mode))};
   openSheet('Plate loader',plateSheetBody());bindPlateSheet();
 }
 function buildAndStart(fresh){
@@ -4325,7 +4332,7 @@ function bindLog(root){
       stepSet(+step.dataset.ei,+step.dataset.s,step.dataset.step,+step.dataset.d);return;}
     const add=e.target.closest('[data-addset]');if(add){const ei=+add.dataset.addset;const sets=t.exercises[ei].sets;const last=sets[sets.length-1]||{w:'',r:''};sets.push({w:last.w,r:last.r,done:false});persistCur();render();return;}
     const sw=e.target.closest('[data-stopwatch]');if(sw){startStopwatch(+sw.dataset.stopwatch);return;}
-    const pl=e.target.closest('[data-plates]');if(pl){const ex=t.exercises[+pl.dataset.plates];const top=Math.max(0,...ex.sets.filter(s=>!s.warm).map(s=>+s.w||0));openPlateSheet(top||barWeight());return;}   // heaviest entered work set (not just ticked ones — you load the bar before lifting)
+    const pl=e.target.closest('[data-plates]');if(pl){const ex=t.exercises[+pl.dataset.plates],m=P.modeOf(ex);const top=Math.max(0,...ex.sets.filter(s=>!s.warm).map(s=>+s.w||0));openPlateSheet(top||barWeight(m),m);return;}   // heaviest entered work set (not just ticked ones — you load the bar before lifting)
     const rem=e.target.closest('[data-delset]');if(rem){const ei=+rem.dataset.delset;const sets=t.exercises[ei].sets;if(sets.length<=1)return;
       const idx=sets.length-1;
       const doRemove=()=>{const removed=sets.splice(idx,1)[0];persistCur();render();

@@ -452,7 +452,7 @@ function bindLog(root){
       stepSet(+step.dataset.ei,+step.dataset.s,step.dataset.step,+step.dataset.d);return;}
     const add=e.target.closest('[data-addset]');if(add){const ei=+add.dataset.addset;const sets=t.exercises[ei].sets;const last=sets[sets.length-1]||{w:'',r:''};sets.push({w:last.w,r:last.r,done:false});persistCur();render();return;}
     const sw=e.target.closest('[data-stopwatch]');if(sw){startStopwatch(+sw.dataset.stopwatch);return;}
-    const pl=e.target.closest('[data-plates]');if(pl){const ex=t.exercises[+pl.dataset.plates];const top=Math.max(0,...ex.sets.filter(s=>!s.warm).map(s=>+s.w||0));openPlateSheet(top||barWeight());return;}   // heaviest entered work set (not just ticked ones — you load the bar before lifting)
+    const pl=e.target.closest('[data-plates]');if(pl){const ex=t.exercises[+pl.dataset.plates],m=P.modeOf(ex);const top=Math.max(0,...ex.sets.filter(s=>!s.warm).map(s=>+s.w||0));openPlateSheet(top||barWeight(m),m);return;}   // heaviest entered work set (not just ticked ones — you load the bar before lifting)
     const rem=e.target.closest('[data-delset]');if(rem){const ei=+rem.dataset.delset;const sets=t.exercises[ei].sets;if(sets.length<=1)return;
       const idx=sets.length-1;
       const doRemove=()=>{const removed=sets.splice(idx,1)[0];persistCur();render();

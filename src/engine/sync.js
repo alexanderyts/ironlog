@@ -95,7 +95,9 @@ function cleanSettings(o){if(!o||typeof o!=='object')return null;
     compound:Math.max(0,Math.min(3600,sNum(r.compound)||120)),isolation:Math.max(0,Math.min(3600,sNum(r.isolation)||75))};
   const prof=cleanProfile(o.profile);if(prof)s.profile=prof;
   const seen=cleanSeen(o.seen);if(seen)s.seen=seen;
-  if(o.bar&&typeof o.bar==='object'){const bar={},lb=sNum(o.bar.lb),kg=sNum(o.bar.kg);if(lb>0)bar.lb=Math.min(200,lb);if(kg>0)bar.kg=Math.min(100,kg);if(Object.keys(bar).length)s.bar=bar;}   // remembered bar weight per unit (plate calculator, D-4)
+  // remembered empty-bar weight per unit for the plate calculator (D-4): `bar` = barbell, `smithBar` = Smith
+  const cleanBar=v=>{if(!v||typeof v!=='object')return null;const o={},lb=sNum(v.lb),kg=sNum(v.kg);if(lb>0)o.lb=Math.min(200,lb);if(kg>0)o.kg=Math.min(100,kg);return Object.keys(o).length?o:null;};
+  const bar=cleanBar(o.bar);if(bar)s.bar=bar;const sbar=cleanBar(o.smithBar);if(sbar)s.smithBar=sbar;
   return s;
 }
 const DANGER_KEY=/^(__proto__|constructor|prototype)$/;

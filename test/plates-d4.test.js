@@ -65,3 +65,18 @@ test('the bar weight is remembered per unit',()=>{
     assert.equal(h.state.settings.bar.lb,40,'the new bar weight is saved for lb');
   }finally{h.teardown();}
 });
+test('a Smith lift uses its own default bar (25lb), kept separate from the barbell',()=>{
+  const h=launch();
+  try{
+    startBlank(h);addEx(h,'barbell-bench-press');
+    h.state.active.exercises[0].mode='smith';   // switch this lift to the Smith machine
+    const card=h.$$('#view .log-ex')[0];
+    card.querySelector('[data-plates]').dispatchEvent(new h.win.MouseEvent('click',{bubbles:true}));
+    assert.match(h.bodyText(),/Smith bar weight/,'the sheet labels it as the Smith bar');
+    assert.match(h.text('.stepper .val'),/^25/,'defaults to the Smith bar (25lb), not the 45 barbell');
+    // change the Smith bar → only smithBar is written, the barbell default is untouched
+    h.$$('[data-plbar]').find(b=>b.dataset.plbar==='1').dispatchEvent(new h.win.MouseEvent('click',{bubbles:true}));   // 25 → 30
+    assert.equal(h.state.settings.smithBar.lb,30,'smithBar saved independently');
+    assert.ok(!h.state.settings.bar,'the barbell bar was not touched');
+  }finally{h.teardown();}
+});

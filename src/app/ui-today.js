@@ -278,15 +278,19 @@ function openSessionNote(){
   const nc=$('#snoteClear');if(nc)nc.addEventListener('click',()=>{delete t.note;persistCur();closeSheet();render();toast('Note removed');});
 }
 /* ---- plate calculator (D-4) ---- barbell/Smith lifts log the TOTAL bar weight, so this shows how to
-   load each side. The bar weight is remembered per unit; the sheet doubles as a calculator (± any weight). */
-function barWeight(){const b=state.settings.bar||{};const v=+b[U()];return v>0?v:(U()==='kg'?20:45);}
-function setBarWeight(v){const b=Object.assign({},state.settings.bar);b[U()]=v;state.settings.bar=b;S.saveSettingsCloud();}
+   load each side. The empty-bar weight is remembered per equipment (barbell vs Smith) AND per unit — a
+   straight bar is ~45lb/20kg, a Smith carriage varies by machine (often listed on it). Adjustable; the
+   sheet doubles as a calculator (± any weight). Settings: `bar` = barbell, `smithBar` = Smith. */
+const BAR_DEFAULT={barbell:{lb:45,kg:20},smith:{lb:25,kg:10}};
+function barKey(mode){return mode==='smith'?'smithBar':'bar';}
+function barWeight(mode){const b=state.settings[barKey(mode)]||{},v=+b[U()];return v>0?v:BAR_DEFAULT[mode==='smith'?'smith':'barbell'][U()];}
+function setBarWeight(mode,v){const k=barKey(mode),b=Object.assign({},state.settings[k]);b[U()]=v;state.settings[k]=b;S.saveSettingsCloud();}
 let plateDraft=null;
 function plateSheetBody(){
-  const w=plateDraft.weight,bar=barWeight(),u=U(),r=P.platesPerSide(w,bar,u);
+  const mode=plateDraft.mode,w=plateDraft.weight,bar=barWeight(mode),u=U(),r=P.platesPerSide(w,bar,u),smith=mode==='smith';
   const chips=r.plates.length?r.plates.map(p=>Array(p.count).fill(0).map(()=>`<span class="plate p${String(p.plate).replace('.','_')}">${p.plate}</span>`).join('')).join('')
     :`<div class="dim" style="padding:12px 2px">${r.belowBar?'That’s less than the empty bar.':'Just the empty bar — no plates.'}</div>`;
-  return `<div class="dim" style="font-size:13px;margin:-4px 2px 16px">How to load each side of the bar. Tap ± to try another weight.</div>
+  return `<div class="dim" style="font-size:13px;margin:-4px 2px 16px">How to load each side of the ${smith?'Smith bar':'bar'}. Tap ± to try another weight.</div>
     <div class="platewt">
       <button class="platestep" data-plw="-1" aria-label="Less">−</button>
       <div class="platewt-v"><span class="mono">${w}</span><small>${u}</small></div>
@@ -295,16 +299,17 @@ function plateSheetBody(){
     <div class="plates">${chips}</div>
     ${r.leftover>0?`<div class="dim" style="font-size:12px;margin-top:10px">+${r.leftover}${u} per side left over — no standard plate fits it.</div>`:''}
     <div class="settingrow" style="border-top:1px solid var(--line);border-bottom:none;padding:14px 2px 4px;margin-top:18px">
-      <div><div style="font-weight:600;font-size:13.5px">Bar weight</div><div class="dim" style="font-size:12px">The empty bar</div></div>
+      <div><div style="font-weight:600;font-size:13.5px">${smith?'Smith bar weight':'Bar weight'}</div><div class="dim" style="font-size:12px">${smith?'The carriage — often listed on the machine':'The empty bar'}</div></div>
       <div class="stepper"><button data-plbar="-1">−</button><button class="val mono">${bar}<small style="font-size:11px"> ${u}</small></button><button data-plbar="1">＋</button></div></div>`;
 }
 function bindPlateSheet(){
-  const step=U()==='kg'?2.5:5,rerender=()=>{$('#sheetBody').innerHTML=plateSheetBody();bindPlateSheet();};
-  $('#sheetBody').querySelectorAll('[data-plw]').forEach(b=>b.addEventListener('click',()=>{plateDraft.weight=Math.max(barWeight(),+(plateDraft.weight+(+b.dataset.plw)*step).toFixed(2));rerender();}));
-  $('#sheetBody').querySelectorAll('[data-plbar]').forEach(b=>b.addEventListener('click',()=>{setBarWeight(Math.max(5,+(barWeight()+(+b.dataset.plbar)*step).toFixed(2)));if(plateDraft.weight<barWeight())plateDraft.weight=barWeight();rerender();}));
+  const mode=plateDraft.mode,step=U()==='kg'?2.5:5,rerender=()=>{$('#sheetBody').innerHTML=plateSheetBody();bindPlateSheet();};
+  $('#sheetBody').querySelectorAll('[data-plw]').forEach(b=>b.addEventListener('click',()=>{plateDraft.weight=Math.max(barWeight(mode),+(plateDraft.weight+(+b.dataset.plw)*step).toFixed(2));rerender();}));
+  $('#sheetBody').querySelectorAll('[data-plbar]').forEach(b=>b.addEventListener('click',()=>{setBarWeight(mode,Math.max(0,+(barWeight(mode)+(+b.dataset.plbar)*step).toFixed(2)));if(plateDraft.weight<barWeight(mode))plateDraft.weight=barWeight(mode);rerender();}));
 }
-function openPlateSheet(weight){
-  const w=Math.round(+weight||0);plateDraft={weight:Math.max(barWeight(),w||barWeight())};
+function openPlateSheet(weight,mode){
+  mode=mode==='smith'?'smith':'barbell';const w=Math.round(+weight||0);
+  plateDraft={mode,weight:Math.max(barWeight(mode),w||barWeight(mode))};
   openSheet('Plate loader',plateSheetBody());bindPlateSheet();
 }
 function buildAndStart(fresh){

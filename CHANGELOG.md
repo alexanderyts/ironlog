@@ -2,6 +2,11 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.59.1 — 2026-09-16 · Smith machine gets its own bar weight
+- **The plate calculator now remembers a separate bar weight for the Smith machine.** A straight barbell defaults to 45 lb / 20 kg; the Smith machine defaults to 25 lb / 10 kg (its carriage is usually lighter and is often printed on the machine). Each is adjustable and remembered on its own, so switching a lift between barbell and Smith uses the right bar automatically.
+
+Not verified on-device.
+
 ## v0.59.0 — 2026-09-16 · Plate calculator
 - **See how to load the bar.** Barbell and Smith-machine lifts now have a "🏋 Plates" button. Tap it and it shows exactly which plates to put on each side for your working weight — colour-coded, largest first. Tap ± to try another weight without leaving the sheet.
 - **Set your bar.** Defaults to a standard 45 lb / 20 kg bar, but you can change it (for a lighter bar, EZ bar, etc.) and it's remembered. If a weight can't be made with standard plates, it tells you what's left over.
