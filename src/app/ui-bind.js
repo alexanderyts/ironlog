@@ -63,7 +63,7 @@ function showSummary(sm){
   }else if(sm.prs.length){
     body+=`<div class="eyebrow" style="margin:2px 2px 8px">🎉 New personal record${sm.prs.length>1?'s':''}</div>
       <div class="card list">${sm.prs.map(p=>`<div class="ex-row"><span style="color:var(--good);font-size:18px;flex-shrink:0">★</span><div style="flex:1;min-width:0"><div class="ex-name">${esc(p.name)}</div><div class="ex-sub">${p.w}${U()}${p.perHand?'/ea':''} × ${p.r}</div></div>
-        <button class="btn sm ghost" data-prmark="${p.id}" style="flex-shrink:0">Wasn’t clean</button></div>`).join('')}</div>`;
+        <button class="btn sm ghost" data-prmark="${p.id}" data-insummary="1" style="flex-shrink:0">Wasn’t clean</button></div>`).join('')}</div>`;
   }else{
     body+=`<div class="dim" style="font-size:13.5px;line-height:1.5;padding:0 2px">Logged and saved. Consistency is what moves the numbers — every session counts.</div>`;
   }
@@ -127,7 +127,7 @@ function commitFinish(s,endedAt,estimated){
    session, same modality, same weight × reps) and flags it `nc`. Nothing is deleted: the set keeps its
    place in History and its share of your volume; it just stops being the bar the app measures you
    against, and stops seeding the next workout. Re-openable both ways. */
-function markBestSet(id){
+function markBestSet(id,btn){
   const p=A.personalRecords(state.sessions,bw(),999).filter(x=>x.id===id)[0];
   if(!p){toast('No record to adjust');return;}
   const s=state.sessions.find(x=>x.date===p.date&&x.exercises.some(e=>e.id===id));
@@ -135,7 +135,11 @@ function markBestSet(id){
   const st=e&&e.sets.find(x=>!x.nc&&P.isWorking(x)&&(+x.w||0)===p.w&&(+x.r||0)===p.r);
   if(!st){toast('Couldn’t find that set');return;}
   st.nc=true;s.updatedAt=Date.now();S.upsertSession(s,false);
-  render();openSheet(EX[id]?EX[id].name:id,exerciseDetail(id));
+  render();
+  // From the post-workout summary, stay in the summary: redrawing the exercise sheet over it threw
+  // away the "Done" button and the trip back to History mid-flow. Tick the row in place instead.
+  if(btn&&btn.dataset.insummary){btn.outerHTML='<span class="dim" style="font-size:12.5px;flex-shrink:0">Set aside ✓</span>';}
+  else openSheet(EX[id]?EX[id].name:id,exerciseDetail(id));
   toast('Set aside — it still counts toward your volume');
 }
 function unmarkSets(id){
@@ -324,6 +328,7 @@ function bind(){
   const v=$('#view');
   if(!v.__delegated){v.__delegated=true;v.addEventListener('click',e=>{
     const a=e.target.closest('[data-action]');if(a&&ACTIONS[a.dataset.action]){ACTIONS[a.dataset.action](a,e);return;}
+    const stip=e.target.closest('[data-seentip]');if(stip){markSeen(stip.dataset.seentip);render();return;}   // generic one-time tip dismissal
     const mu=e.target.closest('[data-mute]');if(mu){const seen=state.settings.seen=state.settings.seen||{};seen['mute:'+mu.dataset.mute]=true;S.saveSettingsCloud();render();toast('Got it — hidden from Coach’s notes',{label:'Undo',fn:()=>{delete seen['mute:'+mu.dataset.mute];S.saveSettingsCloud();render();}});return;}
     const cl=e.target.closest('[data-collapse]');if(cl){toggleCollapse(cl.dataset.collapse);return;}
     const bv=e.target.closest('[data-barval]');if(bv){bv.classList.toggle('on');return;}   // reveal/hide a volume bar's value
@@ -479,7 +484,7 @@ function boot(){
   $('#cdCancel').addEventListener('click',closeConfirm);$('#cscrim').addEventListener('click',closeConfirm);
   $('#cdOk').addEventListener('click',()=>{const cb=_confirmCb;closeConfirm();if(cb)cb();});
   $('#sheetBody').addEventListener('click',e=>{const a=e.target.closest('[data-addto]');if(a){addExerciseToCur(a.dataset.addto);closeSheet();return;}
-    const pm=e.target.closest('[data-prmark]');if(pm){markBestSet(pm.dataset.prmark);return;}
+    const pm=e.target.closest('[data-prmark]');if(pm){markBestSet(pm.dataset.prmark,pm);return;}
     const pu=e.target.closest('[data-prunmark]');if(pu){unmarkSets(pu.dataset.prunmark);return;}});
   $('#btnSettings').addEventListener('click',openSettings);
   $('#restSkip').addEventListener('click',stopRest);

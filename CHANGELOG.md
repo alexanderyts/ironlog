@@ -2,6 +2,13 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.49.1 — 2026-09-16 · Making "adjust a PR" findable
+The feature shipped in v0.49.0 was too well hidden — unless you happened to set a PR with the finish screen open, there was nothing telling you it existed.
+- **Personal Records rows now show a ›** so it's clear they open something.
+- **A one-time note above your records:** "Tap a record for its trend — or set it aside if the form wasn't there." One "Got it" and it's gone for good, on every device.
+- **Fixed: setting a record aside from the finish screen jumped you somewhere else.** It threw away the "Done" button in the middle of finishing a workout. Now the row just ticks to **Set aside ✓** and you carry on.
+- Not verified on-device (tested in a desktop browser at iPhone size — 225 tests green; review snapshot unchanged).
+
 ## v0.49.0 — 2026-09-16 · Adjust a PR, and the sheet that wouldn't appear
 Sometimes you hit a number your form didn't earn. Now you can say so, without losing the fact that you hit it.
 - **"That rep wasn't clean."** Open a lift from your Personal Records (or tap it right after the workout announces it) and set the record aside in one tap. Your PR falls back to your previous best, and the row shows **PR adjusted** with the set-aside lift and its date — so the history is still right there.

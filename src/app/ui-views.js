@@ -88,6 +88,7 @@ function viewProgress(){
     <div class="eyebrow" style="margin:24px 2px 10px">Weekly volume · last 8 weeks</div>
     <div class="card" style="padding:14px 12px 10px">${volumeChart()}</div>
     <div class="eyebrow" style="margin:24px 2px 10px">Personal records</div>
+    ${prTip()}
     <div class="card list" id="prCard">${prList()}</div>
     ${muscleBreakdown(mo)}
   </div>`;
@@ -106,6 +107,16 @@ function volumeChart(){
       +`<div class="bar-lb">${lb}</div></div>`;
   }).join('')}</div>`;
 }
+// A one-time nudge that a PR row opens something, and that a record can be set aside — otherwise the
+// only way anyone meets "that rep wasn't clean" is by happening to set a PR in front of the finish
+// screen. Same dismiss-once pattern as the coaching notes' "Got it"; rides the synced `seen` map.
+function prTip(){
+  if(seenFlag('prAdjustTip'))return '';
+  return `<div class="card" style="padding:11px 14px;margin:0 0 9px;background:var(--surface-2);border:none;display:flex;gap:10px;align-items:center">
+    <div class="dim" style="font-size:12.5px;line-height:1.45;flex:1">Tap a record for its trend — or set it aside if the form wasn’t there.</div>
+    <button class="linkbtn dim" data-seentip="prAdjustTip" style="font-size:12px;padding:2px 4px;flex-shrink:0">Got it</button></div>`;
+}
+const CHEV_R='<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color:var(--ink-3)"><path d="M9 6l6 6-6 6"/></svg>';
 function prList(){
   const arr=A.personalRecords(state.sessions,bw(),8);
   if(!arr.length)return`<div style="padding:22px;text-align:center" class="dim">Log a few sets and your PRs show up here.</div>`;
@@ -116,7 +127,7 @@ function prList(){
   const modeTag=p=>{const ex=EX[p.id];const native=ex&&EQUIP_MODE[ex.equip];return p.mode&&p.mode!==native?` <span class="pill" style="font-size:10px;padding:1px 7px">${esc(MODES[p.mode].label)}</span>`:'';};
   return arr.map(p=>`<div class="ex-row" data-openex="${p.id}" style="cursor:pointer"><div style="flex:1;min-width:0"><div class="ex-name">${esc(p.name)}${modeTag(p)}</div>
     <div class="ex-sub">Best set ${setStr(p)}</div>${p.adjusted?`<div class="ex-sub" style="color:var(--warn)">PR adjusted · ${p.adjusted.w}${U()} × ${p.adjusted.r} on ${fmtDate(p.adjusted.date)} set aside</div>`:''}</div>
-    <div style="text-align:right">${p.showEst?`<div class="mono" style="font-weight:700;font-size:16px">${p.est}<span class="dim" style="font-size:11px"> ${U()} e1RM</span></div>`:`<div class="mono dim" style="font-weight:600;font-size:13px">${p.load}${U()}</div>`}</div></div>`).join('');
+    <div style="text-align:right">${p.showEst?`<div class="mono" style="font-weight:700;font-size:16px">${p.est}<span class="dim" style="font-size:11px"> ${U()} e1RM</span></div>`:`<div class="mono dim" style="font-weight:600;font-size:13px">${p.load}${U()}</div>`}</div>${CHEV_R}</div>`).join('');
 }
 function balBar(l,lv,r,rv){
   const total=lv+rv||1,lp=Math.round(lv/total*100);

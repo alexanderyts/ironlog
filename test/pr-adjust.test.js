@@ -151,3 +151,42 @@ test('UI: opening a sheet while a field has focus drops the keyboard first',()=>
     assert.ok(h.$('#sheet').classList.contains('on'),'and the sheet is actually open');
   }finally{h.teardown();}
 });
+
+test('UI: the tip and the chevron make the retroactive path findable, and the tip dismisses for good',()=>{
+  const h=launch();
+  try{
+    rows(false).forEach(s=>h.S.upsertSession(JSON.parse(JSON.stringify(s)),false));
+    h.click('.tab[data-tab="progress"]');
+    assert.ok(h.has('[data-seentip="prAdjustTip"]'),'a first-time reader is told the rows do something');
+    const row=h.$$('#prCard [data-openex]').find(r=>r.dataset.openex==='barbell-row');
+    assert.ok(row.querySelector('svg'),'the row carries a chevron so it reads as tappable');
+
+    h.click('[data-seentip="prAdjustTip"]');
+    assert.ok(!h.has('[data-seentip="prAdjustTip"]'),'"Got it" hides it');
+    assert.equal(h.state.settings.seen.prAdjustTip,true,'and the choice is stored (so it syncs)');
+    h.click('.tab[data-tab="today"]');h.click('.tab[data-tab="progress"]');
+    assert.ok(!h.has('[data-seentip="prAdjustTip"]'),'it stays hidden across navigation');
+  }finally{h.teardown();}
+});
+
+test('UI: marking from the post-workout summary stays in the summary',()=>{
+  // it used to redraw the exercise sheet over the summary, throwing away "Done" mid-flow
+  const h=launch();
+  try{
+    h.S.upsertSession({id:'old',schema:1,date:Date.now()-8*86400000,updatedAt:1,completed:true,
+      exercises:[{id:'barbell-row',name:'Barbell Row',sets:[{w:100,r:10,done:true}]}]},false);
+    h.click('[data-action="startFlow"]');h.click('[data-action="blank"]');
+    h.click('#btnAddEx');
+    h.click(h.$$('#addResults [data-quickadd]').find(x=>x.dataset.quickadd==='barbell-row'));
+    h.type('input[data-f="w"]','110');h.type('input[data-f="r"]','10');
+    h.click('[data-check]');
+    h.click(h.$$('button').find(b=>b.textContent.trim()==='Finish'));
+    assert.equal(h.text('#sheetTitle'),'New PR! 💪');
+
+    h.click('#sheetBody [data-prmark]');
+    assert.equal(h.text('#sheetTitle'),'New PR! 💪','still on the summary');
+    assert.ok(h.has('#sumDone'),'the Done button survives');
+    assert.ok(h.text('#sheetBody').indexOf('Set aside')>=0,'the row ticks in place');
+    assert.ok(h.state.sessions.some(s=>s.exercises.some(e=>e.sets.some(t=>t.nc))),'and the set really is marked');
+  }finally{h.teardown();}
+});
