@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-pnOdVjRVCVlvwVO0G79vqZ9VOcUaxaXHFbOm2gzHCmI=' 'sha256-WPBob/luB2k1aalTWXpi6zk3SrIbj8GlZV7AlFdG7oA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-jC0RFbMFu9TlsNxKCncco/7pFA0X11uccy05/f0Q5WQ=' 'sha256-WPBob/luB2k1aalTWXpi6zk3SrIbj8GlZV7AlFdG7oA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Ironlog</title>
@@ -349,6 +349,20 @@ html.kb-open .tabbar{display:none}
 .stepper button{width:40px;height:40px;border-radius:8px;font-size:18px;color:var(--ink-2);font-weight:500}
 .stepper button:active{color:var(--accent)}
 .stepper .val{min-width:52px;text-align:center;font-weight:600}
+/* plate calculator */
+.platewt{display:flex;align-items:center;justify-content:center;gap:18px}
+.platewt-v{min-width:120px;text-align:center}
+.platewt-v .mono{font-size:34px;font-weight:700}
+.platewt-v small{font-size:15px;color:var(--ink-3);margin-left:3px}
+.platestep{width:52px;height:52px;border-radius:14px;background:var(--surface-2);color:var(--ink-2);font-size:24px;font-weight:500;display:grid;place-items:center}
+.platestep:active{color:var(--accent);transform:scale(.94)}
+.plates{display:flex;flex-wrap:wrap;gap:8px;align-items:center;min-height:52px}
+.plate{min-width:46px;height:50px;padding:0 10px;border-radius:9px;display:grid;place-items:center;font-weight:700;font-size:15px;color:#fff;background:var(--accent);box-shadow:inset 0 -2px 0 rgba(0,0,0,.18)}
+.plate.p45,.plate.p25,.plate.p20{background:#3b6fd4}
+.plate.p35,.plate.p15{background:#c9612e}
+.plate.p10{background:#3a8f52}
+.plate.p5{background:#6b7280}
+.plate.p2_5,.plate.p1_25{min-width:38px;height:42px;font-size:13px;background:#8a8f98}
 .cloud{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;color:var(--ink-3)}
 .cloud .dot{width:7px;height:7px;border-radius:50%;background:var(--ink-3)}
 .cloud.synced .dot{background:var(--good)}
@@ -424,8 +438,8 @@ html.kb-open .tabbar{display:none}
 </div>
 
 <script>
-/* Ironlog v0.58.0 · site build */
-var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.58.0",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
+/* Ironlog v0.59.0 · site build */
+var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.59.0",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
 
 /* ===== src/data/exercises.js ===== */
 (function(){'use strict';
@@ -832,6 +846,16 @@ function setScore(exId,st,bw){
   return e1rm(setLoad(exId,w,bw),r);
 }
 function scoreMetric(exId){return (INVERTED_LOAD&&INVERTED_LOAD.has(exId))?'resist':(TIME_METRIC&&TIME_METRIC.has(exId))?'time':'e1rm';}
+// Which plates go on EACH side of the bar to reach `total`, greedily from the largest standard plate.
+// `leftover` is any per-side amount that no standard plate can make (an odd micro-amount).
+const PLATES={lb:[45,35,25,10,5,2.5],kg:[25,20,15,10,5,2.5,1.25]};
+function platesPerSide(total,bar,unit){
+  const sizes=PLATES[unit==='kg'?'kg':'lb'],t=+total||0,b=+bar||0,perSide=(t-b)/2;
+  if(perSide<=0)return {perSide:0,plates:[],leftover:0,belowBar:t<b};
+  let rem=perSide;const plates=[];
+  sizes.forEach(p=>{const n=Math.floor((rem+1e-9)/p);if(n>0){plates.push({plate:p,count:n});rem-=n*p;}});
+  return {perSide,plates,leftover:Math.round(rem*100)/100,belowBar:false};
+}
 // Every performance of an exercise (optionally one modality), oldest→newest, for a progress trend. The
 // y-value is setScore (e1RM for normal lifts, effective resistance for assist machines, seconds for
 // holds), so the line always rises with real progress. opts: {mode, bw, limit}
@@ -1076,7 +1100,7 @@ function calcStreak(sessions,now){
   return n;
 }
 
-IL.prog={DAY,startOfDay,e1rm,isWorking,setLoad,sbw,sessionVolume,sessionSets,sessionDuration,MAX_SESSION_MIN,setTimeline,lastSetAt,staleness,STALE_AFTER_MIN,LONG_SESSION_MIN,STALE_CONFIRM_MIN,END_PAD_MIN,finalizeSets,parseWeightInput,fmtVol,modeOf,real,lastPerf,lastModeFor,exerciseSeries,setScore,scoreMetric,bestE1rmBefore,setPattern,fmtPerf,repRange,nextSets,deloadSets,suggestion,unitIncrement,convertWeight,convertSessions,calcStreak,weekIndex,weekStart};
+IL.prog={DAY,startOfDay,e1rm,isWorking,setLoad,sbw,sessionVolume,sessionSets,sessionDuration,MAX_SESSION_MIN,setTimeline,lastSetAt,staleness,STALE_AFTER_MIN,LONG_SESSION_MIN,STALE_CONFIRM_MIN,END_PAD_MIN,finalizeSets,parseWeightInput,fmtVol,modeOf,real,lastPerf,lastModeFor,exerciseSeries,setScore,scoreMetric,platesPerSide,bestE1rmBefore,setPattern,fmtPerf,repRange,nextSets,deloadSets,suggestion,unitIncrement,convertWeight,convertSessions,calcStreak,weekIndex,weekStart};
 if(typeof module!=='undefined')module.exports=IL.prog;
 
 })();
@@ -2121,6 +2145,7 @@ function cleanSettings(o){if(!o||typeof o!=='object')return null;
     compound:Math.max(0,Math.min(3600,sNum(r.compound)||120)),isolation:Math.max(0,Math.min(3600,sNum(r.isolation)||75))};
   const prof=cleanProfile(o.profile);if(prof)s.profile=prof;
   const seen=cleanSeen(o.seen);if(seen)s.seen=seen;
+  if(o.bar&&typeof o.bar==='object'){const bar={},lb=sNum(o.bar.lb),kg=sNum(o.bar.kg);if(lb>0)bar.lb=Math.min(200,lb);if(kg>0)bar.kg=Math.min(100,kg);if(Object.keys(bar).length)s.bar=bar;}   // remembered bar weight per unit (plate calculator, D-4)
   return s;
 }
 const DANGER_KEY=/^(__proto__|constructor|prototype)$/;
@@ -3003,6 +3028,36 @@ function openSessionNote(){
   $('#snoteSave').addEventListener('click',()=>{const v=(ta.value||'').trim();if(v)t.note=v.slice(0,500);else delete t.note;persistCur();closeSheet();render();toast(v?'Note saved':'Note removed');});
   const nc=$('#snoteClear');if(nc)nc.addEventListener('click',()=>{delete t.note;persistCur();closeSheet();render();toast('Note removed');});
 }
+/* ---- plate calculator (D-4) ---- barbell/Smith lifts log the TOTAL bar weight, so this shows how to
+   load each side. The bar weight is remembered per unit; the sheet doubles as a calculator (± any weight). */
+function barWeight(){const b=state.settings.bar||{};const v=+b[U()];return v>0?v:(U()==='kg'?20:45);}
+function setBarWeight(v){const b=Object.assign({},state.settings.bar);b[U()]=v;state.settings.bar=b;S.saveSettingsCloud();}
+let plateDraft=null;
+function plateSheetBody(){
+  const w=plateDraft.weight,bar=barWeight(),u=U(),r=P.platesPerSide(w,bar,u);
+  const chips=r.plates.length?r.plates.map(p=>Array(p.count).fill(0).map(()=>`<span class="plate p${String(p.plate).replace('.','_')}">${p.plate}</span>`).join('')).join('')
+    :`<div class="dim" style="padding:12px 2px">${r.belowBar?'That’s less than the empty bar.':'Just the empty bar — no plates.'}</div>`;
+  return `<div class="dim" style="font-size:13px;margin:-4px 2px 16px">How to load each side of the bar. Tap ± to try another weight.</div>
+    <div class="platewt">
+      <button class="platestep" data-plw="-1" aria-label="Less">−</button>
+      <div class="platewt-v"><span class="mono">${w}</span><small>${u}</small></div>
+      <button class="platestep" data-plw="1" aria-label="More">＋</button></div>
+    <div class="eyebrow" style="margin:18px 2px 10px">Each side${r.plates.length?` · ${r.plates.reduce((a,p)=>a+p.count,0)} plate${r.plates.reduce((a,p)=>a+p.count,0)!==1?'s':''}`:''}</div>
+    <div class="plates">${chips}</div>
+    ${r.leftover>0?`<div class="dim" style="font-size:12px;margin-top:10px">+${r.leftover}${u} per side left over — no standard plate fits it.</div>`:''}
+    <div class="settingrow" style="border-top:1px solid var(--line);border-bottom:none;padding:14px 2px 4px;margin-top:18px">
+      <div><div style="font-weight:600;font-size:13.5px">Bar weight</div><div class="dim" style="font-size:12px">The empty bar</div></div>
+      <div class="stepper"><button data-plbar="-1">−</button><button class="val mono">${bar}<small style="font-size:11px"> ${u}</small></button><button data-plbar="1">＋</button></div></div>`;
+}
+function bindPlateSheet(){
+  const step=U()==='kg'?2.5:5,rerender=()=>{$('#sheetBody').innerHTML=plateSheetBody();bindPlateSheet();};
+  $('#sheetBody').querySelectorAll('[data-plw]').forEach(b=>b.addEventListener('click',()=>{plateDraft.weight=Math.max(barWeight(),+(plateDraft.weight+(+b.dataset.plw)*step).toFixed(2));rerender();}));
+  $('#sheetBody').querySelectorAll('[data-plbar]').forEach(b=>b.addEventListener('click',()=>{setBarWeight(Math.max(5,+(barWeight()+(+b.dataset.plbar)*step).toFixed(2)));if(plateDraft.weight<barWeight())plateDraft.weight=barWeight();rerender();}));
+}
+function openPlateSheet(weight){
+  const w=Math.round(+weight||0);plateDraft={weight:Math.max(barWeight(),w||barWeight())};
+  openSheet('Plate loader',plateSheetBody());bindPlateSheet();
+}
 function buildAndStart(fresh){
   const dl=draft.deload;
   // Coach's findings feed the builder (Phase C). The engine ignores them on a deload (recovery isn't
@@ -3126,6 +3181,7 @@ function logExercise(s,e,ei,mode){
       <button class="linkbtn" data-addset="${ei}">＋ Add set</button>
       ${e.sets.length>1?`<button class="linkbtn" data-delset="${ei}">－ Remove set</button>`:''}
       ${D.TIME_METRIC.has(e.id)&&todayScreen==='active'?`<button class="linkbtn" data-stopwatch="${ei}">⏱ Stopwatch</button>`:''}
+      ${(emode==='barbell'||emode==='smith')?`<button class="linkbtn" data-plates="${ei}">🏋 Plates</button>`:''}
       <button class="linkbtn dim" data-note="${ei}">✎ ${e.note?'Edit note':'Note'}</button>
       <a class="linkbtn dim" href="${demoURL(e.id)}" target="_blank" rel="noopener noreferrer" style="margin-left:auto;text-decoration:none">▶ Watch demo</a>
     </div>
@@ -4269,6 +4325,7 @@ function bindLog(root){
       stepSet(+step.dataset.ei,+step.dataset.s,step.dataset.step,+step.dataset.d);return;}
     const add=e.target.closest('[data-addset]');if(add){const ei=+add.dataset.addset;const sets=t.exercises[ei].sets;const last=sets[sets.length-1]||{w:'',r:''};sets.push({w:last.w,r:last.r,done:false});persistCur();render();return;}
     const sw=e.target.closest('[data-stopwatch]');if(sw){startStopwatch(+sw.dataset.stopwatch);return;}
+    const pl=e.target.closest('[data-plates]');if(pl){const ex=t.exercises[+pl.dataset.plates];const top=Math.max(0,...ex.sets.filter(s=>!s.warm).map(s=>+s.w||0));openPlateSheet(top||barWeight());return;}   // heaviest entered work set (not just ticked ones — you load the bar before lifting)
     const rem=e.target.closest('[data-delset]');if(rem){const ei=+rem.dataset.delset;const sets=t.exercises[ei].sets;if(sets.length<=1)return;
       const idx=sets.length-1;
       const doRemove=()=>{const removed=sets.splice(idx,1)[0];persistCur();render();

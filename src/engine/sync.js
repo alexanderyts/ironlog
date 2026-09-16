@@ -95,6 +95,7 @@ function cleanSettings(o){if(!o||typeof o!=='object')return null;
     compound:Math.max(0,Math.min(3600,sNum(r.compound)||120)),isolation:Math.max(0,Math.min(3600,sNum(r.isolation)||75))};
   const prof=cleanProfile(o.profile);if(prof)s.profile=prof;
   const seen=cleanSeen(o.seen);if(seen)s.seen=seen;
+  if(o.bar&&typeof o.bar==='object'){const bar={},lb=sNum(o.bar.lb),kg=sNum(o.bar.kg);if(lb>0)bar.lb=Math.min(200,lb);if(kg>0)bar.kg=Math.min(100,kg);if(Object.keys(bar).length)s.bar=bar;}   // remembered bar weight per unit (plate calculator, D-4)
   return s;
 }
 const DANGER_KEY=/^(__proto__|constructor|prototype)$/;

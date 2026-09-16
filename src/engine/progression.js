@@ -118,6 +118,16 @@ function setScore(exId,st,bw){
   return e1rm(setLoad(exId,w,bw),r);
 }
 function scoreMetric(exId){return (INVERTED_LOAD&&INVERTED_LOAD.has(exId))?'resist':(TIME_METRIC&&TIME_METRIC.has(exId))?'time':'e1rm';}
+// Which plates go on EACH side of the bar to reach `total`, greedily from the largest standard plate.
+// `leftover` is any per-side amount that no standard plate can make (an odd micro-amount).
+const PLATES={lb:[45,35,25,10,5,2.5],kg:[25,20,15,10,5,2.5,1.25]};
+function platesPerSide(total,bar,unit){
+  const sizes=PLATES[unit==='kg'?'kg':'lb'],t=+total||0,b=+bar||0,perSide=(t-b)/2;
+  if(perSide<=0)return {perSide:0,plates:[],leftover:0,belowBar:t<b};
+  let rem=perSide;const plates=[];
+  sizes.forEach(p=>{const n=Math.floor((rem+1e-9)/p);if(n>0){plates.push({plate:p,count:n});rem-=n*p;}});
+  return {perSide,plates,leftover:Math.round(rem*100)/100,belowBar:false};
+}
 // Every performance of an exercise (optionally one modality), oldest→newest, for a progress trend. The
 // y-value is setScore (e1RM for normal lifts, effective resistance for assist machines, seconds for
 // holds), so the line always rises with real progress. opts: {mode, bw, limit}
@@ -362,5 +372,5 @@ function calcStreak(sessions,now){
   return n;
 }
 
-IL.prog={DAY,startOfDay,e1rm,isWorking,setLoad,sbw,sessionVolume,sessionSets,sessionDuration,MAX_SESSION_MIN,setTimeline,lastSetAt,staleness,STALE_AFTER_MIN,LONG_SESSION_MIN,STALE_CONFIRM_MIN,END_PAD_MIN,finalizeSets,parseWeightInput,fmtVol,modeOf,real,lastPerf,lastModeFor,exerciseSeries,setScore,scoreMetric,bestE1rmBefore,setPattern,fmtPerf,repRange,nextSets,deloadSets,suggestion,unitIncrement,convertWeight,convertSessions,calcStreak,weekIndex,weekStart};
+IL.prog={DAY,startOfDay,e1rm,isWorking,setLoad,sbw,sessionVolume,sessionSets,sessionDuration,MAX_SESSION_MIN,setTimeline,lastSetAt,staleness,STALE_AFTER_MIN,LONG_SESSION_MIN,STALE_CONFIRM_MIN,END_PAD_MIN,finalizeSets,parseWeightInput,fmtVol,modeOf,real,lastPerf,lastModeFor,exerciseSeries,setScore,scoreMetric,platesPerSide,bestE1rmBefore,setPattern,fmtPerf,repRange,nextSets,deloadSets,suggestion,unitIncrement,convertWeight,convertSessions,calcStreak,weekIndex,weekStart};
 if(typeof module!=='undefined')module.exports=IL.prog;

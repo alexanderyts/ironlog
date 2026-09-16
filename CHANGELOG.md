@@ -2,6 +2,12 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.59.0 — 2026-09-16 · Plate calculator
+- **See how to load the bar.** Barbell and Smith-machine lifts now have a "🏋 Plates" button. Tap it and it shows exactly which plates to put on each side for your working weight — colour-coded, largest first. Tap ± to try another weight without leaving the sheet.
+- **Set your bar.** Defaults to a standard 45 lb / 20 kg bar, but you can change it (for a lighter bar, EZ bar, etc.) and it's remembered. If a weight can't be made with standard plates, it tells you what's left over.
+
+Not verified on-device.
+
 ## v0.58.0 — 2026-09-16 · Swipe a pop-up down to close it
 - **Pop-up panels now close with a swipe.** The little bar at the top of a pop-up finally does what it looks like it should — drag the panel down to dismiss it (or flick it), instead of reaching for the ✕. A small drag springs back. The ✕ still works too.
 

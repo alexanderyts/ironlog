@@ -277,6 +277,36 @@ function openSessionNote(){
   $('#snoteSave').addEventListener('click',()=>{const v=(ta.value||'').trim();if(v)t.note=v.slice(0,500);else delete t.note;persistCur();closeSheet();render();toast(v?'Note saved':'Note removed');});
   const nc=$('#snoteClear');if(nc)nc.addEventListener('click',()=>{delete t.note;persistCur();closeSheet();render();toast('Note removed');});
 }
+/* ---- plate calculator (D-4) ---- barbell/Smith lifts log the TOTAL bar weight, so this shows how to
+   load each side. The bar weight is remembered per unit; the sheet doubles as a calculator (± any weight). */
+function barWeight(){const b=state.settings.bar||{};const v=+b[U()];return v>0?v:(U()==='kg'?20:45);}
+function setBarWeight(v){const b=Object.assign({},state.settings.bar);b[U()]=v;state.settings.bar=b;S.saveSettingsCloud();}
+let plateDraft=null;
+function plateSheetBody(){
+  const w=plateDraft.weight,bar=barWeight(),u=U(),r=P.platesPerSide(w,bar,u);
+  const chips=r.plates.length?r.plates.map(p=>Array(p.count).fill(0).map(()=>`<span class="plate p${String(p.plate).replace('.','_')}">${p.plate}</span>`).join('')).join('')
+    :`<div class="dim" style="padding:12px 2px">${r.belowBar?'That’s less than the empty bar.':'Just the empty bar — no plates.'}</div>`;
+  return `<div class="dim" style="font-size:13px;margin:-4px 2px 16px">How to load each side of the bar. Tap ± to try another weight.</div>
+    <div class="platewt">
+      <button class="platestep" data-plw="-1" aria-label="Less">−</button>
+      <div class="platewt-v"><span class="mono">${w}</span><small>${u}</small></div>
+      <button class="platestep" data-plw="1" aria-label="More">＋</button></div>
+    <div class="eyebrow" style="margin:18px 2px 10px">Each side${r.plates.length?` · ${r.plates.reduce((a,p)=>a+p.count,0)} plate${r.plates.reduce((a,p)=>a+p.count,0)!==1?'s':''}`:''}</div>
+    <div class="plates">${chips}</div>
+    ${r.leftover>0?`<div class="dim" style="font-size:12px;margin-top:10px">+${r.leftover}${u} per side left over — no standard plate fits it.</div>`:''}
+    <div class="settingrow" style="border-top:1px solid var(--line);border-bottom:none;padding:14px 2px 4px;margin-top:18px">
+      <div><div style="font-weight:600;font-size:13.5px">Bar weight</div><div class="dim" style="font-size:12px">The empty bar</div></div>
+      <div class="stepper"><button data-plbar="-1">−</button><button class="val mono">${bar}<small style="font-size:11px"> ${u}</small></button><button data-plbar="1">＋</button></div></div>`;
+}
+function bindPlateSheet(){
+  const step=U()==='kg'?2.5:5,rerender=()=>{$('#sheetBody').innerHTML=plateSheetBody();bindPlateSheet();};
+  $('#sheetBody').querySelectorAll('[data-plw]').forEach(b=>b.addEventListener('click',()=>{plateDraft.weight=Math.max(barWeight(),+(plateDraft.weight+(+b.dataset.plw)*step).toFixed(2));rerender();}));
+  $('#sheetBody').querySelectorAll('[data-plbar]').forEach(b=>b.addEventListener('click',()=>{setBarWeight(Math.max(5,+(barWeight()+(+b.dataset.plbar)*step).toFixed(2)));if(plateDraft.weight<barWeight())plateDraft.weight=barWeight();rerender();}));
+}
+function openPlateSheet(weight){
+  const w=Math.round(+weight||0);plateDraft={weight:Math.max(barWeight(),w||barWeight())};
+  openSheet('Plate loader',plateSheetBody());bindPlateSheet();
+}
 function buildAndStart(fresh){
   const dl=draft.deload;
   // Coach's findings feed the builder (Phase C). The engine ignores them on a deload (recovery isn't
@@ -400,6 +430,7 @@ function logExercise(s,e,ei,mode){
       <button class="linkbtn" data-addset="${ei}">＋ Add set</button>
       ${e.sets.length>1?`<button class="linkbtn" data-delset="${ei}">－ Remove set</button>`:''}
       ${D.TIME_METRIC.has(e.id)&&todayScreen==='active'?`<button class="linkbtn" data-stopwatch="${ei}">⏱ Stopwatch</button>`:''}
+      ${(emode==='barbell'||emode==='smith')?`<button class="linkbtn" data-plates="${ei}">🏋 Plates</button>`:''}
       <button class="linkbtn dim" data-note="${ei}">✎ ${e.note?'Edit note':'Note'}</button>
       <a class="linkbtn dim" href="${demoURL(e.id)}" target="_blank" rel="noopener noreferrer" style="margin-left:auto;text-decoration:none">▶ Watch demo</a>
     </div>

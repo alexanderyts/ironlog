@@ -327,6 +327,20 @@ html.kb-open .tabbar{display:none}
 .stepper button{width:40px;height:40px;border-radius:8px;font-size:18px;color:var(--ink-2);font-weight:500}
 .stepper button:active{color:var(--accent)}
 .stepper .val{min-width:52px;text-align:center;font-weight:600}
+/* plate calculator */
+.platewt{display:flex;align-items:center;justify-content:center;gap:18px}
+.platewt-v{min-width:120px;text-align:center}
+.platewt-v .mono{font-size:34px;font-weight:700}
+.platewt-v small{font-size:15px;color:var(--ink-3);margin-left:3px}
+.platestep{width:52px;height:52px;border-radius:14px;background:var(--surface-2);color:var(--ink-2);font-size:24px;font-weight:500;display:grid;place-items:center}
+.platestep:active{color:var(--accent);transform:scale(.94)}
+.plates{display:flex;flex-wrap:wrap;gap:8px;align-items:center;min-height:52px}
+.plate{min-width:46px;height:50px;padding:0 10px;border-radius:9px;display:grid;place-items:center;font-weight:700;font-size:15px;color:#fff;background:var(--accent);box-shadow:inset 0 -2px 0 rgba(0,0,0,.18)}
+.plate.p45,.plate.p25,.plate.p20{background:#3b6fd4}
+.plate.p35,.plate.p15{background:#c9612e}
+.plate.p10{background:#3a8f52}
+.plate.p5{background:#6b7280}
+.plate.p2_5,.plate.p1_25{min-width:38px;height:42px;font-size:13px;background:#8a8f98}
 .cloud{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;color:var(--ink-3)}
 .cloud .dot{width:7px;height:7px;border-radius:50%;background:var(--ink-3)}
 .cloud.synced .dot{background:var(--good)}
