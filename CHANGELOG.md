@@ -2,6 +2,14 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.52.0 — 2026-09-16 · Planks, carries and assisted machines are now first-class
+A review turned up that the time-held and assist-machine lifts were only half-wired into the stats. Fixed:
+- **Bodyweight holds now get a personal record.** A plank, wall sit, dead hang, side plank or hollow hold now shows a best (longest hold) on your PR board — before, they silently never did.
+- **The progress chart reads the right direction for these lifts.** An assisted machine's chart now rises as you *drop the assist* (before, getting stronger looked like a decline), labelled "resistance"; a plank's chart shows seconds ("hold"), instead of being blank.
+- **The builder won't retire an assisted lift while you're improving on it.** Dropping your assist week to week now correctly counts as progress, not a plateau.
+- **The stopwatch logs to the right exercise.** If you delete or reorder exercises while a hold is timing, the seconds now land on the lift you started — before, they could go to the wrong one or vanish. It also skips over a warm-up set when writing the time.
+- Not verified on-device (tested in a desktop browser at iPhone size, including a real countdown-and-hold — 253 tests green; review snapshot unchanged).
+
 ## v0.51.0 — 2026-09-16 · Progress tab: clearer numbers, honest comparisons
 The Progress tab's top numbers now move with what you actually did, and a long-standing wording bug is fixed.
 - **Every stat now shows how it compares to last week** — e.g. "5 sessions · +4 vs last week." It compares fairly: early in the week it measures against the *same point* last week, not a finished week, so a Tuesday never looks like a slump.

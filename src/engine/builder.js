@@ -3,7 +3,7 @@
 var IL=globalThis.IL||(globalThis.IL={});
 if(typeof require==='function'&&!IL.data)require('../data/exercises.js');
 if(typeof require==='function'&&!IL.prog)require('./progression.js');
-const {C,I,EXERCISES,EX,REGIONS,IDEAL_PATS,PAT_RANK,EQUIP_LOAD,LONG_LENGTH,regLabel,patLabel,hashId}=IL.data;
+const {C,I,EXERCISES,EX,REGIONS,IDEAL_PATS,PAT_RANK,EQUIP_LOAD,LONG_LENGTH,INVERTED_LOAD,TIME_METRIC,regLabel,patLabel,hashId}=IL.data;
 const {lastPerf,lastModeFor,nextSets,deloadSets,repRange,modeOf,real,DAY,unitIncrement}=IL.prog;
 
 // Working sets a movement deserves when you've never logged it: main lifts 4, other compounds 3,
@@ -303,12 +303,18 @@ function exerciseStreak(sessions,exId){return exerciseTenure(sessions,exId).sess
 // Mode-scoped so alternating equipment doesn't produce a meaningless sequence.
 function recentPerfs(sessions,exId,opts){
   opts=opts||{};const n=opts.n||3,out=[];let before;
+  // Every axis below is normalized so HIGHER = BETTER, letting isStalled's comparisons stay direction-
+  // agnostic across lift types. Assist machines: less assist is better, so top/score = −(least assist).
+  // Time-held lifts: longer is better, so top/score = seconds. Everything else: heaviest weight / e1RM.
+  const inv=INVERTED_LOAD&&INVERTED_LOAD.has(exId), time=TIME_METRIC&&TIME_METRIC.has(exId);
   for(let i=0;i<n;i++){
     const lp=lastPerf(sessions,exId,{beforeTs:before,mode:opts.mode,clean:true});if(!lp)break;   // a disowned set is not evidence of progress OR of a stall
     if(opts.since&&lp.date<opts.since)break;
-    const top=Math.max(...lp.sets.map(s=>+s.w||0));
-    const topR=Math.max(...lp.sets.filter(s=>(+s.w||0)===top).map(s=>+s.r||0));   // reps at the top weight — for double-progression detection
-    out.push({date:lp.date,score:Math.max(...lp.sets.map(s=>s.w>0?e1rm(s.w,s.r):s.r)),top,topR});
+    let top,topR,score;
+    if(inv){const minA=Math.min(...lp.sets.map(s=>+s.w||0));top=-minA;score=-minA;topR=Math.max(...lp.sets.filter(s=>(+s.w||0)===minA).map(s=>+s.r||0));}
+    else if(time){const maxS=Math.max(...lp.sets.map(s=>+s.r||0));top=maxS;score=maxS;topR=maxS;}
+    else{top=Math.max(...lp.sets.map(s=>+s.w||0));topR=Math.max(...lp.sets.filter(s=>(+s.w||0)===top).map(s=>+s.r||0));score=Math.max(...lp.sets.map(s=>s.w>0?e1rm(s.w,s.r):s.r));}
+    out.push({date:lp.date,score,top,topR});
     before=lp.date;
   }
   return out;

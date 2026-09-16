@@ -259,15 +259,21 @@ function trendCard(id){
   const pts=series.map((p,i)=>[pad+(W-2*pad)*(series.length===1?0:i/(series.length-1)),pad+(H-2*pad)*(1-(p.est-min)/range)]);
   const d=pts.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1)).join(' ');
   const last=pts[pts.length-1],delta=Math.round(vals[vals.length-1]-vals[0]);
+  // The y-value's meaning depends on the lift: estimated 1RM for normal lifts, effective resistance
+  // (bodyweight − assist) for assist machines, seconds for time-held lifts — so the label and unit
+  // adapt, never printing "60 lb e1RM" for a plank.
+  const metric=series[0].metric||'e1rm';
+  const unit=metric==='time'?'s':U();
+  const label=metric==='time'?'Progress · hold':metric==='resist'?'Progress · resistance':'Progress · est. 1RM';
   // A dip caused by the user setting their own record aside is not a decline, and must not be painted
   // like one. When the latest point is adjusted, the delta goes neutral and says why — that is the
   // whole point of the flag: going lighter on purpose should never read as losing ground.
   const adjusted=!!series[series.length-1].adj, anyAdj=series.some(p=>p.adj);
   const col=adjusted?'var(--ink-3)':delta>0?'var(--good)':delta<0?'var(--warn)':'var(--ink-3)';
-  const arrow=delta>0?'▲ +'+delta:delta<0?'▼ '+Math.abs(delta):'— flat';
+  const arrow=delta>0?'▲ +'+delta+unit:delta<0?'▼ '+Math.abs(delta)+unit:'— flat';
   return `<div class="card" style="padding:14px 15px;margin:0 0 12px">
-    <div class="row-between" style="margin-bottom:9px"><span class="eyebrow">Progress · est. 1RM</span>
-      <span class="mono" style="font-weight:700;color:${col}">${vals[vals.length-1]}${U()} <span style="font-size:12px">${arrow}</span></span></div>
+    <div class="row-between" style="margin-bottom:9px"><span class="eyebrow">${label}</span>
+      <span class="mono" style="font-weight:700;color:${col}">${vals[vals.length-1]}${unit} <span style="font-size:12px">${arrow}</span></span></div>
     <svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" preserveAspectRatio="none" style="display:block;overflow:visible">
       <path d="${d}" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
       <circle cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="3.5" fill="${adjusted?'var(--ink-3)':'var(--accent)'}"/></svg>

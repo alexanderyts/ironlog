@@ -103,10 +103,22 @@ function lastPerf(sessions,exId,opts){
   }
   return null;
 }
-// Every performance of an exercise (optionally one modality), oldest→newest, for a progress trend:
-// the best working set of each real (non-deload) session, as estimated 1RM. opts: {mode, bw, limit}
+// The comparable "score" of a set, where HIGHER IS ALWAYS BETTER regardless of lift type — so a trend
+// line, a stall check, or "lifts trending up" can compare sessions without special-casing at each call
+// site. Assist machines (INVERTED_LOAD): effective resistance = bodyweight − assist (needs bw; 0 until
+// set). Time-held lifts (TIME_METRIC): seconds held. Everything else: estimated 1RM.
+function setScore(exId,st,bw){
+  const w=+st.w||0,r=+st.r||0;
+  if(INVERTED_LOAD&&INVERTED_LOAD.has(exId))return Math.max(0,(+bw||0)-w);
+  if(TIME_METRIC&&TIME_METRIC.has(exId))return r;
+  return e1rm(setLoad(exId,w,bw),r);
+}
+function scoreMetric(exId){return (INVERTED_LOAD&&INVERTED_LOAD.has(exId))?'resist':(TIME_METRIC&&TIME_METRIC.has(exId))?'time':'e1rm';}
+// Every performance of an exercise (optionally one modality), oldest→newest, for a progress trend. The
+// y-value is setScore (e1RM for normal lifts, effective resistance for assist machines, seconds for
+// holds), so the line always rises with real progress. opts: {mode, bw, limit}
 function exerciseSeries(sessions,exId,opts){
-  opts=opts||{};const bw=opts.bw||0,out=[];
+  opts=opts||{};const bw=opts.bw||0,out=[],metric=scoreMetric(exId);
   for(const s of real(sessions)){
     const e=s.exercises.find(x=>x.id===exId&&(!opts.mode||modeOf(x)===opts.mode));
     if(!e)continue;
@@ -114,12 +126,15 @@ function exerciseSeries(sessions,exId,opts){
     // has disowned reads as their level, and every honest session after it looks like a decline. But
     // the point is never DROPPED: if that session has no clean set at all it still plots, flagged, so
     // the history stays visible. `adj` tells the view to mark the point "PR adjusted".
-    let best=0,w=0,r=0,ncBest=0,ncW=0,ncR=0;
-    e.sets.forEach(st=>{if(!isWorking(st))return;const est=e1rm(setLoad(exId,st.w,bw),+st.r||0);
-      if(st.nc){if(est>ncBest){ncBest=est;ncW=+st.w||0;ncR=+st.r||0;}return;}
-      if(est>best){best=est;w=+st.w||0;r=+st.r||0;}});
-    if(best>0)out.push({date:s.date,est:best,w,r,adj:ncBest>best||undefined});
-    else if(ncBest>0)out.push({date:s.date,est:ncBest,w:ncW,r:ncR,adj:true});
+    let best=-1,w=0,r=0,ncBest=-1,ncW=0,ncR=0;   // -1 so a legitimate score of 0 (e.g. assist == bodyweight) still plots
+    e.sets.forEach(st=>{if(!isWorking(st))return;
+      const r0=+st.r||0,load=setLoad(exId,st.w,bw);
+      if(!r0||(!load&&metric!=='time'))return;   // same "real set" gate as personalRecords — junk (0-rep / no-load non-time) sets don't plot
+      const sc=setScore(exId,st,bw);
+      if(st.nc){if(sc>ncBest){ncBest=sc;ncW=+st.w||0;ncR=+st.r||0;}return;}
+      if(sc>best){best=sc;w=+st.w||0;r=+st.r||0;}});
+    if(best>=0)out.push({date:s.date,est:best,w,r,metric,adj:ncBest>best||undefined});
+    else if(ncBest>=0)out.push({date:s.date,est:ncBest,w:ncW,r:ncR,metric,adj:true});
   }
   out.sort((a,b)=>a.date-b.date);
   return opts.limit?out.slice(-opts.limit):out;
@@ -341,5 +356,5 @@ function calcStreak(sessions,now){
   return n;
 }
 
-IL.prog={DAY,startOfDay,e1rm,isWorking,setLoad,sessionVolume,sessionSets,sessionDuration,MAX_SESSION_MIN,setTimeline,lastSetAt,staleness,STALE_AFTER_MIN,LONG_SESSION_MIN,STALE_CONFIRM_MIN,END_PAD_MIN,finalizeSets,parseWeightInput,fmtVol,modeOf,real,lastPerf,lastModeFor,exerciseSeries,bestE1rmBefore,setPattern,fmtPerf,repRange,nextSets,deloadSets,suggestion,unitIncrement,convertWeight,convertSessions,calcStreak,weekIndex,weekStart};
+IL.prog={DAY,startOfDay,e1rm,isWorking,setLoad,sessionVolume,sessionSets,sessionDuration,MAX_SESSION_MIN,setTimeline,lastSetAt,staleness,STALE_AFTER_MIN,LONG_SESSION_MIN,STALE_CONFIRM_MIN,END_PAD_MIN,finalizeSets,parseWeightInput,fmtVol,modeOf,real,lastPerf,lastModeFor,exerciseSeries,setScore,scoreMetric,bestE1rmBefore,setPattern,fmtPerf,repRange,nextSets,deloadSets,suggestion,unitIncrement,convertWeight,convertSessions,calcStreak,weekIndex,weekStart};
 if(typeof module!=='undefined')module.exports=IL.prog;

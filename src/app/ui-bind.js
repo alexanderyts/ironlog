@@ -495,12 +495,14 @@ function stopRest(){clearInterval(restInt);restInt=null;restState=null;const b=$
 // Shares the rest-bar chassis and is mutually exclusive with it (same screen slot). Clock-driven off
 // Date.now(), never a tick count, so locking the phone mid-hold doesn't lose time. State is in-memory
 // and session-scoped like the rest timer — nothing to persist.
-let swState=null,swInt=null;   // {ei, phase:'count'|'run', end (countdown) / start (elapsed)}
+let swState=null,swInt=null;   // {ex, phase:'count'|'run', end (countdown) / start (elapsed)}
 function stopSw(){clearInterval(swInt);swInt=null;swState=null;const b=$('#swbar');if(b)b.classList.remove('on','run');}
 function startStopwatch(ei){
   const t=cur();if(!t||!t.exercises[ei]||todayScreen!=='active')return;
   stopRest();unlockAudio();   // the two bars can't share the slot; drop any running rest first
-  swState={ei,phase:'count',end:Date.now()+5000};   // 5s to get into position
+  // Capture the exercise OBJECT, not its index — the list can be deleted/reordered while the timer runs,
+  // and an index would then point at a different lift (or off the end). The object ref survives both.
+  swState={ex:t.exercises[ei],phase:'count',end:Date.now()+5000};   // 5s to get into position
   const b=$('#swbar');if(b){b.classList.add('on');b.classList.remove('run');}
   clearInterval(swInt);swInt=setInterval(tickSw,100);tickSw();
 }
@@ -520,10 +522,12 @@ function tickSw(){
 function finishStopwatch(){
   if(!swState){stopSw();return;}
   if(swState.phase!=='run'){stopSw();toast('Stopwatch cancelled');return;}
-  const t=cur(),ei=swState.ei,secs=Math.max(1,Math.round((Date.now()-swState.start)/1000));
+  const t=cur(),ex=swState.ex,secs=Math.max(1,Math.round((Date.now()-swState.start)/1000));
   stopSw();
-  if(!t||!t.exercises[ei])return;
-  const sets=t.exercises[ei].sets;let st=sets.find(s=>!s.done);
+  // Resolve the exercise by identity, not index — if it was deleted mid-hold, say so instead of writing
+  // the time onto whatever now sits at that index.
+  if(!t||!ex||t.exercises.indexOf(ex)<0){toast('That exercise was removed — hold not logged');return;}
+  const sets=ex.sets;let st=sets.find(s=>!s.done&&!s.warm);   // next unticked WORKING set (skip warm-ups)
   if(!st){st={w:sets.length?sets[sets.length-1].w:'',r:'',done:false};sets.push(st);}
   st.r=secs;st.done=true;if(!(+st.at>0))st.at=Date.now();
   persistCur();render();toast('Logged '+secs+'s');

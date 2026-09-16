@@ -3,7 +3,7 @@ var IL=globalThis.IL||(globalThis.IL={});
 if(typeof require==='function'&&!IL.data)require('../data/exercises.js');
 if(typeof require==='function'&&!IL.prog)require('./progression.js');
 const {EX,EXERCISES,REGIONS,IDEAL_PATS,LOWER_GROUPS,MODES,INVERTED_LOAD,TIME_METRIC,regLabel,patLabel,exampleFor,hashId}=IL.data;
-const {DAY,startOfDay,e1rm,isWorking,setLoad,sessionVolume,sessionSets,sessionDuration,setTimeline,modeOf,calcStreak,real,weekIndex,weekStart,lastPerf}=IL.prog;
+const {DAY,startOfDay,e1rm,isWorking,setLoad,setScore,sessionVolume,sessionSets,sessionDuration,setTimeline,modeOf,calcStreak,real,weekIndex,weekStart,lastPerf}=IL.prog;
 
 // completed() INCLUDES deloads on purpose — volume/frequency/PR-window analysis wants everything the
 // user actually did. Progression-only scans use real() (completed AND not a deload) instead.
@@ -44,12 +44,14 @@ function analyze(sessions,now){
   const readyForComparative=done.length>=MIN_COMPARATIVE_SESSIONS&&daySpan>=MIN_COMPARATIVE_DAYS;
   return {sessions:done.length,daySpan,readyForComparative,totalSets,groupSets,effSets,perWeek,groupFreq,push,pull,upperSets,lowerSets,regSeen,patSeen,weeks};
 }
-// How many tracked lifts trend up in estimated 1RM over the last 4 weeks
+// How many tracked lifts are improving over the last 4 weeks. Uses setScore (higher = better for every
+// lift type), so an assist machine losing assist and a plank held longer both read as UP, not down, and
+// a disowned (nc) fluke set can't manufacture progress.
 function progressionStat(sessions,now,bw){
   now=now||Date.now();
   const done=real(sessions).filter(s=>s.date>=now-28*DAY&&s.date<now).sort((x,y)=>x.date-y.date);
   const byEx={};
-  done.forEach(s=>s.exercises.forEach(e=>{const best=Math.max(0,...e.sets.filter(isWorking).map(st=>e1rm(setLoad(e.id,st.w,bw),+st.r||0)));if(best)(byEx[e.id]=byEx[e.id]||[]).push(best);}));
+  done.forEach(s=>s.exercises.forEach(e=>{const best=Math.max(0,...e.sets.filter(st=>!st.nc&&isWorking(st)).map(st=>setScore(e.id,st,bw)));if(best)(byEx[e.id]=byEx[e.id]||[]).push(best);}));
   let n=0,up=0;Object.values(byEx).forEach(arr=>{if(arr.length>=2){n++;if(arr[arr.length-1]>arr[0])up++;}});
   return {n,up};
 }
@@ -317,11 +319,15 @@ function personalRecords(sessions,bw,limit){
   const best={},set_aside={};
   // Ranking rule for a key, shared by the live best and the set-aside best so they can't drift apart
   const beats=(c,b,inverted,time)=>inverted?(!b||c.load<b.load):time?(!b||c.load>b.load||(c.load===b.load&&c.r>b.r)):(!b||c.est>b.est);
-  real(sessions).forEach(s=>{s.exercises.forEach(e=>{const mode=modeOf(e);e.sets.forEach(st=>{
-    if(!isWorking(st))return;const w=setLoad(e.id,st.w,bw),r=+st.r||0;if(!w||!r)return;
-    const est=e1rm(w,r);const ex=EX[e.id];const key=e.id+':'+mode;
+  real(sessions).forEach(s=>{s.exercises.forEach(e=>{const mode=modeOf(e),key=e.id+':'+mode,ex=EX[e.id];
     const inverted=!!(ex&&INVERTED_LOAD&&INVERTED_LOAD.has(e.id));   // assist machine: the PR is the LEAST assist, and no 1RM estimate (#16)
-    const time=!!(TIME_METRIC&&TIME_METRIC.has(e.id));   // time-held: "reps" are seconds → no 1RM; best = heaviest, then longest
+    const time=!!(TIME_METRIC&&TIME_METRIC.has(e.id));   // time-held: "reps" are seconds → no 1RM; best = longest, then heaviest
+    e.sets.forEach(st=>{
+    if(!isWorking(st))return;const w=setLoad(e.id,st.w,bw),r=+st.r||0;
+    // A time-held lift is a real record at load 0 (a bodyweight plank) — rank it by seconds. Everything
+    // else still needs a real load, so a pull-up with no bodyweight set stays out (analysis.test.js:112).
+    if(!r||(!w&&!time))return;
+    const est=e1rm(w,r);
     const cand={w:+st.w||0,load:w,r,est,date:s.date};
     // "Doesn't count as a record" (#PR-adjust): the user has disowned this rep, so it can never BE the
     // PR — but it is remembered here so the row can show what was set aside. The set itself is

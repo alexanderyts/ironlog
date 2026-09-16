@@ -63,3 +63,47 @@ test('UI: tapping ⏱ opens the stopwatch bar in its countdown, mutually exclusi
     assert.ok(!h.$('#restbar').classList.contains('on'),'the rest bar is not up at the same time');
   }finally{h.teardown();}
 });
+
+/* ---- U1 + U4: stopwatch targets the right exercise by identity, and skips warm-up sets ----
+   These drive the REAL countdown (jsdom timers run in real time), so they wait ~6s each. */
+function startBlank(h,ids){
+  h.click('[data-action="startFlow"]');h.click('[data-action="blank"]');
+  ids.forEach(id=>{h.click('#btnAddEx');h.click(h.$$('#addResults [data-quickadd]').find(x=>x.dataset.quickadd===id));});
+}
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+
+test('U1: deleting an exercise mid-hold logs the seconds to the ORIGINAL lift, not the wrong one',async()=>{
+  const h=launch();
+  try{
+    startBlank(h,['barbell-bench-press','overhead-press','plank']);
+    const plankCard=h.$$('#view .log-ex').find(c=>/Plank/.test(c.textContent));
+    plankCard.querySelector('[data-stopwatch]').dispatchEvent(new h.win.MouseEvent('click',{bubbles:true}));
+    await sleep(5500);   // past the 5s countdown, into the hold
+    // delete Bench (index 0) — plank shifts from index 2 to 1
+    const benchDel=h.$$('#view .log-ex').find(c=>/Bench/.test(c.textContent)).querySelector('[data-delex]');
+    benchDel.dispatchEvent(new h.win.MouseEvent('click',{bubbles:true}));
+    await sleep(400);
+    h.click('#swStop');
+    const plank=h.state.active.exercises.find(e=>e.id==='plank');
+    const ohp=h.state.active.exercises.find(e=>e.id==='overhead-press');
+    const plankDone=plank.sets.find(s=>s.done&&+s.r>0);
+    assert.ok(plankDone,'the plank got the logged seconds');
+    assert.ok(!ohp.sets.some(s=>s.done),'the OHP (which shifted into the old index) did NOT');
+  }finally{h.teardown();}
+});
+
+test('U4: the hold is written to the first WORKING set, skipping a leading warm-up',async()=>{
+  const h=launch();
+  try{
+    startBlank(h,['plank']);
+    // mark set 1 a warm-up
+    const warmBtn=h.$('#view [data-warm]');warmBtn.dispatchEvent(new h.win.MouseEvent('click',{bubbles:true}));
+    h.$('#view [data-stopwatch]').dispatchEvent(new h.win.MouseEvent('click',{bubbles:true}));
+    await sleep(5500);
+    h.click('#swStop');
+    const plank=h.state.active.exercises.find(e=>e.id==='plank');
+    assert.ok(plank.sets[0].warm,'set 1 stayed a warm-up');
+    assert.ok(!(plank.sets[0].done&&+plank.sets[0].r>0),'the hold did NOT land in the warm-up set');
+    assert.ok(plank.sets.some((s,i)=>i>0&&s.done&&+s.r>0),'it landed in a working set');
+  }finally{h.teardown();}
+});

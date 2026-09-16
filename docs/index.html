@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-LUlbvgP5jpYoh8pyCw1onJHWx0EXKhp+FB5xESdFJyM=' 'sha256-WPBob/luB2k1aalTWXpi6zk3SrIbj8GlZV7AlFdG7oA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-Bw8oP5pLxQ8R/LnyAH5+73yAtOo1gw551eft7mXhKSo=' 'sha256-WPBob/luB2k1aalTWXpi6zk3SrIbj8GlZV7AlFdG7oA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Ironlog</title>
@@ -424,8 +424,8 @@ html.kb-open .tabbar{display:none}
 </div>
 
 <script>
-/* Ironlog v0.51.0 · site build */
-var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.51.0",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
+/* Ironlog v0.52.0 · site build */
+var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.52.0",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
 
 /* ===== src/data/exercises.js ===== */
 (function(){'use strict';
@@ -817,10 +817,22 @@ function lastPerf(sessions,exId,opts){
   }
   return null;
 }
-// Every performance of an exercise (optionally one modality), oldest→newest, for a progress trend:
-// the best working set of each real (non-deload) session, as estimated 1RM. opts: {mode, bw, limit}
+// The comparable "score" of a set, where HIGHER IS ALWAYS BETTER regardless of lift type — so a trend
+// line, a stall check, or "lifts trending up" can compare sessions without special-casing at each call
+// site. Assist machines (INVERTED_LOAD): effective resistance = bodyweight − assist (needs bw; 0 until
+// set). Time-held lifts (TIME_METRIC): seconds held. Everything else: estimated 1RM.
+function setScore(exId,st,bw){
+  const w=+st.w||0,r=+st.r||0;
+  if(INVERTED_LOAD&&INVERTED_LOAD.has(exId))return Math.max(0,(+bw||0)-w);
+  if(TIME_METRIC&&TIME_METRIC.has(exId))return r;
+  return e1rm(setLoad(exId,w,bw),r);
+}
+function scoreMetric(exId){return (INVERTED_LOAD&&INVERTED_LOAD.has(exId))?'resist':(TIME_METRIC&&TIME_METRIC.has(exId))?'time':'e1rm';}
+// Every performance of an exercise (optionally one modality), oldest→newest, for a progress trend. The
+// y-value is setScore (e1RM for normal lifts, effective resistance for assist machines, seconds for
+// holds), so the line always rises with real progress. opts: {mode, bw, limit}
 function exerciseSeries(sessions,exId,opts){
-  opts=opts||{};const bw=opts.bw||0,out=[];
+  opts=opts||{};const bw=opts.bw||0,out=[],metric=scoreMetric(exId);
   for(const s of real(sessions)){
     const e=s.exercises.find(x=>x.id===exId&&(!opts.mode||modeOf(x)===opts.mode));
     if(!e)continue;
@@ -828,12 +840,15 @@ function exerciseSeries(sessions,exId,opts){
     // has disowned reads as their level, and every honest session after it looks like a decline. But
     // the point is never DROPPED: if that session has no clean set at all it still plots, flagged, so
     // the history stays visible. `adj` tells the view to mark the point "PR adjusted".
-    let best=0,w=0,r=0,ncBest=0,ncW=0,ncR=0;
-    e.sets.forEach(st=>{if(!isWorking(st))return;const est=e1rm(setLoad(exId,st.w,bw),+st.r||0);
-      if(st.nc){if(est>ncBest){ncBest=est;ncW=+st.w||0;ncR=+st.r||0;}return;}
-      if(est>best){best=est;w=+st.w||0;r=+st.r||0;}});
-    if(best>0)out.push({date:s.date,est:best,w,r,adj:ncBest>best||undefined});
-    else if(ncBest>0)out.push({date:s.date,est:ncBest,w:ncW,r:ncR,adj:true});
+    let best=-1,w=0,r=0,ncBest=-1,ncW=0,ncR=0;   // -1 so a legitimate score of 0 (e.g. assist == bodyweight) still plots
+    e.sets.forEach(st=>{if(!isWorking(st))return;
+      const r0=+st.r||0,load=setLoad(exId,st.w,bw);
+      if(!r0||(!load&&metric!=='time'))return;   // same "real set" gate as personalRecords — junk (0-rep / no-load non-time) sets don't plot
+      const sc=setScore(exId,st,bw);
+      if(st.nc){if(sc>ncBest){ncBest=sc;ncW=+st.w||0;ncR=+st.r||0;}return;}
+      if(sc>best){best=sc;w=+st.w||0;r=+st.r||0;}});
+    if(best>=0)out.push({date:s.date,est:best,w,r,metric,adj:ncBest>best||undefined});
+    else if(ncBest>=0)out.push({date:s.date,est:ncBest,w:ncW,r:ncR,metric,adj:true});
   }
   out.sort((a,b)=>a.date-b.date);
   return opts.limit?out.slice(-opts.limit):out;
@@ -1055,7 +1070,7 @@ function calcStreak(sessions,now){
   return n;
 }
 
-IL.prog={DAY,startOfDay,e1rm,isWorking,setLoad,sessionVolume,sessionSets,sessionDuration,MAX_SESSION_MIN,setTimeline,lastSetAt,staleness,STALE_AFTER_MIN,LONG_SESSION_MIN,STALE_CONFIRM_MIN,END_PAD_MIN,finalizeSets,parseWeightInput,fmtVol,modeOf,real,lastPerf,lastModeFor,exerciseSeries,bestE1rmBefore,setPattern,fmtPerf,repRange,nextSets,deloadSets,suggestion,unitIncrement,convertWeight,convertSessions,calcStreak,weekIndex,weekStart};
+IL.prog={DAY,startOfDay,e1rm,isWorking,setLoad,sessionVolume,sessionSets,sessionDuration,MAX_SESSION_MIN,setTimeline,lastSetAt,staleness,STALE_AFTER_MIN,LONG_SESSION_MIN,STALE_CONFIRM_MIN,END_PAD_MIN,finalizeSets,parseWeightInput,fmtVol,modeOf,real,lastPerf,lastModeFor,exerciseSeries,setScore,scoreMetric,bestE1rmBefore,setPattern,fmtPerf,repRange,nextSets,deloadSets,suggestion,unitIncrement,convertWeight,convertSessions,calcStreak,weekIndex,weekStart};
 if(typeof module!=='undefined')module.exports=IL.prog;
 
 })();
@@ -1097,7 +1112,7 @@ if(typeof module!=='undefined')module.exports=IL.search;
 var IL=globalThis.IL||(globalThis.IL={});
 if(typeof require==='function'&&!IL.data)require('../data/exercises.js');
 if(typeof require==='function'&&!IL.prog)require('./progression.js');
-const {C,I,EXERCISES,EX,REGIONS,IDEAL_PATS,PAT_RANK,EQUIP_LOAD,LONG_LENGTH,regLabel,patLabel,hashId}=IL.data;
+const {C,I,EXERCISES,EX,REGIONS,IDEAL_PATS,PAT_RANK,EQUIP_LOAD,LONG_LENGTH,INVERTED_LOAD,TIME_METRIC,regLabel,patLabel,hashId}=IL.data;
 const {lastPerf,lastModeFor,nextSets,deloadSets,repRange,modeOf,real,DAY,unitIncrement}=IL.prog;
 
 // Working sets a movement deserves when you've never logged it: main lifts 4, other compounds 3,
@@ -1397,12 +1412,18 @@ function exerciseStreak(sessions,exId){return exerciseTenure(sessions,exId).sess
 // Mode-scoped so alternating equipment doesn't produce a meaningless sequence.
 function recentPerfs(sessions,exId,opts){
   opts=opts||{};const n=opts.n||3,out=[];let before;
+  // Every axis below is normalized so HIGHER = BETTER, letting isStalled's comparisons stay direction-
+  // agnostic across lift types. Assist machines: less assist is better, so top/score = −(least assist).
+  // Time-held lifts: longer is better, so top/score = seconds. Everything else: heaviest weight / e1RM.
+  const inv=INVERTED_LOAD&&INVERTED_LOAD.has(exId), time=TIME_METRIC&&TIME_METRIC.has(exId);
   for(let i=0;i<n;i++){
     const lp=lastPerf(sessions,exId,{beforeTs:before,mode:opts.mode,clean:true});if(!lp)break;   // a disowned set is not evidence of progress OR of a stall
     if(opts.since&&lp.date<opts.since)break;
-    const top=Math.max(...lp.sets.map(s=>+s.w||0));
-    const topR=Math.max(...lp.sets.filter(s=>(+s.w||0)===top).map(s=>+s.r||0));   // reps at the top weight — for double-progression detection
-    out.push({date:lp.date,score:Math.max(...lp.sets.map(s=>s.w>0?e1rm(s.w,s.r):s.r)),top,topR});
+    let top,topR,score;
+    if(inv){const minA=Math.min(...lp.sets.map(s=>+s.w||0));top=-minA;score=-minA;topR=Math.max(...lp.sets.filter(s=>(+s.w||0)===minA).map(s=>+s.r||0));}
+    else if(time){const maxS=Math.max(...lp.sets.map(s=>+s.r||0));top=maxS;score=maxS;topR=maxS;}
+    else{top=Math.max(...lp.sets.map(s=>+s.w||0));topR=Math.max(...lp.sets.filter(s=>(+s.w||0)===top).map(s=>+s.r||0));score=Math.max(...lp.sets.map(s=>s.w>0?e1rm(s.w,s.r):s.r));}
+    out.push({date:lp.date,score,top,topR});
     before=lp.date;
   }
   return out;
@@ -1555,7 +1576,7 @@ var IL=globalThis.IL||(globalThis.IL={});
 if(typeof require==='function'&&!IL.data)require('../data/exercises.js');
 if(typeof require==='function'&&!IL.prog)require('./progression.js');
 const {EX,EXERCISES,REGIONS,IDEAL_PATS,LOWER_GROUPS,MODES,INVERTED_LOAD,TIME_METRIC,regLabel,patLabel,exampleFor,hashId}=IL.data;
-const {DAY,startOfDay,e1rm,isWorking,setLoad,sessionVolume,sessionSets,sessionDuration,setTimeline,modeOf,calcStreak,real,weekIndex,weekStart,lastPerf}=IL.prog;
+const {DAY,startOfDay,e1rm,isWorking,setLoad,setScore,sessionVolume,sessionSets,sessionDuration,setTimeline,modeOf,calcStreak,real,weekIndex,weekStart,lastPerf}=IL.prog;
 
 // completed() INCLUDES deloads on purpose — volume/frequency/PR-window analysis wants everything the
 // user actually did. Progression-only scans use real() (completed AND not a deload) instead.
@@ -1596,12 +1617,14 @@ function analyze(sessions,now){
   const readyForComparative=done.length>=MIN_COMPARATIVE_SESSIONS&&daySpan>=MIN_COMPARATIVE_DAYS;
   return {sessions:done.length,daySpan,readyForComparative,totalSets,groupSets,effSets,perWeek,groupFreq,push,pull,upperSets,lowerSets,regSeen,patSeen,weeks};
 }
-// How many tracked lifts trend up in estimated 1RM over the last 4 weeks
+// How many tracked lifts are improving over the last 4 weeks. Uses setScore (higher = better for every
+// lift type), so an assist machine losing assist and a plank held longer both read as UP, not down, and
+// a disowned (nc) fluke set can't manufacture progress.
 function progressionStat(sessions,now,bw){
   now=now||Date.now();
   const done=real(sessions).filter(s=>s.date>=now-28*DAY&&s.date<now).sort((x,y)=>x.date-y.date);
   const byEx={};
-  done.forEach(s=>s.exercises.forEach(e=>{const best=Math.max(0,...e.sets.filter(isWorking).map(st=>e1rm(setLoad(e.id,st.w,bw),+st.r||0)));if(best)(byEx[e.id]=byEx[e.id]||[]).push(best);}));
+  done.forEach(s=>s.exercises.forEach(e=>{const best=Math.max(0,...e.sets.filter(st=>!st.nc&&isWorking(st)).map(st=>setScore(e.id,st,bw)));if(best)(byEx[e.id]=byEx[e.id]||[]).push(best);}));
   let n=0,up=0;Object.values(byEx).forEach(arr=>{if(arr.length>=2){n++;if(arr[arr.length-1]>arr[0])up++;}});
   return {n,up};
 }
@@ -1869,11 +1892,15 @@ function personalRecords(sessions,bw,limit){
   const best={},set_aside={};
   // Ranking rule for a key, shared by the live best and the set-aside best so they can't drift apart
   const beats=(c,b,inverted,time)=>inverted?(!b||c.load<b.load):time?(!b||c.load>b.load||(c.load===b.load&&c.r>b.r)):(!b||c.est>b.est);
-  real(sessions).forEach(s=>{s.exercises.forEach(e=>{const mode=modeOf(e);e.sets.forEach(st=>{
-    if(!isWorking(st))return;const w=setLoad(e.id,st.w,bw),r=+st.r||0;if(!w||!r)return;
-    const est=e1rm(w,r);const ex=EX[e.id];const key=e.id+':'+mode;
+  real(sessions).forEach(s=>{s.exercises.forEach(e=>{const mode=modeOf(e),key=e.id+':'+mode,ex=EX[e.id];
     const inverted=!!(ex&&INVERTED_LOAD&&INVERTED_LOAD.has(e.id));   // assist machine: the PR is the LEAST assist, and no 1RM estimate (#16)
-    const time=!!(TIME_METRIC&&TIME_METRIC.has(e.id));   // time-held: "reps" are seconds → no 1RM; best = heaviest, then longest
+    const time=!!(TIME_METRIC&&TIME_METRIC.has(e.id));   // time-held: "reps" are seconds → no 1RM; best = longest, then heaviest
+    e.sets.forEach(st=>{
+    if(!isWorking(st))return;const w=setLoad(e.id,st.w,bw),r=+st.r||0;
+    // A time-held lift is a real record at load 0 (a bodyweight plank) — rank it by seconds. Everything
+    // else still needs a real load, so a pull-up with no bodyweight set stays out (analysis.test.js:112).
+    if(!r||(!w&&!time))return;
+    const est=e1rm(w,r);
     const cand={w:+st.w||0,load:w,r,est,date:s.date};
     // "Doesn't count as a record" (#PR-adjust): the user has disowned this rep, so it can never BE the
     // PR — but it is remembered here so the row can show what was set aside. The set itself is
@@ -3266,15 +3293,21 @@ function trendCard(id){
   const pts=series.map((p,i)=>[pad+(W-2*pad)*(series.length===1?0:i/(series.length-1)),pad+(H-2*pad)*(1-(p.est-min)/range)]);
   const d=pts.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1)).join(' ');
   const last=pts[pts.length-1],delta=Math.round(vals[vals.length-1]-vals[0]);
+  // The y-value's meaning depends on the lift: estimated 1RM for normal lifts, effective resistance
+  // (bodyweight − assist) for assist machines, seconds for time-held lifts — so the label and unit
+  // adapt, never printing "60 lb e1RM" for a plank.
+  const metric=series[0].metric||'e1rm';
+  const unit=metric==='time'?'s':U();
+  const label=metric==='time'?'Progress · hold':metric==='resist'?'Progress · resistance':'Progress · est. 1RM';
   // A dip caused by the user setting their own record aside is not a decline, and must not be painted
   // like one. When the latest point is adjusted, the delta goes neutral and says why — that is the
   // whole point of the flag: going lighter on purpose should never read as losing ground.
   const adjusted=!!series[series.length-1].adj, anyAdj=series.some(p=>p.adj);
   const col=adjusted?'var(--ink-3)':delta>0?'var(--good)':delta<0?'var(--warn)':'var(--ink-3)';
-  const arrow=delta>0?'▲ +'+delta:delta<0?'▼ '+Math.abs(delta):'— flat';
+  const arrow=delta>0?'▲ +'+delta+unit:delta<0?'▼ '+Math.abs(delta)+unit:'— flat';
   return `<div class="card" style="padding:14px 15px;margin:0 0 12px">
-    <div class="row-between" style="margin-bottom:9px"><span class="eyebrow">Progress · est. 1RM</span>
-      <span class="mono" style="font-weight:700;color:${col}">${vals[vals.length-1]}${U()} <span style="font-size:12px">${arrow}</span></span></div>
+    <div class="row-between" style="margin-bottom:9px"><span class="eyebrow">${label}</span>
+      <span class="mono" style="font-weight:700;color:${col}">${vals[vals.length-1]}${unit} <span style="font-size:12px">${arrow}</span></span></div>
     <svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" preserveAspectRatio="none" style="display:block;overflow:visible">
       <path d="${d}" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
       <circle cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="3.5" fill="${adjusted?'var(--ink-3)':'var(--accent)'}"/></svg>
@@ -4137,12 +4170,14 @@ function stopRest(){clearInterval(restInt);restInt=null;restState=null;const b=$
 // Shares the rest-bar chassis and is mutually exclusive with it (same screen slot). Clock-driven off
 // Date.now(), never a tick count, so locking the phone mid-hold doesn't lose time. State is in-memory
 // and session-scoped like the rest timer — nothing to persist.
-let swState=null,swInt=null;   // {ei, phase:'count'|'run', end (countdown) / start (elapsed)}
+let swState=null,swInt=null;   // {ex, phase:'count'|'run', end (countdown) / start (elapsed)}
 function stopSw(){clearInterval(swInt);swInt=null;swState=null;const b=$('#swbar');if(b)b.classList.remove('on','run');}
 function startStopwatch(ei){
   const t=cur();if(!t||!t.exercises[ei]||todayScreen!=='active')return;
   stopRest();unlockAudio();   // the two bars can't share the slot; drop any running rest first
-  swState={ei,phase:'count',end:Date.now()+5000};   // 5s to get into position
+  // Capture the exercise OBJECT, not its index — the list can be deleted/reordered while the timer runs,
+  // and an index would then point at a different lift (or off the end). The object ref survives both.
+  swState={ex:t.exercises[ei],phase:'count',end:Date.now()+5000};   // 5s to get into position
   const b=$('#swbar');if(b){b.classList.add('on');b.classList.remove('run');}
   clearInterval(swInt);swInt=setInterval(tickSw,100);tickSw();
 }
@@ -4162,10 +4197,12 @@ function tickSw(){
 function finishStopwatch(){
   if(!swState){stopSw();return;}
   if(swState.phase!=='run'){stopSw();toast('Stopwatch cancelled');return;}
-  const t=cur(),ei=swState.ei,secs=Math.max(1,Math.round((Date.now()-swState.start)/1000));
+  const t=cur(),ex=swState.ex,secs=Math.max(1,Math.round((Date.now()-swState.start)/1000));
   stopSw();
-  if(!t||!t.exercises[ei])return;
-  const sets=t.exercises[ei].sets;let st=sets.find(s=>!s.done);
+  // Resolve the exercise by identity, not index — if it was deleted mid-hold, say so instead of writing
+  // the time onto whatever now sits at that index.
+  if(!t||!ex||t.exercises.indexOf(ex)<0){toast('That exercise was removed — hold not logged');return;}
+  const sets=ex.sets;let st=sets.find(s=>!s.done&&!s.warm);   // next unticked WORKING set (skip warm-ups)
   if(!st){st={w:sets.length?sets[sets.length-1].w:'',r:'',done:false};sets.push(st);}
   st.r=secs;st.done=true;if(!(+st.at>0))st.at=Date.now();
   persistCur();render();toast('Logged '+secs+'s');
