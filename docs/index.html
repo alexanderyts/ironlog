@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-sJnjYcBSIIjk8iUUjKkoymBc3ELJV+FXwRMBBRgHcvs=' 'sha256-WPBob/luB2k1aalTWXpi6zk3SrIbj8GlZV7AlFdG7oA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-OSopTkAFR3bHjeTeSLjskWsWtQQ3mdrLpXzLEeBTim8=' 'sha256-WPBob/luB2k1aalTWXpi6zk3SrIbj8GlZV7AlFdG7oA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Ironlog</title>
@@ -326,6 +326,9 @@ html.kb-open .tabbar{display:none}
 .restbar .inner{max-width:520px;margin:0 auto;padding:0 12px}
 .restbar .rcard{background:var(--ink);color:var(--bg);border-radius:14px;padding:9px 12px;display:flex;align-items:center;gap:11px;box-shadow:0 6px 24px rgba(0,0,0,.25)}
 .restbar.done .rcard{background:var(--good);color:#fff}
+/* stopwatch shares the rest-bar chassis (position/inner/rcard/buttons); only the colour differs so it
+   can't be mistaken for the rest timer. Dark while counting down, accent once the hold is running. */
+.swbar.run .rcard{background:var(--accent);color:var(--accent-ink)}
 .rest-time{font-family:var(--font-mono);font-weight:600;font-size:19px;min-width:52px}
 .rest-lbl{font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;opacity:.7;margin-bottom:1px}
 .rest-prog{flex:1;height:6px;background:rgba(255,255,255,.22);border-radius:3px;overflow:hidden}
@@ -384,6 +387,13 @@ html.kb-open .tabbar{display:none}
   <button class="rest-btn" id="restSkip">Skip</button>
 </div></div></div>
 
+<div class="restbar swbar" id="swbar"><div class="inner"><div class="rcard">
+  <div><div class="rest-lbl" id="swLbl">Get set</div><span class="rest-time" id="swTime">5</span></div>
+  <div style="flex:1"></div>
+  <button class="rest-btn" id="swStop">Stop &amp; log</button>
+  <button class="rest-btn" id="swCancel">Cancel</button>
+</div></div></div>
+
 <nav class="tabbar">
   <div class="row">
     <button class="tab" data-tab="today">
@@ -412,8 +422,8 @@ html.kb-open .tabbar{display:none}
 </div>
 
 <script>
-/* Ironlog v0.49.2 · site build */
-var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.49.2",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
+/* Ironlog v0.50.0 · site build */
+var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.50.0",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
 
 /* ===== src/data/exercises.js ===== */
 (function(){'use strict';
@@ -564,7 +574,13 @@ const RAW=[
  ["ab-crunch-machine","Ab Crunch Machine","Core",["Core"],"Machine",I,[12,20],"Curl the torso forward against the resistance, squeeze the abs, control up.","ab machine,crunch machine,abdominal machine"],
  ["torso-rotation-machine","Torso Rotation Machine","Core",["Core"],"Machine",I,[12,15],"Rotate the torso against the pad through a controlled range; log per side.","rotary torso,twist machine,oblique machine"],
  ["machine-back-extension","Machine Back Extension","Hamstrings",["Hamstrings","Glutes","Back"],"Machine",I,[12,20],"Push the pad back by extending the hips and lower back, control forward.","lower back machine,back extension machine,lumbar extension"],
- ["cable-wrist-curl","Cable Wrist Curl","Forearms",["Forearms"],"Cable",I,[12,20],"Forearms braced, curl the low-pulley handle up with the wrists, lower fully for a stretch.","low pulley wrist curl,cable forearm curl"]
+ ["cable-wrist-curl","Cable Wrist Curl","Forearms",["Forearms"],"Cable",I,[12,20],"Forearms braced, curl the low-pulley handle up with the wrists, lower fully for a stretch.","low pulley wrist curl,cable forearm curl"],
+ // Time-held additions (v0.50.0) — the "reps" field is SECONDS; use the ⏱ stopwatch on the card or type it in.
+ ["dead-hang","Dead Hang","Forearms",["Forearms","Back"],"Bodyweight",I,[20,60],"Hang from a pull-up bar with a full grip and active shoulders; log seconds held.","bar hang,grip hang"],
+ ["wall-sit","Wall Sit","Quads",["Quads","Glutes"],"Bodyweight",I,[30,60],"Slide down a wall to a 90° knee bend and hold; log seconds held.","wall squat hold"],
+ ["side-plank","Side Plank","Core",["Core"],"Bodyweight",I,[20,45],"On one forearm, stack the hips and hold a straight line; log seconds per side.","side bridge"],
+ ["hollow-hold","Hollow Hold","Core",["Core"],"Bodyweight",I,[20,45],"On your back, press the low back down and lift shoulders and legs into a dish; log seconds held.","hollow body hold"],
+ ["suitcase-carry","Suitcase Carry","Forearms",["Forearms","Core"],"Dumbbell",C,[20,40],"Carry one heavy dumbbell at your side, resisting the lean; log seconds per side.","one arm carry,suitcase walk"]
 ];
 
 // [region/head, movement pattern, tier]. tier 1 = foundational lift (can anchor a session and should be
@@ -596,14 +612,16 @@ const META={
  // commercial-gym machines
  'assisted-pull-up':['lats','vpull',2],'assisted-dip':['lateral','hpush',2],'machine-lateral-raise':['side','iso',2],'machine-bicep-curl':['overall','iso',2],'machine-tricep-extension':['lateral','iso',2],
  'hip-adduction':['overall','iso',3],'glute-kickback-machine':['overall','iso',2],'machine-hip-thrust':['overall','hinge',2],
- 'ab-crunch-machine':['flexion','iso',2],'torso-rotation-machine':['rotation','iso',3],'machine-back-extension':['overall','hinge',2],'cable-wrist-curl':['flexor','iso',2]
+ 'ab-crunch-machine':['flexion','iso',2],'torso-rotation-machine':['rotation','iso',3],'machine-back-extension':['overall','hinge',2],'cable-wrist-curl':['flexor','iso',2],
+ // time-held additions (v0.50.0)
+ 'dead-hang':['grip','iso',3],'wall-sit':['overall','iso',3],'side-plank':['rotation','iso',3],'hollow-hold':['antiext','iso',3],'suitcase-carry':['grip','iso',3]
 };
 // Movements trained at a long muscle length (a strong hypertrophy driver) — the builder gives these a
 // small preference so a plan tends to include a stretch-biased option per muscle. Existing lifts that
 // already load the stretch are tagged here too.
 const LONG_LENGTH=new Set(['incline-dumbbell-fly','dumbbell-pullover','cable-pullover','bayesian-cable-curl','incline-dumbbell-curl','cable-overhead-extension','overhead-tricep-extension','leaning-cable-lateral','sissy-squat','romanian-deadlift','stiff-leg-deadlift','seated-leg-curl']);
 // Single-limb movements (for future per-side volume handling and to diversify rotation families).
-const UNILATERAL=new Set(['single-arm-cable-row','concentration-curl','single-arm-pushdown','reverse-lunge','single-leg-curl','single-leg-hip-thrust','single-leg-calf-raise','bulgarian-split-squat','walking-lunge','step-up','dumbbell-row','cable-kickback']);
+const UNILATERAL=new Set(['single-arm-cable-row','concentration-curl','single-arm-pushdown','reverse-lunge','single-leg-curl','single-leg-hip-thrust','single-leg-calf-raise','bulgarian-split-squat','walking-lunge','step-up','dumbbell-row','cable-kickback','side-plank','suitcase-carry']);
 // Assist machines where LESS weight is harder: progression REDUCES the load and a PR is the lowest
 // assist, not the highest (#16). The engine flips the increment and the PR ranking for these ids.
 const INVERTED_LOAD=new Set(['assisted-pull-up','assisted-dip']);
@@ -611,7 +629,7 @@ const INVERTED_LOAD=new Set(['assisted-pull-up','assisted-dip']);
 // 1RM estimate — a plank or a loaded carry is progressed by holding longer or adding load, and the
 // engine shows load × seconds. They still count as SETS for balance/frequency/coach. (farmers-carry
 // and plank already declare seconds in their target range and instructions; this makes the maths agree.)
-const TIME_METRIC=new Set(['plank','farmers-carry']);
+const TIME_METRIC=new Set(['plank','farmers-carry','dead-hang','wall-sit','side-plank','hollow-hold','suitcase-carry']);
 
 const EXERCISES=RAW.map(r=>{const m=META[r[0]]||['overall','iso',3];
   return {id:r[0],name:r[1],group:r[2],muscles:r[3],equip:r[4],type:r[5],rr:r[6],instr:r[7],alias:r[8],reg:m[0],pat:m[1],tier:m[2]||3};});
@@ -752,7 +770,7 @@ function finalizeSets(exercises){
     // or a weighted lift ticked with no weight (it would save as 0-volume and skew "last time"). An
     // unknown id is treated as bodyweight so a custom move isn't wrongly dropped.
     // Object.assign copies `at` (the check timestamp) through; only `t` (the transient touched flag) is stripped.
-    const ex=EX[e.id],allowBlank=!ex||ex.equip==='Bodyweight';
+    const ex=EX[e.id],allowBlank=!ex||ex.equip==='Bodyweight'||(TIME_METRIC&&TIME_METRIC.has(e.id));   // a time-held lift (plank/carry/hang) can be logged by seconds alone — load is optional
     const sets=e.sets.filter(st=>st.done===true&&(+st.r||0)>0&&(allowBlank||(+st.w||0)>0)).map(st=>{const o=Object.assign({},st);delete o.t;o.done=true;return o;});
     return Object.assign({},e,{sets});
   }).filter(e=>e.sets.length);
@@ -2958,6 +2976,7 @@ function logExercise(s,e,ei,mode){
     <div class="set-actions">
       <button class="linkbtn" data-addset="${ei}">＋ Add set</button>
       ${e.sets.length>1?`<button class="linkbtn" data-delset="${ei}">－ Remove set</button>`:''}
+      ${D.TIME_METRIC.has(e.id)&&todayScreen==='active'?`<button class="linkbtn" data-stopwatch="${ei}">⏱ Stopwatch</button>`:''}
       <button class="linkbtn dim" data-note="${ei}">✎ ${e.note?'Edit note':'Note'}</button>
       <a class="linkbtn dim" href="${demoURL(e.id)}" target="_blank" rel="noopener noreferrer" style="margin-left:auto;text-decoration:none">▶ Watch demo</a>
     </div>
@@ -3022,7 +3041,8 @@ function sessCard(s){
     <div class="sess-top"><div class="sess-date">${relDay(s.date)}${s.deload?' <span class="deload-badge">Deload</span>':''}</div><span class="pill accent">${s.exercises.length} exercise${s.exercises.length!==1?'s':''}</span></div>
     <div class="sess-meta"><span class="muted">Volume <b>${fmtVol(volOf(s))} ${U()}</b></span><span class="muted">Sets <b>${setsOf(s)}</b></span>${P.sessionDuration(s)!=null?`<span class="muted">${s.endEstimated?'≈':''}<b>${fmtDur(P.sessionDuration(s))}</b></span>`:''}</div>
     <div class="sess-ex">${s.exercises.slice(0,4).map(e=>{const best=e.sets.filter(P.isWorking);const top=best.length?Math.max(...best.map(x=>+x.w||0)):0;
-      return `<div><span>${esc(EX[e.id]?EX[e.id].name:e.name)}</span><span class="s">${best.length}×${best.length?best[0].r:0} · ${top}${U()}</span></div>`;}).join('')}
+      const tm=D.TIME_METRIC.has(e.id);   // seconds, not reps — and a bodyweight hold has no "· 0lb" to show
+      return `<div><span>${esc(EX[e.id]?EX[e.id].name:e.name)}</span><span class="s">${best.length}×${best.length?best[0].r+(tm?'s':''):0}${top?' · '+top+U():''}</span></div>`;}).join('')}
       ${s.exercises.length>4?`<div class="dim" style="font-size:12px">+${s.exercises.length-4} more</div>`:''}</div>
   </div>`;
 }
@@ -3703,7 +3723,7 @@ function chooseEndThenCommit(s){
 }
 // endedAt may be null ("don't record a length"): the session then has no duration anywhere it's read.
 function commitFinish(s,endedAt,estimated){
-  closeSheet();stopRest();stopElapsed();
+  closeSheet();stopRest();stopSw();stopElapsed();
   if(endedAt)s.endedAt=endedAt;else delete s.endedAt;
   if(estimated&&endedAt)s.endEstimated=true;else delete s.endEstimated;
   cleanSets(s);
@@ -3764,7 +3784,7 @@ function unmarkSets(id){
   toast('Counting it again');
 }
 function discardActive(){showConfirm('Discard workout?','Nothing from this session will be saved.','Discard',()=>{
-  stopRest();stopElapsed();const copy=state.active;state.active=null;S.persistActive();todayScreen='home';render();
+  stopRest();stopSw();stopElapsed();const copy=state.active;state.active=null;S.persistActive();todayScreen='home';render();
   toast('Workout discarded',{label:'Undo',fn:()=>{S.setActive(copy);todayScreen='active';render();}});});}
 
 /* ---------------- cardio finish / manual save ---------------- */
@@ -4023,8 +4043,9 @@ function bindLog(root){
     const chk=e.target.closest('[data-check]');if(chk){const ei=+chk.dataset.check,si=+chk.dataset.s;const st=t.exercises[ei].sets[si];
       if(!st.done){const cex=EX[t.exercises[ei].id];
         // Ticking a loaded lift with no weight would save a 0-volume "working" set and poison "last time".
-        // Point the user at the weight field instead of silently accepting it. Bodyweight moves are exempt.
-        if(cex&&cex.equip!=='Bodyweight'&&!(+st.w>0)){const wi=$(`input[data-f="w"][data-ei="${ei}"][data-s="${si}"]`);if(wi){wi.focus();if(wi.select)wi.select();}toast('Add a weight first');return;}}
+        // Point the user at the weight field instead of silently accepting it. Bodyweight moves are exempt,
+        // and so are time-held lifts (a carry can be logged by time alone; load is optional).
+        if(cex&&cex.equip!=='Bodyweight'&&!D.TIME_METRIC.has(cex.id)&&!(+st.w>0)){const wi=$(`input[data-f="w"][data-ei="${ei}"][data-s="${si}"]`);if(wi){wi.focus();if(wi.select)wi.select();}toast('Add a weight first');return;}}
       st.done=!st.done;
       // T1: stamp on completion, but keep an existing stamp on un-tick → re-tick (a mis-tap corrected
       // seconds later keeps its true time, instead of jumping to "now" and skewing the rest medians).
@@ -4034,6 +4055,7 @@ function bindLog(root){
     const step=e.target.closest('[data-step]');if(step){if(heldRepeat){heldRepeat=false;return;}   // the click after a hold is not one more step
       stepSet(+step.dataset.ei,+step.dataset.s,step.dataset.step,+step.dataset.d);return;}
     const add=e.target.closest('[data-addset]');if(add){const ei=+add.dataset.addset;const sets=t.exercises[ei].sets;const last=sets[sets.length-1]||{w:'',r:''};sets.push({w:last.w,r:last.r,done:false});persistCur();render();return;}
+    const sw=e.target.closest('[data-stopwatch]');if(sw){startStopwatch(+sw.dataset.stopwatch);return;}
     const rem=e.target.closest('[data-delset]');if(rem){const ei=+rem.dataset.delset;const sets=t.exercises[ei].sets;if(sets.length<=1)return;
       const idx=sets.length-1;
       const doRemove=()=>{const removed=sets.splice(idx,1)[0];persistCur();render();
@@ -4088,6 +4110,44 @@ function finishRest(){
 }
 function stopRest(){clearInterval(restInt);restInt=null;restState=null;const b=$('#restbar');b.classList.remove('on','done');}
 
+/* ---------------- stopwatch (time-held lifts: planks, carries, hangs) ---------------- */
+// Shares the rest-bar chassis and is mutually exclusive with it (same screen slot). Clock-driven off
+// Date.now(), never a tick count, so locking the phone mid-hold doesn't lose time. State is in-memory
+// and session-scoped like the rest timer — nothing to persist.
+let swState=null,swInt=null;   // {ei, phase:'count'|'run', end (countdown) / start (elapsed)}
+function stopSw(){clearInterval(swInt);swInt=null;swState=null;const b=$('#swbar');if(b)b.classList.remove('on','run');}
+function startStopwatch(ei){
+  const t=cur();if(!t||!t.exercises[ei]||todayScreen!=='active')return;
+  stopRest();unlockAudio();   // the two bars can't share the slot; drop any running rest first
+  swState={ei,phase:'count',end:Date.now()+5000};   // 5s to get into position
+  const b=$('#swbar');if(b){b.classList.add('on');b.classList.remove('run');}
+  clearInterval(swInt);swInt=setInterval(tickSw,100);tickSw();
+}
+function tickSw(){
+  if(!swState)return;const b=$('#swbar');if(!b)return;
+  if(swState.phase==='count'){
+    const rem=Math.max(0,swState.end-Date.now()),n=Math.ceil(rem/1000);
+    $('#swLbl').textContent='Get set';$('#swTime').textContent=n>0?String(n):'Go';
+    if(rem<=0){swState.phase='run';swState.start=Date.now();b.classList.add('run');beep();try{if(navigator.vibrate)navigator.vibrate(120);}catch(e){}}
+    return;
+  }
+  const el=Math.floor((Date.now()-swState.start)/1000);
+  $('#swLbl').textContent='Holding';$('#swTime').textContent=Math.floor(el/60)+':'+String(el%60).padStart(2,'0');
+}
+// Stop writes the elapsed seconds into the next unticked set (adding one if every set is done) and ticks
+// it. Stopping during the countdown just cancels — nothing was held yet.
+function finishStopwatch(){
+  if(!swState){stopSw();return;}
+  if(swState.phase!=='run'){stopSw();toast('Stopwatch cancelled');return;}
+  const t=cur(),ei=swState.ei,secs=Math.max(1,Math.round((Date.now()-swState.start)/1000));
+  stopSw();
+  if(!t||!t.exercises[ei])return;
+  const sets=t.exercises[ei].sets;let st=sets.find(s=>!s.done);
+  if(!st){st={w:sets.length?sets[sets.length-1].w:'',r:'',done:false};sets.push(st);}
+  st.r=secs;st.done=true;if(!(+st.at>0))st.at=Date.now();
+  persistCur();render();toast('Logged '+secs+'s');
+}
+
 /* ---------------- boot ---------------- */
 function boot(){
   state.sessions.forEach(s=>{if(!s.schema)s.schema=SCHEMA;});   // schema migrations live here
@@ -4100,6 +4160,7 @@ function boot(){
     const pu=e.target.closest('[data-prunmark]');if(pu){unmarkSets(pu.dataset.prunmark);return;}});
   $('#btnSettings').addEventListener('click',openSettings);
   $('#restSkip').addEventListener('click',stopRest);
+  $('#swStop').addEventListener('click',finishStopwatch);$('#swCancel').addEventListener('click',()=>{stopSw();toast('Stopwatch cancelled');});
   $('#restAdd').addEventListener('click',()=>{
     if(!restState){   // during the "Go!" (done) grace state, +15s starts a fresh short rest instead of no-op
       if($('#restbar').classList.contains('done')){restState={total:15,end:Date.now()+15000};$('#restbar').classList.remove('done');$('#restLbl').textContent='Rest';}

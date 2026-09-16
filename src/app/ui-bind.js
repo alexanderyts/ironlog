@@ -104,7 +104,7 @@ function chooseEndThenCommit(s){
 }
 // endedAt may be null ("don't record a length"): the session then has no duration anywhere it's read.
 function commitFinish(s,endedAt,estimated){
-  closeSheet();stopRest();stopElapsed();
+  closeSheet();stopRest();stopSw();stopElapsed();
   if(endedAt)s.endedAt=endedAt;else delete s.endedAt;
   if(estimated&&endedAt)s.endEstimated=true;else delete s.endEstimated;
   cleanSets(s);
@@ -165,7 +165,7 @@ function unmarkSets(id){
   toast('Counting it again');
 }
 function discardActive(){showConfirm('Discard workout?','Nothing from this session will be saved.','Discard',()=>{
-  stopRest();stopElapsed();const copy=state.active;state.active=null;S.persistActive();todayScreen='home';render();
+  stopRest();stopSw();stopElapsed();const copy=state.active;state.active=null;S.persistActive();todayScreen='home';render();
   toast('Workout discarded',{label:'Undo',fn:()=>{S.setActive(copy);todayScreen='active';render();}});});}
 
 /* ---------------- cardio finish / manual save ---------------- */
@@ -424,8 +424,9 @@ function bindLog(root){
     const chk=e.target.closest('[data-check]');if(chk){const ei=+chk.dataset.check,si=+chk.dataset.s;const st=t.exercises[ei].sets[si];
       if(!st.done){const cex=EX[t.exercises[ei].id];
         // Ticking a loaded lift with no weight would save a 0-volume "working" set and poison "last time".
-        // Point the user at the weight field instead of silently accepting it. Bodyweight moves are exempt.
-        if(cex&&cex.equip!=='Bodyweight'&&!(+st.w>0)){const wi=$(`input[data-f="w"][data-ei="${ei}"][data-s="${si}"]`);if(wi){wi.focus();if(wi.select)wi.select();}toast('Add a weight first');return;}}
+        // Point the user at the weight field instead of silently accepting it. Bodyweight moves are exempt,
+        // and so are time-held lifts (a carry can be logged by time alone; load is optional).
+        if(cex&&cex.equip!=='Bodyweight'&&!D.TIME_METRIC.has(cex.id)&&!(+st.w>0)){const wi=$(`input[data-f="w"][data-ei="${ei}"][data-s="${si}"]`);if(wi){wi.focus();if(wi.select)wi.select();}toast('Add a weight first');return;}}
       st.done=!st.done;
       // T1: stamp on completion, but keep an existing stamp on un-tick → re-tick (a mis-tap corrected
       // seconds later keeps its true time, instead of jumping to "now" and skewing the rest medians).
@@ -435,6 +436,7 @@ function bindLog(root){
     const step=e.target.closest('[data-step]');if(step){if(heldRepeat){heldRepeat=false;return;}   // the click after a hold is not one more step
       stepSet(+step.dataset.ei,+step.dataset.s,step.dataset.step,+step.dataset.d);return;}
     const add=e.target.closest('[data-addset]');if(add){const ei=+add.dataset.addset;const sets=t.exercises[ei].sets;const last=sets[sets.length-1]||{w:'',r:''};sets.push({w:last.w,r:last.r,done:false});persistCur();render();return;}
+    const sw=e.target.closest('[data-stopwatch]');if(sw){startStopwatch(+sw.dataset.stopwatch);return;}
     const rem=e.target.closest('[data-delset]');if(rem){const ei=+rem.dataset.delset;const sets=t.exercises[ei].sets;if(sets.length<=1)return;
       const idx=sets.length-1;
       const doRemove=()=>{const removed=sets.splice(idx,1)[0];persistCur();render();
@@ -489,6 +491,44 @@ function finishRest(){
 }
 function stopRest(){clearInterval(restInt);restInt=null;restState=null;const b=$('#restbar');b.classList.remove('on','done');}
 
+/* ---------------- stopwatch (time-held lifts: planks, carries, hangs) ---------------- */
+// Shares the rest-bar chassis and is mutually exclusive with it (same screen slot). Clock-driven off
+// Date.now(), never a tick count, so locking the phone mid-hold doesn't lose time. State is in-memory
+// and session-scoped like the rest timer — nothing to persist.
+let swState=null,swInt=null;   // {ei, phase:'count'|'run', end (countdown) / start (elapsed)}
+function stopSw(){clearInterval(swInt);swInt=null;swState=null;const b=$('#swbar');if(b)b.classList.remove('on','run');}
+function startStopwatch(ei){
+  const t=cur();if(!t||!t.exercises[ei]||todayScreen!=='active')return;
+  stopRest();unlockAudio();   // the two bars can't share the slot; drop any running rest first
+  swState={ei,phase:'count',end:Date.now()+5000};   // 5s to get into position
+  const b=$('#swbar');if(b){b.classList.add('on');b.classList.remove('run');}
+  clearInterval(swInt);swInt=setInterval(tickSw,100);tickSw();
+}
+function tickSw(){
+  if(!swState)return;const b=$('#swbar');if(!b)return;
+  if(swState.phase==='count'){
+    const rem=Math.max(0,swState.end-Date.now()),n=Math.ceil(rem/1000);
+    $('#swLbl').textContent='Get set';$('#swTime').textContent=n>0?String(n):'Go';
+    if(rem<=0){swState.phase='run';swState.start=Date.now();b.classList.add('run');beep();try{if(navigator.vibrate)navigator.vibrate(120);}catch(e){}}
+    return;
+  }
+  const el=Math.floor((Date.now()-swState.start)/1000);
+  $('#swLbl').textContent='Holding';$('#swTime').textContent=Math.floor(el/60)+':'+String(el%60).padStart(2,'0');
+}
+// Stop writes the elapsed seconds into the next unticked set (adding one if every set is done) and ticks
+// it. Stopping during the countdown just cancels — nothing was held yet.
+function finishStopwatch(){
+  if(!swState){stopSw();return;}
+  if(swState.phase!=='run'){stopSw();toast('Stopwatch cancelled');return;}
+  const t=cur(),ei=swState.ei,secs=Math.max(1,Math.round((Date.now()-swState.start)/1000));
+  stopSw();
+  if(!t||!t.exercises[ei])return;
+  const sets=t.exercises[ei].sets;let st=sets.find(s=>!s.done);
+  if(!st){st={w:sets.length?sets[sets.length-1].w:'',r:'',done:false};sets.push(st);}
+  st.r=secs;st.done=true;if(!(+st.at>0))st.at=Date.now();
+  persistCur();render();toast('Logged '+secs+'s');
+}
+
 /* ---------------- boot ---------------- */
 function boot(){
   state.sessions.forEach(s=>{if(!s.schema)s.schema=SCHEMA;});   // schema migrations live here
@@ -501,6 +541,7 @@ function boot(){
     const pu=e.target.closest('[data-prunmark]');if(pu){unmarkSets(pu.dataset.prunmark);return;}});
   $('#btnSettings').addEventListener('click',openSettings);
   $('#restSkip').addEventListener('click',stopRest);
+  $('#swStop').addEventListener('click',finishStopwatch);$('#swCancel').addEventListener('click',()=>{stopSw();toast('Stopwatch cancelled');});
   $('#restAdd').addEventListener('click',()=>{
     if(!restState){   // during the "Go!" (done) grace state, +15s starts a fresh short rest instead of no-op
       if($('#restbar').classList.contains('done')){restState={total:15,end:Date.now()+15000};$('#restbar').classList.remove('done');$('#restLbl').textContent='Rest';}

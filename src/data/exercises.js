@@ -144,7 +144,13 @@ const RAW=[
  ["ab-crunch-machine","Ab Crunch Machine","Core",["Core"],"Machine",I,[12,20],"Curl the torso forward against the resistance, squeeze the abs, control up.","ab machine,crunch machine,abdominal machine"],
  ["torso-rotation-machine","Torso Rotation Machine","Core",["Core"],"Machine",I,[12,15],"Rotate the torso against the pad through a controlled range; log per side.","rotary torso,twist machine,oblique machine"],
  ["machine-back-extension","Machine Back Extension","Hamstrings",["Hamstrings","Glutes","Back"],"Machine",I,[12,20],"Push the pad back by extending the hips and lower back, control forward.","lower back machine,back extension machine,lumbar extension"],
- ["cable-wrist-curl","Cable Wrist Curl","Forearms",["Forearms"],"Cable",I,[12,20],"Forearms braced, curl the low-pulley handle up with the wrists, lower fully for a stretch.","low pulley wrist curl,cable forearm curl"]
+ ["cable-wrist-curl","Cable Wrist Curl","Forearms",["Forearms"],"Cable",I,[12,20],"Forearms braced, curl the low-pulley handle up with the wrists, lower fully for a stretch.","low pulley wrist curl,cable forearm curl"],
+ // Time-held additions (v0.50.0) — the "reps" field is SECONDS; use the ⏱ stopwatch on the card or type it in.
+ ["dead-hang","Dead Hang","Forearms",["Forearms","Back"],"Bodyweight",I,[20,60],"Hang from a pull-up bar with a full grip and active shoulders; log seconds held.","bar hang,grip hang"],
+ ["wall-sit","Wall Sit","Quads",["Quads","Glutes"],"Bodyweight",I,[30,60],"Slide down a wall to a 90° knee bend and hold; log seconds held.","wall squat hold"],
+ ["side-plank","Side Plank","Core",["Core"],"Bodyweight",I,[20,45],"On one forearm, stack the hips and hold a straight line; log seconds per side.","side bridge"],
+ ["hollow-hold","Hollow Hold","Core",["Core"],"Bodyweight",I,[20,45],"On your back, press the low back down and lift shoulders and legs into a dish; log seconds held.","hollow body hold"],
+ ["suitcase-carry","Suitcase Carry","Forearms",["Forearms","Core"],"Dumbbell",C,[20,40],"Carry one heavy dumbbell at your side, resisting the lean; log seconds per side.","one arm carry,suitcase walk"]
 ];
 
 // [region/head, movement pattern, tier]. tier 1 = foundational lift (can anchor a session and should be
@@ -176,14 +182,16 @@ const META={
  // commercial-gym machines
  'assisted-pull-up':['lats','vpull',2],'assisted-dip':['lateral','hpush',2],'machine-lateral-raise':['side','iso',2],'machine-bicep-curl':['overall','iso',2],'machine-tricep-extension':['lateral','iso',2],
  'hip-adduction':['overall','iso',3],'glute-kickback-machine':['overall','iso',2],'machine-hip-thrust':['overall','hinge',2],
- 'ab-crunch-machine':['flexion','iso',2],'torso-rotation-machine':['rotation','iso',3],'machine-back-extension':['overall','hinge',2],'cable-wrist-curl':['flexor','iso',2]
+ 'ab-crunch-machine':['flexion','iso',2],'torso-rotation-machine':['rotation','iso',3],'machine-back-extension':['overall','hinge',2],'cable-wrist-curl':['flexor','iso',2],
+ // time-held additions (v0.50.0)
+ 'dead-hang':['grip','iso',3],'wall-sit':['overall','iso',3],'side-plank':['rotation','iso',3],'hollow-hold':['antiext','iso',3],'suitcase-carry':['grip','iso',3]
 };
 // Movements trained at a long muscle length (a strong hypertrophy driver) — the builder gives these a
 // small preference so a plan tends to include a stretch-biased option per muscle. Existing lifts that
 // already load the stretch are tagged here too.
 const LONG_LENGTH=new Set(['incline-dumbbell-fly','dumbbell-pullover','cable-pullover','bayesian-cable-curl','incline-dumbbell-curl','cable-overhead-extension','overhead-tricep-extension','leaning-cable-lateral','sissy-squat','romanian-deadlift','stiff-leg-deadlift','seated-leg-curl']);
 // Single-limb movements (for future per-side volume handling and to diversify rotation families).
-const UNILATERAL=new Set(['single-arm-cable-row','concentration-curl','single-arm-pushdown','reverse-lunge','single-leg-curl','single-leg-hip-thrust','single-leg-calf-raise','bulgarian-split-squat','walking-lunge','step-up','dumbbell-row','cable-kickback']);
+const UNILATERAL=new Set(['single-arm-cable-row','concentration-curl','single-arm-pushdown','reverse-lunge','single-leg-curl','single-leg-hip-thrust','single-leg-calf-raise','bulgarian-split-squat','walking-lunge','step-up','dumbbell-row','cable-kickback','side-plank','suitcase-carry']);
 // Assist machines where LESS weight is harder: progression REDUCES the load and a PR is the lowest
 // assist, not the highest (#16). The engine flips the increment and the PR ranking for these ids.
 const INVERTED_LOAD=new Set(['assisted-pull-up','assisted-dip']);
@@ -191,7 +199,7 @@ const INVERTED_LOAD=new Set(['assisted-pull-up','assisted-dip']);
 // 1RM estimate — a plank or a loaded carry is progressed by holding longer or adding load, and the
 // engine shows load × seconds. They still count as SETS for balance/frequency/coach. (farmers-carry
 // and plank already declare seconds in their target range and instructions; this makes the maths agree.)
-const TIME_METRIC=new Set(['plank','farmers-carry']);
+const TIME_METRIC=new Set(['plank','farmers-carry','dead-hang','wall-sit','side-plank','hollow-hold','suitcase-carry']);
 
 const EXERCISES=RAW.map(r=>{const m=META[r[0]]||['overall','iso',3];
   return {id:r[0],name:r[1],group:r[2],muscles:r[3],equip:r[4],type:r[5],rr:r[6],instr:r[7],alias:r[8],reg:m[0],pat:m[1],tier:m[2]||3};});

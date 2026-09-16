@@ -304,6 +304,9 @@ html.kb-open .tabbar{display:none}
 .restbar .inner{max-width:520px;margin:0 auto;padding:0 12px}
 .restbar .rcard{background:var(--ink);color:var(--bg);border-radius:14px;padding:9px 12px;display:flex;align-items:center;gap:11px;box-shadow:0 6px 24px rgba(0,0,0,.25)}
 .restbar.done .rcard{background:var(--good);color:#fff}
+/* stopwatch shares the rest-bar chassis (position/inner/rcard/buttons); only the colour differs so it
+   can't be mistaken for the rest timer. Dark while counting down, accent once the hold is running. */
+.swbar.run .rcard{background:var(--accent);color:var(--accent-ink)}
 .rest-time{font-family:var(--font-mono);font-weight:600;font-size:19px;min-width:52px}
 .rest-lbl{font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;opacity:.7;margin-bottom:1px}
 .rest-prog{flex:1;height:6px;background:rgba(255,255,255,.22);border-radius:3px;overflow:hidden}

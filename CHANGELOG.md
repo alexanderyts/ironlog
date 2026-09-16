@@ -2,6 +2,15 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.50.0 — 2026-09-16 · A built-in stopwatch for planks, carries and holds
+For anything measured by time instead of reps — planks, farmer's carries, dead hangs — you can now time it in the app instead of watching a separate clock.
+- **⏱ Stopwatch button** on those exercises' cards during a workout. Tap it → a 5-second "get set" countdown → it counts up while you hold → **Stop & log** drops the seconds straight into your next set and checks it off.
+- It runs off the clock, so locking your phone mid-hold doesn't lose your time.
+- **Five new time-based exercises:** Dead Hang, Wall Sit, Side Plank, Hollow Hold, and Suitcase Carry — search for them like any other.
+- These lifts can be logged by time alone (no weight needed), and — as before — they count as sets for your balance and frequency, but never as weight-times-reps volume.
+- Small fix: in your History list, a bodyweight hold now reads "2×27s" instead of "2×27 · 0lb".
+- Not verified on-device (tested in a desktop browser at iPhone size, including a real countdown-and-hold — 235 tests green; review snapshot unchanged).
+
 ## v0.49.2 — 2026-09-16 · Polish on the PR-adjust feature
 A review of v0.49.0/.1 turned up four rough edges, now fixed.
 - **Opening a Note or exercise info mid-workout no longer loses your place.** The panel still opens cleanly over the keyboard, but closing it now returns you exactly where you were instead of the top of the workout.
