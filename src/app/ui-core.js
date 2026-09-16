@@ -120,6 +120,22 @@ function render(){
     const rb=v.querySelector('#ilReload');if(rb)rb.onclick=()=>location.reload();   // JS handler (no inline on* — CSP-safe)
   }
 }
+/* Derived-stat memo (P2). Every expensive read — Progress-tab analytics, a card's all-time PR — is a
+   full scan of state.sessions. They're pure in (sessions, bodyweight, unit, day), so we cache the
+   result and reuse it until one of those actually changes. This is what stops the Progress tab from
+   re-scanning history ~8× on every collapse/cloud-ping, and the live editor from re-scanning per card
+   on every set tick (the completed workout isn't in `sessions` yet, so the sig is stable while logging). */
+let _memoSig='',_memo=new Map();
+function statSig(){
+  const ss=state.sessions;let mx=0;for(let i=0;i<ss.length;i++){const u=ss[i].updatedAt||0;if(u>mx)mx=u;}
+  return ss.length+':'+mx+':'+bw()+':'+state.settings.unit+':'+Math.floor(Date.now()/DAY);   // day bucket so date-windowed stats refresh at a rollover even with no new data
+}
+function memoStat(key,fn){
+  const sig=statSig();
+  if(_memoSig!==sig){_memoSig=sig;_memo.clear();}
+  if(_memo.has(key))return _memo.get(key);
+  const v=fn();_memo.set(key,v);return v;
+}
 // current session being edited on the Today tab (the live workout or a past one)
 const cur=()=>todayScreen==='edit'?editSession:state.active;
 function persistCur(){if(todayScreen==='edit'){editDirty=true;return;}

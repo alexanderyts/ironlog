@@ -112,7 +112,7 @@ function viewProgress(){
   </div>`;
 }
 function volumeChart(){
-  const cols=A.weeklyVolumes(state.sessions,Date.now(),bw(),8);
+  const cols=memoStat('wv8',()=>A.weeklyVolumes(state.sessions,Date.now(),bw(),8));
   const max=Math.max(1,...cols.map(c=>c.v)),u=U();
   // The tallest bar is always labelled (gives the scale a number); any other non-empty bar reveals
   // its value on tap. Empty weeks aren't tappable. Screen readers get the value from aria-label.
@@ -130,14 +130,14 @@ function volumeChart(){
 // screen. Same dismiss-once pattern as the coaching notes' "Got it"; rides the synced `seen` map.
 function prTip(){
   if(seenFlag('prAdjustTip'))return '';
-  if(!A.personalRecords(state.sessions,bw(),1).length)return '';   // nothing to tap yet — don't tell a new user to tap a record
+  if(!memoStat('prAll',()=>A.personalRecords(state.sessions,bw(),999)).length)return '';   // nothing to tap yet — don't tell a new user to tap a record
   return `<div class="card" style="padding:11px 14px;margin:0 0 9px;background:var(--surface-2);border:none;display:flex;gap:10px;align-items:center">
     <div class="dim" style="font-size:12.5px;line-height:1.45;flex:1">Tap a record for its trend — or set it aside if the form wasn’t there.</div>
     <button class="linkbtn dim" data-seentip="prAdjustTip" style="font-size:12px;padding:2px 4px;flex-shrink:0">Got it</button></div>`;
 }
 const CHEV_R='<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color:var(--ink-3)"><path d="M9 6l6 6-6 6"/></svg>';
 function prList(){
-  const arr=A.personalRecords(state.sessions,bw(),8);
+  const arr=memoStat('prAll',()=>A.personalRecords(state.sessions,bw(),999)).slice(0,8);
   if(!arr.length)return`<div style="padding:22px;text-align:center" class="dim">Log a few sets and your PRs show up here.</div>`;
   const rsuf=p=>p.time?'s':'';   // time-held lifts show seconds, not reps
   const setStr=p=>p.bodyweight?(p.w?'Bodyweight +'+p.w+U():'Bodyweight')+' × '+p.r+rsuf(p):p.w+U()+(MODES[p.mode]&&MODES[p.mode].perHand?'/hand':'')+' × '+p.r+rsuf(p);
@@ -180,8 +180,8 @@ function collapsible(key,title,summary,body,margin){
 }
 function coachCard(done){
   if(!done.length)return '';
-  const a=A.analyze(state.sessions,Date.now());
-  const tips=A.buildTips(a,state.sessions,Date.now(),bw(),state.settings.profile,state.settings.seen);
+  const a=memoStat('analyze',()=>A.analyze(state.sessions,Date.now()));
+  const tips=A.buildTips(a,state.sessions,Date.now(),bw(),state.settings.profile,state.settings.seen);   // not memoized — depends on the mutable seen/profile settings, and is cheap given `a`
   const sum=tips.length?`${tips.length} note${tips.length!==1?'s':''}`:'all clear';
   if(!a.readyForComparative){
     // early on: encouragement + whatever per-muscle tips (region/pattern gaps, progression) are
@@ -198,7 +198,7 @@ function coachCard(done){
 // Read-only view of HOW the user deloads. Deliberately makes no judgment and never touches
 // progression — a deload is theirs, at any load, for any reason. See analysis.deloadStats.
 function recoveryCard(){
-  const d=A.deloadStats(state.sessions,Date.now());
+  const d=memoStat('deload',()=>A.deloadStats(state.sessions,Date.now()));
   if(!d.deloads&&d.lastDaysAgo==null)return '';
   const rows=[];
   if(d.total)rows.push(`<b>${d.deloads} of your last ${d.total}</b> session${d.total!==1?'s':''} ${d.deloads===1?'was':'were'} a deload${d.lastDaysAgo!=null?` (most recent ${d.lastDaysAgo===0?'today':d.lastDaysAgo+' day'+(d.lastDaysAgo===1?'':'s')+' ago'})`:''}.`);
@@ -213,7 +213,7 @@ function recoveryCard(){
 // Time card (T3): how long you train, how dense, how long you rest, and where the time goes — all
 // from the per-set stamps. Shows nothing until at least one timed workout exists.
 function timeCard(){
-  const t=A.timeTrends(state.sessions,Date.now());
+  const t=memoStat('time',()=>A.timeTrends(state.sessions,Date.now()));
   if(!t.n)return '';
   const rest=[];if(t.restCompound!=null)rest.push('compounds ~'+fmtSec(t.restCompound));if(t.restIsolation!=null)rest.push('isolation ~'+fmtSec(t.restIsolation));
   const maxG=Math.max(1,...t.byGroup.map(g=>g[1]));
@@ -229,7 +229,7 @@ function timeCard(){
 }
 // Cardio summary — its own section on Progress. Nothing here touches the lifting stats.
 function cardioCard(){
-  const c=A.cardioStats(state.sessions,Date.now());
+  const c=memoStat('cardio',()=>A.cardioStats(state.sessions,Date.now()));
   if(!c.sessions)return '';
   const maxT=Math.max(1,...c.byType.map(t=>t[1]));
   const body=`<div class="card" style="padding:15px 16px">
@@ -242,7 +242,7 @@ function cardioCard(){
   return collapsible('cardio','Cardio · last 4 weeks',`${c.winCount} session${c.winCount!==1?'s':''} · ${fmtDur(c.winMin)}`,body);
 }
 function muscleBreakdown(mo){
-  const arr=A.muscleSetCounts(mo);if(!arr.length)return'';
+  const arr=memoStat('msc',()=>A.muscleSetCounts(mo));if(!arr.length)return'';
   const max=Math.max(...arr.map(a=>a[1]));
   return `<div class="eyebrow" style="margin:24px 2px 10px">Sets by muscle · last 30 days</div>
     <div class="card" style="padding:15px 16px">${arr.map(([g,n])=>`<div style="margin-bottom:11px"><div class="row-between" style="margin-bottom:5px"><span style="font-weight:600;font-size:13.5px">${g}</span><span class="mono dim" style="font-size:12.5px">${n} sets</span></div><div style="height:7px;background:var(--surface-2);border-radius:4px;overflow:hidden"><div style="height:100%;width:${n/max*100}%;background:var(--accent);border-radius:4px"></div></div></div>`).join('')}</div>`;
@@ -416,25 +416,33 @@ function viewportDeficit(){
 }
 const vpLog=[], vpT0=(window.performance&&performance.now())||Date.now();
 function vlog(m){const t=((window.performance&&performance.now())||Date.now())-vpT0;vpLog.push(Math.round(t)+'ms '+m);if(vpLog.length>14)vpLog.shift();}
-let _lastDeficit=-1;
+let _lastDeficit=-1,_lastScreenH=-1,_lastPortrait=null;
+// Returns true if anything actually changed this call — the rAF loop uses that to know when the
+// launch-time viewport has settled so it can stop (see watchViewport). Every DOM write is guarded so
+// a steady state writes nothing (P1: the old version rewrote --screen-h/minHeight ~60×/s forever).
 function syncViewportDeficit(){
+  let changed=false;
   const d=viewportDeficit();
   if(STANDALONE){
-    const de=document.documentElement, portrait=innerWidth<=innerHeight;
+    const de=document.documentElement, portrait=innerWidth<=innerHeight, sh=screen.height;
     // Bar position is derived from screen.height (constant), not the viewport — see .tabbar CSS
-    de.style.setProperty('--screen-h',screen.height+'px');
-    de.classList.toggle('standalone',portrait);
-    // THE trigger for WebKit's launch-time viewport correction (from the v0.8.9 on-device timeline):
-    // the document becoming taller than the short viewport — i.e. scrollable. A one-frame nudge was
-    // not enough; a taller-than-viewport document that PERSISTS clears it within ~40ms. Keeping the
-    // document at least screen-height tall does exactly that in the launch state, and is a no-op
-    // once corrected (viewport == screen height, so nothing becomes scrollable).
-    de.style.minHeight=portrait?screen.height+'px':'';
+    if(sh!==_lastScreenH){de.style.setProperty('--screen-h',sh+'px');_lastScreenH=sh;changed=true;}
+    if(portrait!==_lastPortrait){
+      de.classList.toggle('standalone',portrait);
+      // THE trigger for WebKit's launch-time viewport correction (from the v0.8.9 on-device timeline):
+      // the document becoming taller than the short viewport — i.e. scrollable. A taller-than-viewport
+      // document that PERSISTS clears it within ~40ms. Keeping the document at least screen-height tall
+      // does exactly that, and is a no-op once corrected (it persists, so writing it once is enough).
+      de.style.minHeight=portrait?sh+'px':'';
+      _lastPortrait=portrait;changed=true;
+    }
   }
-  if(d===_lastDeficit)return;
-  _lastDeficit=d;
-  document.documentElement.style.setProperty('--deficit',d+'px');
-  vlog('deficit '+d+' inner '+innerHeight);
+  if(d!==_lastDeficit){
+    _lastDeficit=d;
+    document.documentElement.style.setProperty('--deficit',d+'px');
+    vlog('deficit '+d+' inner '+innerHeight);changed=true;
+  }
+  return changed;
 }
 // Is the on-screen keyboard up? On iOS the layout viewport doesn't shrink for the keyboard, so a
 // fixed-bottom bar floats over it (and can get shoved to the top of the keyboard on scroll). When the
@@ -451,10 +459,16 @@ function watchViewport(){
   if(window.visualViewport){visualViewport.addEventListener('resize',syncViewportDeficit);
     visualViewport.addEventListener('resize',syncKeyboard);visualViewport.addEventListener('scroll',syncKeyboard);}
   addEventListener('focusout',()=>setTimeout(syncKeyboard,50),{passive:true});   // catch the keyboard dismissing
-  // WebKit's correction fires no event we can hook, so check every frame while the page is visible
-  // (one subtraction per frame — free). A frame-level check means the bar can never be visibly
-  // stale for longer than the frame the correction lands in.
-  const frame=()=>{if(!document.hidden)syncViewportDeficit();requestAnimationFrame(frame);};
+  // WebKit's launch-time correction fires no event we can hook, so we poll per frame — but ONLY until
+  // the viewport settles. Once it's been stable for ~2s (or a 5s hard cap), stop: everything after
+  // launch (rotate, keyboard, focus) already arrives through the listeners above, so a permanent
+  // 60fps loop is pure battery/main-thread waste in an installed PWA (P1).
+  const t0=(window.performance&&performance.now())||Date.now();let stable=0;
+  const frame=()=>{
+    if(!document.hidden){if(syncViewportDeficit())stable=0;else stable++;}
+    const elapsed=((window.performance&&performance.now())||Date.now())-t0;
+    if(stable<120&&elapsed<5000)requestAnimationFrame(frame);else vlog('vp loop done '+Math.round(elapsed)+'ms');
+  };
   requestAnimationFrame(frame);
   addEventListener('touchstart',()=>vlog('touch'),{passive:true,once:true});
   addEventListener('load',()=>vlog('load'));

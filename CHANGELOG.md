@@ -2,6 +2,14 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.54.0 — 2026-09-16 · Faster, especially as your history grows
+Performance work you won't see directly — the app just does less pointless work, which means less lag and less battery drain the more you log.
+- **The Progress tab does its number-crunching once, not over and over.** Opening a chart or expanding a section no longer re-scans your entire history each time — the results are reused until your data actually changes. The more workouts you've logged, the bigger this is.
+- **Ticking a set during a workout is snappier.** Each exercise card's "personal best" is now worked out once when you open the workout, instead of being recalculated on every single tap.
+- **The screen-fit loop stops when it's done.** A background routine that keeps the layout correct at launch used to run forever (a small constant battery cost on an installed app); it now switches off once the screen has settled.
+
+Not verified on-device.
+
 ## v0.53.0 — 2026-09-16 · Data safety: nothing gets lost or resurrected
 Under-the-hood fixes so your log stays intact in the corners that could bite. Nothing to learn — it just behaves better.
 - **A workout in progress can no longer disappear silently.** If your phone's storage fills up mid-session, you now get a clear "Storage is full — export a backup" warning instead of edits quietly failing and the session being lost on reload.

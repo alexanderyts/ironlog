@@ -345,7 +345,9 @@ function logExercise(s,e,ei,mode){
   // miss real improvements AND flash fake ones. The Progress PR list ranks both correctly.
   if(mode==='active'&&!s.deload&&!D.INVERTED_LOAD.has(e.id)&&!D.TIME_METRIC.has(e.id)){
     // Live PR recognition: the session's best working set beating this lift's all-time best (same mode)
-    const histBest=P.bestE1rmBefore(state.sessions,e.id,{mode:emode,bw:bw(),excludeId:s.id});
+    // Memoized: the all-time best is a full-history scan, and the completed session isn't in `sessions`
+    // yet, so it's identical for every set tick during a workout — compute it once per (lift, mode). (P2)
+    const histBest=memoStat('be1:'+e.id+':'+emode+':'+s.id,()=>P.bestE1rmBefore(state.sessions,e.id,{mode:emode,bw:bw(),excludeId:s.id}));
     if(histBest>0){let best=0,bs=null;e.sets.forEach(st=>{if(st.warm||st.nc||!P.isWorking(st))return;const est=P.e1rm(P.setLoad(e.id,st.w,bw()),+st.r||0);if((+st.r)&&est>best){best=est;bs=st;}});
       if(bs&&best>histBest)prLine=`<div class="sugg" style="color:var(--good);background:var(--good-soft)"><span>★ New PR — ${bs.w}${U()}${MODES[emode]&&MODES[emode].perHand?'/ea':''} × ${bs.r} <span class="dim">est ${Math.round(best)}${U()}</span></span></div>`;}
   }
