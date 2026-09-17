@@ -2,6 +2,14 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.59.2 — 2026-09-17 · Plate loader: type the weight in
+Polishing the plate loader from your feedback:
+- **Type any weight instead of tapping.** Both the weight and the bar weight are now editable — tap the number and type it, and the plates update as you go. No more holding the button for a heavy load.
+- **The bar can be set to 0** (for a fully counterbalanced Smith machine), and it stays there.
+- **Cleaner layout** — the unit ("lb"/"kg") now sits neatly beside the number instead of slipping underneath.
+
+Not verified on-device.
+
 ## v0.59.1 — 2026-09-16 · Smith machine gets its own bar weight
 - **The plate calculator now remembers a separate bar weight for the Smith machine.** A straight barbell defaults to 45 lb / 20 kg; the Smith machine defaults to 25 lb / 10 kg (its carriage is usually lighter and is often printed on the machine). Each is adjustable and remembered on its own, so switching a lift between barbell and Smith uses the right bar automatically.
 

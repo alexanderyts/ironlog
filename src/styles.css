@@ -328,11 +328,15 @@ html.kb-open .tabbar{display:none}
 .stepper button:active{color:var(--accent)}
 .stepper .val{min-width:52px;text-align:center;font-weight:600}
 /* plate calculator */
-.platewt{display:flex;align-items:center;justify-content:center;gap:18px}
-.platewt-v{min-width:120px;text-align:center}
-.platewt-v .mono{font-size:34px;font-weight:700}
-.platewt-v small{font-size:15px;color:var(--ink-3);margin-left:3px}
-.platestep{width:52px;height:52px;border-radius:14px;background:var(--surface-2);color:var(--ink-2);font-size:24px;font-weight:500;display:grid;place-items:center}
+.platewt{display:flex;align-items:center;justify-content:center;gap:14px}
+.platewt-in{display:flex;align-items:baseline;justify-content:center;gap:5px;min-width:130px}
+.platewt-in input{width:96px;text-align:right;font-size:34px;font-weight:700;font-variant-numeric:tabular-nums;background:none;color:var(--ink);padding:0}
+.platewt-in input:focus{outline:none;color:var(--accent)}
+.platewt-in .u{font-size:15px;color:var(--ink-3)}
+.stepper .barin{width:46px;text-align:center;font-weight:600;background:none;color:var(--ink);font-size:16px}
+.stepper .barin:focus{outline:none;color:var(--accent)}
+.stepper .baru{font-size:11px;padding:0 4px 0 1px}
+.platestep{width:52px;height:52px;border-radius:14px;background:var(--surface-2);color:var(--ink-2);font-size:24px;font-weight:500;display:grid;place-items:center;flex-shrink:0}
 .platestep:active{color:var(--accent);transform:scale(.94)}
 .plates{display:flex;flex-wrap:wrap;gap:8px;align-items:center;min-height:52px}
 .plate{min-width:46px;height:50px;padding:0 10px;border-radius:9px;display:grid;place-items:center;font-weight:700;font-size:15px;color:#fff;background:var(--accent);box-shadow:inset 0 -2px 0 rgba(0,0,0,.18)}

@@ -96,7 +96,7 @@ function cleanSettings(o){if(!o||typeof o!=='object')return null;
   const prof=cleanProfile(o.profile);if(prof)s.profile=prof;
   const seen=cleanSeen(o.seen);if(seen)s.seen=seen;
   // remembered empty-bar weight per unit for the plate calculator (D-4): `bar` = barbell, `smithBar` = Smith
-  const cleanBar=v=>{if(!v||typeof v!=='object')return null;const o={},lb=sNum(v.lb),kg=sNum(v.kg);if(lb>0)o.lb=Math.min(200,lb);if(kg>0)o.kg=Math.min(100,kg);return Object.keys(o).length?o:null;};
+  const cleanBar=v=>{if(!v||typeof v!=='object')return null;const o={};if('lb'in v){const n=sNum(v.lb);if(n>=0)o.lb=Math.min(200,n);}if('kg'in v){const n=sNum(v.kg);if(n>=0)o.kg=Math.min(100,n);}return Object.keys(o).length?o:null;};   // preserve an explicit 0 (counterbalanced Smith)
   const bar=cleanBar(o.bar);if(bar)s.bar=bar;const sbar=cleanBar(o.smithBar);if(sbar)s.smithBar=sbar;
   return s;
 }

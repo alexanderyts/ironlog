@@ -65,6 +65,33 @@ test('the bar weight is remembered per unit',()=>{
     assert.equal(h.state.settings.bar.lb,40,'the new bar weight is saved for lb');
   }finally{h.teardown();}
 });
+test('typing a weight auto-updates the breakdown (no clicking needed for heavy loads)',()=>{
+  const h=launch();
+  try{
+    startBlank(h);addEx(h,'barbell-bench-press');
+    const card=h.$$('#view .log-ex')[0];
+    card.querySelector('[data-plates]').dispatchEvent(new h.win.MouseEvent('click',{bubbles:true}));
+    h.type('#plWeight','315');   // no steppers — just type it
+    assert.deepEqual(h.$$('#plateOut .plate').map(p=>p.textContent),['45','45','45'],'315 on a 45 bar = three 45s per side, live');
+    // the breakdown updated in place; the input kept its value (focus not stolen)
+    assert.equal(h.$('#plWeight').value,'315');
+  }finally{h.teardown();}
+});
+test('the bar can be typed to 0 (a counterbalanced Smith) and it sticks',()=>{
+  const h=launch();
+  try{
+    startBlank(h);addEx(h,'barbell-bench-press');
+    h.state.active.exercises[0].mode='smith';
+    const card=h.$$('#view .log-ex')[0];
+    card.querySelector('[data-plates]').dispatchEvent(new h.win.MouseEvent('click',{bubbles:true}));
+    const bar=h.$('#plBar');bar.value='0';bar.dispatchEvent(new h.win.Event('input',{bubbles:true}));bar.dispatchEvent(new h.win.Event('change',{bubbles:true}));
+    assert.equal(h.state.settings.smithBar.lb,0,'0 is stored, not treated as unset');
+    // reopen: it stays 0, not reverted to the 25 default
+    h.click('#sheetClose');
+    card.querySelector('[data-plates]').dispatchEvent(new h.win.MouseEvent('click',{bubbles:true}));
+    assert.equal(h.$('#plBar').value,'0','an explicit 0 bar is honoured on reopen');
+  }finally{h.teardown();}
+});
 test('a Smith lift uses its own default bar (25lb), kept separate from the barbell',()=>{
   const h=launch();
   try{
@@ -73,7 +100,7 @@ test('a Smith lift uses its own default bar (25lb), kept separate from the barbe
     const card=h.$$('#view .log-ex')[0];
     card.querySelector('[data-plates]').dispatchEvent(new h.win.MouseEvent('click',{bubbles:true}));
     assert.match(h.bodyText(),/Smith bar weight/,'the sheet labels it as the Smith bar');
-    assert.match(h.text('.stepper .val'),/^25/,'defaults to the Smith bar (25lb), not the 45 barbell');
+    assert.equal(h.$('#plBar').value,'25','defaults to the Smith bar (25lb), not the 45 barbell');
     // change the Smith bar → only smithBar is written, the barbell default is untouched
     h.$$('[data-plbar]').find(b=>b.dataset.plbar==='1').dispatchEvent(new h.win.MouseEvent('click',{bubbles:true}));   // 25 → 30
     assert.equal(h.state.settings.smithBar.lb,30,'smithBar saved independently');

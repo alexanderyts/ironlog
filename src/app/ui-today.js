@@ -283,33 +283,43 @@ function openSessionNote(){
    sheet doubles as a calculator (± any weight). Settings: `bar` = barbell, `smithBar` = Smith. */
 const BAR_DEFAULT={barbell:{lb:45,kg:20},smith:{lb:25,kg:10}};
 function barKey(mode){return mode==='smith'?'smithBar':'bar';}
-function barWeight(mode){const b=state.settings[barKey(mode)]||{},v=+b[U()];return v>0?v:BAR_DEFAULT[mode==='smith'?'smith':'barbell'][U()];}
+function barWeight(mode){const b=state.settings[barKey(mode)]||{},v=b[U()];return (typeof v==='number'&&isFinite(v)&&v>=0)?v:BAR_DEFAULT[mode==='smith'?'smith':'barbell'][U()];}   // an explicit 0 is honoured (counterbalanced Smith); only a missing value falls back to the default
 function setBarWeight(mode,v){const k=barKey(mode),b=Object.assign({},state.settings[k]);b[U()]=v;state.settings[k]=b;S.saveSettingsCloud();}
 let plateDraft=null;
-function plateSheetBody(){
-  const mode=plateDraft.mode,w=plateDraft.weight,bar=barWeight(mode),u=U(),r=P.platesPerSide(w,bar,u),smith=mode==='smith';
+// Just the breakdown — re-rendered on every keystroke WITHOUT touching the inputs, so typing keeps focus.
+function plateOutHtml(){
+  const u=U(),r=P.platesPerSide(plateDraft.weight,plateDraft.bar,u),n=r.plates.reduce((a,p)=>a+p.count,0);
   const chips=r.plates.length?r.plates.map(p=>Array(p.count).fill(0).map(()=>`<span class="plate p${String(p.plate).replace('.','_')}">${p.plate}</span>`).join('')).join('')
     :`<div class="dim" style="padding:12px 2px">${r.belowBar?'That’s less than the empty bar.':'Just the empty bar — no plates.'}</div>`;
-  return `<div class="dim" style="font-size:13px;margin:-4px 2px 16px">How to load each side of the ${smith?'Smith bar':'bar'}. Tap ± to try another weight.</div>
+  return `<div class="eyebrow" style="margin:18px 2px 10px">Each side${n?` · ${n} plate${n!==1?'s':''}`:''}</div>
+    <div class="plates">${chips}</div>
+    ${r.leftover>0?`<div class="dim" style="font-size:12px;margin-top:10px">+${r.leftover}${u} per side left over — no standard plate fits it.</div>`:''}`;
+}
+function plateSheetBody(){
+  const mode=plateDraft.mode,u=U(),smith=mode==='smith';
+  return `<div class="dim" style="font-size:13px;margin:-4px 2px 16px">How to load each side of the ${smith?'Smith bar':'bar'}. Type a weight or tap ±.</div>
     <div class="platewt">
       <button class="platestep" data-plw="-1" aria-label="Less">−</button>
-      <div class="platewt-v"><span class="mono">${w}</span><small>${u}</small></div>
+      <div class="platewt-in"><input id="plWeight" inputmode="decimal" value="${plateDraft.weight}" aria-label="Total weight"><span class="u">${u}</span></div>
       <button class="platestep" data-plw="1" aria-label="More">＋</button></div>
-    <div class="eyebrow" style="margin:18px 2px 10px">Each side${r.plates.length?` · ${r.plates.reduce((a,p)=>a+p.count,0)} plate${r.plates.reduce((a,p)=>a+p.count,0)!==1?'s':''}`:''}</div>
-    <div class="plates">${chips}</div>
-    ${r.leftover>0?`<div class="dim" style="font-size:12px;margin-top:10px">+${r.leftover}${u} per side left over — no standard plate fits it.</div>`:''}
+    <div id="plateOut">${plateOutHtml()}</div>
     <div class="settingrow" style="border-top:1px solid var(--line);border-bottom:none;padding:14px 2px 4px;margin-top:18px">
       <div><div style="font-weight:600;font-size:13.5px">${smith?'Smith bar weight':'Bar weight'}</div><div class="dim" style="font-size:12px">${smith?'The carriage — often listed on the machine':'The empty bar'}</div></div>
-      <div class="stepper"><button data-plbar="-1">−</button><button class="val mono">${bar}<small style="font-size:11px"> ${u}</small></button><button data-plbar="1">＋</button></div></div>`;
+      <div class="stepper"><button data-plbar="-1">−</button><input id="plBar" class="barin mono" inputmode="decimal" value="${plateDraft.bar}" aria-label="Bar weight"><span class="baru dim">${u}</span><button data-plbar="1">＋</button></div></div>`;
 }
 function bindPlateSheet(){
-  const mode=plateDraft.mode,step=U()==='kg'?2.5:5,rerender=()=>{$('#sheetBody').innerHTML=plateSheetBody();bindPlateSheet();};
-  $('#sheetBody').querySelectorAll('[data-plw]').forEach(b=>b.addEventListener('click',()=>{plateDraft.weight=Math.max(barWeight(mode),+(plateDraft.weight+(+b.dataset.plw)*step).toFixed(2));rerender();}));
-  $('#sheetBody').querySelectorAll('[data-plbar]').forEach(b=>b.addEventListener('click',()=>{setBarWeight(mode,Math.max(0,+(barWeight(mode)+(+b.dataset.plbar)*step).toFixed(2)));if(plateDraft.weight<barWeight(mode))plateDraft.weight=barWeight(mode);rerender();}));
+  const mode=plateDraft.mode,step=U()==='kg'?2.5:5,num=v=>{const n=parseFloat(P.parseWeightInput(String(v)));return isFinite(n)?n:0;};
+  const wIn=$('#plWeight'),bIn=$('#plBar'),out=$('#plateOut');
+  const sync=()=>{if(out)out.innerHTML=plateOutHtml();};
+  if(wIn)wIn.addEventListener('input',()=>{plateDraft.weight=Math.max(0,num(wIn.value));sync();});
+  if(bIn){bIn.addEventListener('input',()=>{plateDraft.bar=Math.min(mode==='smith'?100:200,Math.max(0,num(bIn.value)));sync();});
+    bIn.addEventListener('change',()=>{setBarWeight(mode,plateDraft.bar);});}   // persist the bar only when they're done typing it
+  $('#sheetBody').querySelectorAll('[data-plw]').forEach(b=>b.addEventListener('click',()=>{plateDraft.weight=Math.max(0,+(plateDraft.weight+(+b.dataset.plw)*step).toFixed(2));if(wIn)wIn.value=plateDraft.weight;sync();}));
+  $('#sheetBody').querySelectorAll('[data-plbar]').forEach(b=>b.addEventListener('click',()=>{plateDraft.bar=Math.max(0,+(plateDraft.bar+(+b.dataset.plbar)*step).toFixed(2));setBarWeight(mode,plateDraft.bar);if(bIn)bIn.value=plateDraft.bar;sync();}));
 }
 function openPlateSheet(weight,mode){
-  mode=mode==='smith'?'smith':'barbell';const w=Math.round(+weight||0);
-  plateDraft={mode,weight:Math.max(barWeight(mode),w||barWeight(mode))};
+  mode=mode==='smith'?'smith':'barbell';const bar=barWeight(mode),w=Math.round(+weight||0);
+  plateDraft={mode,bar,weight:w||bar};
   openSheet('Plate loader',plateSheetBody());bindPlateSheet();
 }
 function buildAndStart(fresh){
