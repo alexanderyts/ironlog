@@ -566,6 +566,7 @@ function openSettings(){
     ${CFG.DEMO?'':`<div style="height:18px"></div>
     <div class="eyebrow" style="margin-bottom:10px">Your data</div>
     <button class="btn ghost block" id="btnExport" style="margin-bottom:10px">⬇ Export a backup file</button>
+    <button class="btn ghost block" id="btnExportCsv" style="margin-bottom:10px">⬇ Export sessions (CSV)</button>
     <label class="btn ghost block" style="margin-bottom:10px">⬆ Import a backup<input type="file" id="fileImport" accept="application/json" hidden></label>`}
     <div style="height:18px"></div>
     <div class="dim" style="font-size:11.5px;line-height:1.55;text-align:center;padding:0 6px">Ironlog offers general fitness information, not medical advice. Warm up, use a weight you can control, and stop if something hurts. Consult a qualified professional before starting a program — you train at your own risk.</div>
@@ -582,6 +583,7 @@ function openSettings(){
   on('#btnProfile',openProfile);
   on('#btnUnmute',()=>{const seen=state.settings.seen||{};Object.keys(seen).forEach(k=>{if(k.indexOf('mute:')===0)delete seen[k];});S.saveSettingsCloud();openSettings();render();toast('Coaching notes are back on');});
   on('#btnExport',exportData);
+  on('#btnExportCsv',exportCsv);
   const fi=$('#fileImport');if(fi)fi.addEventListener('change',importData);
   on('#btnResetDemo',()=>showConfirm('Reset the demo?','Reloads the original sample data and discards your changes.','Reset',()=>S.resetDemo()));
   on('#btnDbxOn',()=>S.connectDropbox());
@@ -615,6 +617,15 @@ async function exportData(){
   const fname='ironlog-backup-'+new Date().toISOString().slice(0,10)+'.json';
   try{if(window.claude&&claude.use){const dl=await claude.use('downloads');if(dl){await dl.save({filename:fname,data:json});toast('Backup saved');return;}}}catch(e){}
   try{const blob=new Blob([json],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=fname;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);toast('Backup downloaded');}
+  catch(e){toast('Could not export here');}
+}
+async function exportCsv(){
+  const done=state.sessions.filter(s=>s.completed!==false).length;
+  if(!done){toast('No finished workouts to export yet');return;}
+  const csv=IL.sync.sessionSummaryCsv(state.sessions,U());
+  const fname='ironlog-sessions-'+new Date().toISOString().slice(0,10)+'.csv';
+  try{if(window.claude&&claude.use){const dl=await claude.use('downloads');if(dl){await dl.save({filename:fname,data:csv});toast('CSV saved');return;}}}catch(e){}
+  try{const blob=new Blob([csv],{type:'text/csv'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=fname;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);toast('CSV downloaded');}
   catch(e){toast('Could not export here');}
 }
 function importData(ev){

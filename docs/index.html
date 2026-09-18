@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-Lnp5xa27KkddFhPicy620dgmbLU6Vjg8mBB8LZ3GIvU=' 'sha256-WPBob/luB2k1aalTWXpi6zk3SrIbj8GlZV7AlFdG7oA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-m5dOpJdh+VJzVUH1VRLflz1tOFPXXrpYyAWqCgqcNso=' 'sha256-WPBob/luB2k1aalTWXpi6zk3SrIbj8GlZV7AlFdG7oA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Ironlog</title>
@@ -442,8 +442,8 @@ html.kb-open .tabbar{display:none}
 </div>
 
 <script>
-/* Ironlog v0.59.2 · site build */
-var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.59.2",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
+/* Ironlog v0.60.0 · site build */
+var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.60.0",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
 
 /* ===== src/data/exercises.js ===== */
 (function(){'use strict';
@@ -2185,7 +2185,25 @@ function resolveActive(local,remote){
   return {active:local.active,activeClearedAt:lc,changed:false,pushNeeded:remoteEvt<localEvt};
 }
 
-IL.sync={mergeSessions,applyTombstones,pruneTombstones,cleanDeleted,exportPayload,parseImport,resolveActive,cleanSession,cleanRoutine,cleanSettings,cleanProfile,cleanCardio,PROFILE_ENUM,CARDIO_ENUM,TOMB_KEEP};
+// One row per finished workout — a health-app / spreadsheet friendly summary (D-4 CSV export). Volume
+// uses each session's own bodyweight (D-1). Cardio rows carry their type/intensity/distance in Notes.
+function csvCell(v){v=v==null?'':String(v);return /[",\n\r]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;}
+function sessionSummaryCsv(sessions,unit){
+  const P=IL.prog;unit=unit==='kg'?'kg':'lb';
+  const rows=[['Date','Day','Type','Duration (min)','Volume ('+unit+')','Working sets','Exercises','Bodyweight ('+unit+')','Notes']];
+  (sessions||[]).filter(s=>s&&s.completed!==false).slice().sort((a,b)=>a.date-b.date).forEach(s=>{
+    const d=new Date(s.date),iso=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+    const day=d.toLocaleDateString('en-US',{weekday:'short'}),cardio=s.kind==='cardio';
+    const dur=P.sessionDuration(s);let notes=s.note||'';
+    if(cardio){const c=s.cardio||{},bits=[c.type,c.intensity,(c.distance!=null?c.distance+' '+(c.unit||''):'')].filter(Boolean);notes=[bits.join(' · '),s.note].filter(Boolean).join(' — ');}
+    rows.push([iso,day,cardio?'Cardio':(s.deload?'Deload':'Strength'),dur==null?'':dur,
+      cardio?'':P.sessionVolume(s,0),cardio?'':P.sessionSets(s),cardio?'':(s.exercises?s.exercises.length:0),
+      (+s.bw>0)?s.bw:'',notes].map(csvCell));
+  });
+  return rows.map(r=>r.join(',')).join('\r\n')+'\r\n';
+}
+
+IL.sync={mergeSessions,applyTombstones,pruneTombstones,cleanDeleted,exportPayload,parseImport,resolveActive,cleanSession,cleanRoutine,cleanSettings,cleanProfile,cleanCardio,sessionSummaryCsv,PROFILE_ENUM,CARDIO_ENUM,TOMB_KEEP};
 if(typeof module!=='undefined')module.exports=IL.sync;
 
 })();
@@ -3793,6 +3811,7 @@ function openSettings(){
     ${CFG.DEMO?'':`<div style="height:18px"></div>
     <div class="eyebrow" style="margin-bottom:10px">Your data</div>
     <button class="btn ghost block" id="btnExport" style="margin-bottom:10px">⬇ Export a backup file</button>
+    <button class="btn ghost block" id="btnExportCsv" style="margin-bottom:10px">⬇ Export sessions (CSV)</button>
     <label class="btn ghost block" style="margin-bottom:10px">⬆ Import a backup<input type="file" id="fileImport" accept="application/json" hidden></label>`}
     <div style="height:18px"></div>
     <div class="dim" style="font-size:11.5px;line-height:1.55;text-align:center;padding:0 6px">Ironlog offers general fitness information, not medical advice. Warm up, use a weight you can control, and stop if something hurts. Consult a qualified professional before starting a program — you train at your own risk.</div>
@@ -3809,6 +3828,7 @@ function openSettings(){
   on('#btnProfile',openProfile);
   on('#btnUnmute',()=>{const seen=state.settings.seen||{};Object.keys(seen).forEach(k=>{if(k.indexOf('mute:')===0)delete seen[k];});S.saveSettingsCloud();openSettings();render();toast('Coaching notes are back on');});
   on('#btnExport',exportData);
+  on('#btnExportCsv',exportCsv);
   const fi=$('#fileImport');if(fi)fi.addEventListener('change',importData);
   on('#btnResetDemo',()=>showConfirm('Reset the demo?','Reloads the original sample data and discards your changes.','Reset',()=>S.resetDemo()));
   on('#btnDbxOn',()=>S.connectDropbox());
@@ -3842,6 +3862,15 @@ async function exportData(){
   const fname='ironlog-backup-'+new Date().toISOString().slice(0,10)+'.json';
   try{if(window.claude&&claude.use){const dl=await claude.use('downloads');if(dl){await dl.save({filename:fname,data:json});toast('Backup saved');return;}}}catch(e){}
   try{const blob=new Blob([json],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=fname;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);toast('Backup downloaded');}
+  catch(e){toast('Could not export here');}
+}
+async function exportCsv(){
+  const done=state.sessions.filter(s=>s.completed!==false).length;
+  if(!done){toast('No finished workouts to export yet');return;}
+  const csv=IL.sync.sessionSummaryCsv(state.sessions,U());
+  const fname='ironlog-sessions-'+new Date().toISOString().slice(0,10)+'.csv';
+  try{if(window.claude&&claude.use){const dl=await claude.use('downloads');if(dl){await dl.save({filename:fname,data:csv});toast('CSV saved');return;}}}catch(e){}
+  try{const blob=new Blob([csv],{type:'text/csv'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=fname;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);toast('CSV downloaded');}
   catch(e){toast('Could not export here');}
 }
 function importData(ev){

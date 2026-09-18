@@ -131,5 +131,23 @@ function resolveActive(local,remote){
   return {active:local.active,activeClearedAt:lc,changed:false,pushNeeded:remoteEvt<localEvt};
 }
 
-IL.sync={mergeSessions,applyTombstones,pruneTombstones,cleanDeleted,exportPayload,parseImport,resolveActive,cleanSession,cleanRoutine,cleanSettings,cleanProfile,cleanCardio,PROFILE_ENUM,CARDIO_ENUM,TOMB_KEEP};
+// One row per finished workout — a health-app / spreadsheet friendly summary (D-4 CSV export). Volume
+// uses each session's own bodyweight (D-1). Cardio rows carry their type/intensity/distance in Notes.
+function csvCell(v){v=v==null?'':String(v);return /[",\n\r]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;}
+function sessionSummaryCsv(sessions,unit){
+  const P=IL.prog;unit=unit==='kg'?'kg':'lb';
+  const rows=[['Date','Day','Type','Duration (min)','Volume ('+unit+')','Working sets','Exercises','Bodyweight ('+unit+')','Notes']];
+  (sessions||[]).filter(s=>s&&s.completed!==false).slice().sort((a,b)=>a.date-b.date).forEach(s=>{
+    const d=new Date(s.date),iso=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+    const day=d.toLocaleDateString('en-US',{weekday:'short'}),cardio=s.kind==='cardio';
+    const dur=P.sessionDuration(s);let notes=s.note||'';
+    if(cardio){const c=s.cardio||{},bits=[c.type,c.intensity,(c.distance!=null?c.distance+' '+(c.unit||''):'')].filter(Boolean);notes=[bits.join(' · '),s.note].filter(Boolean).join(' — ');}
+    rows.push([iso,day,cardio?'Cardio':(s.deload?'Deload':'Strength'),dur==null?'':dur,
+      cardio?'':P.sessionVolume(s,0),cardio?'':P.sessionSets(s),cardio?'':(s.exercises?s.exercises.length:0),
+      (+s.bw>0)?s.bw:'',notes].map(csvCell));
+  });
+  return rows.map(r=>r.join(',')).join('\r\n')+'\r\n';
+}
+
+IL.sync={mergeSessions,applyTombstones,pruneTombstones,cleanDeleted,exportPayload,parseImport,resolveActive,cleanSession,cleanRoutine,cleanSettings,cleanProfile,cleanCardio,sessionSummaryCsv,PROFILE_ENUM,CARDIO_ENUM,TOMB_KEEP};
 if(typeof module!=='undefined')module.exports=IL.sync;

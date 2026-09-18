@@ -2,6 +2,14 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.60.0 — 2026-09-18 · Export your sessions as a CSV
+- **New "Export sessions (CSV)" button** in Settings → Your data. It saves one row per finished workout — date, day, type (Strength / Deload / Cardio), duration, total volume, working sets, exercises, bodyweight, and notes — ready for a spreadsheet or to feed into another health app.
+- Volume uses the bodyweight recorded on each workout (so bodyweight lifts are accurate), and cardio sessions include their type, intensity and distance.
+
+A note on health apps: Bevel and Apple Health only accept data through Apple Health, and Apple Health can't store sets/reps/weight — so a direct live sync isn't possible from a web app. This CSV is the portable bridge (a tool like "Health CSV Importer" can push the bodyweight/minutes into Apple Health), and it's the foundation if we later add an Apple Health shortcut.
+
+Not verified on-device.
+
 ## v0.59.2 — 2026-09-17 · Plate loader: type the weight in
 Polishing the plate loader from your feedback:
 - **Type any weight instead of tapping.** Both the weight and the bar weight are now editable — tap the number and type it, and the plates update as you go. No more holding the button for a heavy load.
