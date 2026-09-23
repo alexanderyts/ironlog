@@ -228,6 +228,7 @@ const DUAL_STACK=new Set(['cable-crossover','low-to-high-cable-fly','cable-rever
 // Assist machines where LESS weight is harder: progression REDUCES the load and a PR is the lowest
 // assist, not the highest (#16). The engine flips the increment and the PR ranking for these ids.
 const INVERTED_LOAD=new Set(['assisted-pull-up','assisted-dip']);
+const isAssist=id=>INVERTED_LOAD.has(id);   // the ONE assist-machine check (review §8: it was hand-written ~10×)
 // Time-held lifts: the "reps" field is SECONDS, not reps. So they carry no weight×reps volume and no
 // 1RM estimate — a plank or a loaded carry is progressed by holding longer or adding load, and the
 // engine shows load × seconds. They still count as SETS for balance/frequency/coach. (farmers-carry
@@ -279,7 +280,7 @@ const MODES={
 };
 const MODE_ORDER=['barbell','dumbbell','smith','machine','cable','bodyweight'];
 const EQUIP_MODE={Barbell:'barbell',Dumbbell:'dumbbell',Machine:'machine',Cable:'cable',Bodyweight:'bodyweight',Other:'machine'};
-const PUSH_PATS=['hpush','vpush'], PULL_PATS=['hpull','vpull'], LOWER_GROUPS=['Quads','Hamstrings','Glutes','Calves'];
+const LOWER_GROUPS=['Quads','Hamstrings','Glutes','Calves'];
 // Fraction of bodyweight lifted on bodyweight moves (used when a bodyweight is set)
 const BW_FACTOR={'pull-up':1,'chin-up':1,'chest-dip':1,'tricep-dip':1,'push-up':0.65};
 
@@ -303,7 +304,6 @@ function regLabel(group,reg){
   return (M[group]&&M[group][reg])||reg;
 }
 function patLabel(p){return {hpush:'horizontal press',vpush:'overhead press',hpull:'row',vpull:'pull-up / pulldown',hinge:'hip hinge',squat:'squat',lunge:'lunge',iso:'isolation'}[p]||p;}
-function exampleFor(group,reg){const e=EXERCISES.find(x=>x.group===group&&x.reg===reg&&x.type===C)||EXERCISES.find(x=>x.group===group&&x.reg===reg);return e?e.name:null;}
 function hashId(s){let h=0;for(let i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))>>>0;return h;}
 
-IL.data={C,I,EXERCISES,EX,GROUPS,PRESETS,META,REGIONS,IDEAL_PATS,PAT_RANK,EQUIP_LOAD,MODES,MODE_ORDER,EQUIP_MODE,LONG_LENGTH,UNILATERAL,ONE_DB,DUAL_STACK,INVERTED_LOAD,TIME_METRIC,PUSH_PATS,PULL_PATS,LOWER_GROUPS,BW_FACTOR,GROUP_ICON,exIcon,regLabel,patLabel,exampleFor,hashId};
+IL.data={C,I,EXERCISES,EX,GROUPS,PRESETS,META,REGIONS,IDEAL_PATS,PAT_RANK,EQUIP_LOAD,MODES,MODE_ORDER,EQUIP_MODE,LONG_LENGTH,UNILATERAL,ONE_DB,DUAL_STACK,INVERTED_LOAD,isAssist,TIME_METRIC,LOWER_GROUPS,BW_FACTOR,GROUP_ICON,exIcon,regLabel,patLabel,hashId};

@@ -2,12 +2,15 @@
 // No DOM, no app state: everything takes the sessions array it should look at.
 var IL=globalThis.IL||(globalThis.IL={});
 if(typeof require==='function'&&!IL.data)require('../data/exercises.js');
-const {EX,BW_FACTOR,EQUIP_MODE,MODES,INVERTED_LOAD,TIME_METRIC,UNILATERAL,ONE_DB,DUAL_STACK}=IL.data;
+const {EX,BW_FACTOR,EQUIP_MODE,MODES,isAssist,TIME_METRIC,UNILATERAL,ONE_DB,DUAL_STACK}=IL.data;
 
 // The modality a logged exercise instance was performed with: its explicit `mode`, else derived
 // from the exercise's fixed equipment. Stable for any instance, so mode-less history (and every
 // existing test) resolves to a single consistent mode per exercise id — i.e. no behavior change.
-function modeOf(e){return (e&&e.mode)||EQUIP_MODE[EX[e&&e.id]&&EX[e.id].equip]||'barbell';}
+// An unknown stored mode (an older version's value, hand-edited data) falls back to the native one —
+// imports already drop it, but data already on the phone isn't re-cleaned, and MODES[mode].label on it
+// blanked the Progress tab (found by the weird-data safety net).
+function modeOf(e){return (e&&e.mode&&MODES[e.mode]?e.mode:null)||EQUIP_MODE[EX[e&&e.id]&&EX[e.id].equip]||'barbell';}
 
 /* ---- per-side accounting ----
    A set's volume is weight × reps × holds × sides:
@@ -46,7 +49,7 @@ function sessionVolume(s,bw){const b=sbw(s,bw);let v=0;s.exercises.forEach(e=>{
   // Assisted machines: the logged number is the ASSISTANCE, so the resistance actually moved is
   // bodyweight − assist (mirrors a weighted bodyweight lift, which is bodyweight + added). Needs a
   // bodyweight; without one it's unknowable and contributes 0 rather than counting the machine's help.
-  const inv=INVERTED_LOAD&&INVERTED_LOAD.has(e.id),mult=inv?1:sideMult(e);   // both sides / both dumbbells count (see sideMult)
+  const inv=isAssist(e.id),mult=inv?1:sideMult(e);   // both sides / both dumbbells count (see sideMult)
   e.sets.forEach(st=>{if(isWorking(st)){const load=inv?Math.max(0,b-(+st.w||0)):setLoad(e.id,st.w,b);v+=load*(+st.r||0)*mult;}});
 });return v;}
 function sessionSets(s){let n=0;s.exercises.forEach(e=>e.sets.forEach(st=>{if(isWorking(st))n++;}));return n;}
@@ -63,7 +66,6 @@ function sessionDuration(s){const a=+s.date,b=+s.endedAt;if(!(b>a&&isFinite(a)&&
 function setTimeline(s){const out=[];(s.exercises||[]).forEach(e=>{const g=EX[e.id]?EX[e.id].group:null;e.sets.forEach(st=>{if(isFinite(+st.at)&&+st.at>0)out.push({exId:e.id,group:g,at:+st.at});});});return out.sort((a,b)=>a.at-b.at);}
 // Forgotten-Finish safeguards (T2). The app never ends a workout itself — it notices and asks.
 const STALE_AFTER_MIN=75,      // no checked set for this long while a workout is open → "still training?"
-      LONG_SESSION_MIN=150,     // an unusually long open session (belt-and-suspenders for the banner copy)
       STALE_CONFIRM_MIN=30,     // at Finish, if the last set was this long ago, offer to log THAT time
       END_PAD_MIN=3;            // …plus a few minutes for the set itself
 function lastSetAt(s){let m=0;(s.exercises||[]).forEach(e=>e.sets.forEach(st=>{const a=+st.at;if(a>m)m=a;}));return m||null;}
@@ -86,7 +88,7 @@ function finalizeSets(exercises){
     // An assist machine at an EXPLICIT 0 is an unassisted rep — the strongest possible, and the goal the
     // suggestions point you at — so it must save. A blank field is still dropped (it could be a forgotten
     // entry, and would otherwise record a false "unassisted" PR). (Full review 4.2)
-    const inv=INVERTED_LOAD&&INVERTED_LOAD.has(e.id),typed=st=>st.w!=null&&String(st.w).trim()!==''&&isFinite(+st.w);
+    const inv=isAssist(e.id),typed=st=>st.w!=null&&String(st.w).trim()!==''&&isFinite(+st.w);
     const sets=e.sets.filter(st=>st.done===true&&(+st.r||0)>0&&(allowBlank||(+st.w||0)>0||(inv&&typed(st)))).map(st=>{const o=Object.assign({},st);delete o.t;o.done=true;return o;});
     return Object.assign({},e,{sets});
   }).filter(e=>e.sets.length);
@@ -107,6 +109,9 @@ function fmtVol(v){
 // detour, invisible to overload). Order is preserved (callers rely on newest-first). This is the one
 // predicate every progression/history scan shares — change it here, not in nine places.
 const real=sessions=>(sessions||[]).filter(s=>s.completed!==false&&!s.deload&&s.kind!=='cardio');
+// The sessions that count as LIFTING at all (deloads included): finished, not cardio, with exercises.
+// Coach analysis and the builder's plan detection share this rule (review §8: it was written out per file).
+const liftSessions=sessions=>(sessions||[]).filter(s=>s&&s.completed!==false&&s.exercises&&s.exercises.length&&s.kind!=='cardio');
 
 // Most recent completed performance of an exercise. opts: {beforeTs, excludeId, mode}
 // When `mode` is given, only instances performed with that modality match — so progression compares
@@ -152,7 +157,7 @@ function lastPerf(sessions,exId,opts){
    it's null (no fake PR) unless opts.repsFallback — the stall check, which only compares a lift with
    ITSELF, may fall back to reps. */
 function liftKind(exId){
-  if(INVERTED_LOAD&&INVERTED_LOAD.has(exId))return 'resist';
+  if(isAssist(exId))return 'resist';
   if(TIME_METRIC&&TIME_METRIC.has(exId))return 'time';
   const ex=EX[exId];
   if(ex&&ex.equip==='Bodyweight'&&!(BW_FACTOR&&BW_FACTOR[exId]))return 'reps';
@@ -353,7 +358,7 @@ function repRange(ex,goal){
 function nextSets(last,ex,unit,rr){
   const lo=rr?rr[0]:(ex?ex.rr[0]:8),hi=rr?rr[1]:(ex?ex.rr[1]:12),baseInc=unitIncrement(unit||'lb',ex);
   const resetR=(hi-lo>=4)?lo+1:lo;   // on a wide range, resetting to the very bottom drops too many reps — start one above (#11)
-  const inverted=!!(ex&&INVERTED_LOAD&&INVERTED_LOAD.has(ex.id)),inc=inverted?-baseInc:baseInc;   // assist machines: LESS weight is harder, so a bump REDUCES load (#16)
+  const inverted=!!ex&&isAssist(ex.id),inc=inverted?-baseInc:baseInc;   // assist machines: LESS weight is harder, so a bump REDUCES load (#16)
   const p=setPattern(last,inverted);   // an assist machine is anchored on its HARDEST (least-assist) sets
   const anchorSets=p.anchor.map(i=>last[i]);
   const short=anchorSets.reduce((n,s)=>n+Math.max(0,hi-(+s.r||0)),0);
@@ -388,7 +393,7 @@ function deloadSets(last,ex,unit){
   const hi=ex?(timed?ex.rr[0]:ex.rr[1]):12,inc=unitIncrement(unit||'lb',ex);
   // On an assist machine (#16) less weight is HARDER, so a deload must ADD assist, not cut it —
   // otherwise "recovery" prescribes a harder set than last time. ~40% MORE assist, on the grid.
-  const inverted=!!(ex&&INVERTED_LOAD&&INVERTED_LOAD.has(ex.id));
+  const inverted=!!ex&&isAssist(ex.id);
   return last.map(s=>{const w=+s.w||0;
     const dw=w>0?(inverted?Math.round(w*1.4/inc)*inc:Math.max(inc,Math.round(w*0.6/inc)*inc)):w;
     return{w:dw,r:hi};});
@@ -418,7 +423,7 @@ function suggestion(sessions,exId,opts){
   const n=nextSets(lp.sets,ex,unit,opts.rr);
   const ramp=n.pattern!=='flat';
   const topLbl=n.pattern==='descending'?'opener':'top set';
-  const inverted=!!(ex&&INVERTED_LOAD&&INVERTED_LOAD.has(ex.id));   // assist machine: a bump means LESS assist
+  const inverted=!!ex&&isAssist(ex.id);   // assist machine: a bump means LESS assist
   if(n.bumped){
     // the REAL bump can differ from `inc` when the last top was off-grid (after a unit conversion) and
     // got snapped before adding — so report newTop − lastTop, not inc, or the label lies (#11/#29)
@@ -484,5 +489,5 @@ function calcStreak(sessions,now){
   return n;
 }
 
-IL.prog={DAY,startOfDay,e1rm,isWorking,setLoad,sbw,sessionVolume,sessionSets,sessionDuration,MAX_SESSION_MIN,setTimeline,lastSetAt,staleness,STALE_AFTER_MIN,LONG_SESSION_MIN,STALE_CONFIRM_MIN,END_PAD_MIN,finalizeSets,parseWeightInput,fmtVol,modeOf,real,lastPerf,lastModeFor,exerciseSeries,setScore,scoreMetric,liftKind,scoreSet,beatsScore,bestSetBefore,sessionPR,platesPerSide,sidesOf,holdsOf,sideMult,trackOf,sideDefault,lastSideFor,lastTrackFor,bestE1rmBefore,setPattern,fmtPerf,repRange,nextSets,deloadSets,suggestion,unitIncrement,setWeightSteps,convertWeight,convertSessions,calcStreak,weekIndex,weekStart};
+IL.prog={liftSessions,DAY,startOfDay,e1rm,isWorking,setLoad,sbw,sessionVolume,sessionSets,sessionDuration,MAX_SESSION_MIN,setTimeline,lastSetAt,staleness,STALE_AFTER_MIN,STALE_CONFIRM_MIN,END_PAD_MIN,finalizeSets,parseWeightInput,fmtVol,modeOf,real,lastPerf,lastModeFor,exerciseSeries,setScore,scoreMetric,liftKind,scoreSet,beatsScore,bestSetBefore,sessionPR,platesPerSide,sidesOf,holdsOf,sideMult,trackOf,sideDefault,lastSideFor,lastTrackFor,bestE1rmBefore,setPattern,fmtPerf,repRange,nextSets,deloadSets,suggestion,unitIncrement,setWeightSteps,convertWeight,convertSessions,calcStreak,weekIndex,weekStart};
 if(typeof module!=='undefined')module.exports=IL.prog;

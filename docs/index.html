@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-QMPMbtM1AmbCxJOwXHjieELBlkrtDzhAD5aA5BFYMpg=' 'sha256-WPBob/luB2k1aalTWXpi6zk3SrIbj8GlZV7AlFdG7oA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-P7Umnh3v/BxCCY/UNrHjoQZlZPIF9q1Rc5RIXpzbkeo=' 'sha256-WPBob/luB2k1aalTWXpi6zk3SrIbj8GlZV7AlFdG7oA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Ironlog</title>
@@ -454,8 +454,8 @@ html.kb-open .tabbar{display:none}
 </div>
 
 <script>
-/* Ironlog v0.66.0 · site build */
-var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.66.0",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
+/* Ironlog v0.67.0 · site build */
+var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.67.0",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
 
 /* ===== src/data/exercises.js ===== */
 (function(){'use strict';
@@ -690,6 +690,7 @@ const DUAL_STACK=new Set(['cable-crossover','low-to-high-cable-fly','cable-rever
 // Assist machines where LESS weight is harder: progression REDUCES the load and a PR is the lowest
 // assist, not the highest (#16). The engine flips the increment and the PR ranking for these ids.
 const INVERTED_LOAD=new Set(['assisted-pull-up','assisted-dip']);
+const isAssist=id=>INVERTED_LOAD.has(id);   // the ONE assist-machine check (review §8: it was hand-written ~10×)
 // Time-held lifts: the "reps" field is SECONDS, not reps. So they carry no weight×reps volume and no
 // 1RM estimate — a plank or a loaded carry is progressed by holding longer or adding load, and the
 // engine shows load × seconds. They still count as SETS for balance/frequency/coach. (farmers-carry
@@ -741,7 +742,7 @@ const MODES={
 };
 const MODE_ORDER=['barbell','dumbbell','smith','machine','cable','bodyweight'];
 const EQUIP_MODE={Barbell:'barbell',Dumbbell:'dumbbell',Machine:'machine',Cable:'cable',Bodyweight:'bodyweight',Other:'machine'};
-const PUSH_PATS=['hpush','vpush'], PULL_PATS=['hpull','vpull'], LOWER_GROUPS=['Quads','Hamstrings','Glutes','Calves'];
+const LOWER_GROUPS=['Quads','Hamstrings','Glutes','Calves'];
 // Fraction of bodyweight lifted on bodyweight moves (used when a bodyweight is set)
 const BW_FACTOR={'pull-up':1,'chin-up':1,'chest-dip':1,'tricep-dip':1,'push-up':0.65};
 
@@ -765,10 +766,9 @@ function regLabel(group,reg){
   return (M[group]&&M[group][reg])||reg;
 }
 function patLabel(p){return {hpush:'horizontal press',vpush:'overhead press',hpull:'row',vpull:'pull-up / pulldown',hinge:'hip hinge',squat:'squat',lunge:'lunge',iso:'isolation'}[p]||p;}
-function exampleFor(group,reg){const e=EXERCISES.find(x=>x.group===group&&x.reg===reg&&x.type===C)||EXERCISES.find(x=>x.group===group&&x.reg===reg);return e?e.name:null;}
 function hashId(s){let h=0;for(let i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))>>>0;return h;}
 
-IL.data={C,I,EXERCISES,EX,GROUPS,PRESETS,META,REGIONS,IDEAL_PATS,PAT_RANK,EQUIP_LOAD,MODES,MODE_ORDER,EQUIP_MODE,LONG_LENGTH,UNILATERAL,ONE_DB,DUAL_STACK,INVERTED_LOAD,TIME_METRIC,PUSH_PATS,PULL_PATS,LOWER_GROUPS,BW_FACTOR,GROUP_ICON,exIcon,regLabel,patLabel,exampleFor,hashId};
+IL.data={C,I,EXERCISES,EX,GROUPS,PRESETS,META,REGIONS,IDEAL_PATS,PAT_RANK,EQUIP_LOAD,MODES,MODE_ORDER,EQUIP_MODE,LONG_LENGTH,UNILATERAL,ONE_DB,DUAL_STACK,INVERTED_LOAD,isAssist,TIME_METRIC,LOWER_GROUPS,BW_FACTOR,GROUP_ICON,exIcon,regLabel,patLabel,hashId};
 
 })();
 
@@ -779,12 +779,15 @@ IL.data={C,I,EXERCISES,EX,GROUPS,PRESETS,META,REGIONS,IDEAL_PATS,PAT_RANK,EQUIP_
 // No DOM, no app state: everything takes the sessions array it should look at.
 var IL=globalThis.IL||(globalThis.IL={});
 if(typeof require==='function'&&!IL.data)require('../data/exercises.js');
-const {EX,BW_FACTOR,EQUIP_MODE,MODES,INVERTED_LOAD,TIME_METRIC,UNILATERAL,ONE_DB,DUAL_STACK}=IL.data;
+const {EX,BW_FACTOR,EQUIP_MODE,MODES,isAssist,TIME_METRIC,UNILATERAL,ONE_DB,DUAL_STACK}=IL.data;
 
 // The modality a logged exercise instance was performed with: its explicit `mode`, else derived
 // from the exercise's fixed equipment. Stable for any instance, so mode-less history (and every
 // existing test) resolves to a single consistent mode per exercise id — i.e. no behavior change.
-function modeOf(e){return (e&&e.mode)||EQUIP_MODE[EX[e&&e.id]&&EX[e.id].equip]||'barbell';}
+// An unknown stored mode (an older version's value, hand-edited data) falls back to the native one —
+// imports already drop it, but data already on the phone isn't re-cleaned, and MODES[mode].label on it
+// blanked the Progress tab (found by the weird-data safety net).
+function modeOf(e){return (e&&e.mode&&MODES[e.mode]?e.mode:null)||EQUIP_MODE[EX[e&&e.id]&&EX[e.id].equip]||'barbell';}
 
 /* ---- per-side accounting ----
    A set's volume is weight × reps × holds × sides:
@@ -823,7 +826,7 @@ function sessionVolume(s,bw){const b=sbw(s,bw);let v=0;s.exercises.forEach(e=>{
   // Assisted machines: the logged number is the ASSISTANCE, so the resistance actually moved is
   // bodyweight − assist (mirrors a weighted bodyweight lift, which is bodyweight + added). Needs a
   // bodyweight; without one it's unknowable and contributes 0 rather than counting the machine's help.
-  const inv=INVERTED_LOAD&&INVERTED_LOAD.has(e.id),mult=inv?1:sideMult(e);   // both sides / both dumbbells count (see sideMult)
+  const inv=isAssist(e.id),mult=inv?1:sideMult(e);   // both sides / both dumbbells count (see sideMult)
   e.sets.forEach(st=>{if(isWorking(st)){const load=inv?Math.max(0,b-(+st.w||0)):setLoad(e.id,st.w,b);v+=load*(+st.r||0)*mult;}});
 });return v;}
 function sessionSets(s){let n=0;s.exercises.forEach(e=>e.sets.forEach(st=>{if(isWorking(st))n++;}));return n;}
@@ -840,7 +843,6 @@ function sessionDuration(s){const a=+s.date,b=+s.endedAt;if(!(b>a&&isFinite(a)&&
 function setTimeline(s){const out=[];(s.exercises||[]).forEach(e=>{const g=EX[e.id]?EX[e.id].group:null;e.sets.forEach(st=>{if(isFinite(+st.at)&&+st.at>0)out.push({exId:e.id,group:g,at:+st.at});});});return out.sort((a,b)=>a.at-b.at);}
 // Forgotten-Finish safeguards (T2). The app never ends a workout itself — it notices and asks.
 const STALE_AFTER_MIN=75,      // no checked set for this long while a workout is open → "still training?"
-      LONG_SESSION_MIN=150,     // an unusually long open session (belt-and-suspenders for the banner copy)
       STALE_CONFIRM_MIN=30,     // at Finish, if the last set was this long ago, offer to log THAT time
       END_PAD_MIN=3;            // …plus a few minutes for the set itself
 function lastSetAt(s){let m=0;(s.exercises||[]).forEach(e=>e.sets.forEach(st=>{const a=+st.at;if(a>m)m=a;}));return m||null;}
@@ -863,7 +865,7 @@ function finalizeSets(exercises){
     // An assist machine at an EXPLICIT 0 is an unassisted rep — the strongest possible, and the goal the
     // suggestions point you at — so it must save. A blank field is still dropped (it could be a forgotten
     // entry, and would otherwise record a false "unassisted" PR). (Full review 4.2)
-    const inv=INVERTED_LOAD&&INVERTED_LOAD.has(e.id),typed=st=>st.w!=null&&String(st.w).trim()!==''&&isFinite(+st.w);
+    const inv=isAssist(e.id),typed=st=>st.w!=null&&String(st.w).trim()!==''&&isFinite(+st.w);
     const sets=e.sets.filter(st=>st.done===true&&(+st.r||0)>0&&(allowBlank||(+st.w||0)>0||(inv&&typed(st)))).map(st=>{const o=Object.assign({},st);delete o.t;o.done=true;return o;});
     return Object.assign({},e,{sets});
   }).filter(e=>e.sets.length);
@@ -884,6 +886,9 @@ function fmtVol(v){
 // detour, invisible to overload). Order is preserved (callers rely on newest-first). This is the one
 // predicate every progression/history scan shares — change it here, not in nine places.
 const real=sessions=>(sessions||[]).filter(s=>s.completed!==false&&!s.deload&&s.kind!=='cardio');
+// The sessions that count as LIFTING at all (deloads included): finished, not cardio, with exercises.
+// Coach analysis and the builder's plan detection share this rule (review §8: it was written out per file).
+const liftSessions=sessions=>(sessions||[]).filter(s=>s&&s.completed!==false&&s.exercises&&s.exercises.length&&s.kind!=='cardio');
 
 // Most recent completed performance of an exercise. opts: {beforeTs, excludeId, mode}
 // When `mode` is given, only instances performed with that modality match — so progression compares
@@ -929,7 +934,7 @@ function lastPerf(sessions,exId,opts){
    it's null (no fake PR) unless opts.repsFallback — the stall check, which only compares a lift with
    ITSELF, may fall back to reps. */
 function liftKind(exId){
-  if(INVERTED_LOAD&&INVERTED_LOAD.has(exId))return 'resist';
+  if(isAssist(exId))return 'resist';
   if(TIME_METRIC&&TIME_METRIC.has(exId))return 'time';
   const ex=EX[exId];
   if(ex&&ex.equip==='Bodyweight'&&!(BW_FACTOR&&BW_FACTOR[exId]))return 'reps';
@@ -1130,7 +1135,7 @@ function repRange(ex,goal){
 function nextSets(last,ex,unit,rr){
   const lo=rr?rr[0]:(ex?ex.rr[0]:8),hi=rr?rr[1]:(ex?ex.rr[1]:12),baseInc=unitIncrement(unit||'lb',ex);
   const resetR=(hi-lo>=4)?lo+1:lo;   // on a wide range, resetting to the very bottom drops too many reps — start one above (#11)
-  const inverted=!!(ex&&INVERTED_LOAD&&INVERTED_LOAD.has(ex.id)),inc=inverted?-baseInc:baseInc;   // assist machines: LESS weight is harder, so a bump REDUCES load (#16)
+  const inverted=!!ex&&isAssist(ex.id),inc=inverted?-baseInc:baseInc;   // assist machines: LESS weight is harder, so a bump REDUCES load (#16)
   const p=setPattern(last,inverted);   // an assist machine is anchored on its HARDEST (least-assist) sets
   const anchorSets=p.anchor.map(i=>last[i]);
   const short=anchorSets.reduce((n,s)=>n+Math.max(0,hi-(+s.r||0)),0);
@@ -1165,7 +1170,7 @@ function deloadSets(last,ex,unit){
   const hi=ex?(timed?ex.rr[0]:ex.rr[1]):12,inc=unitIncrement(unit||'lb',ex);
   // On an assist machine (#16) less weight is HARDER, so a deload must ADD assist, not cut it —
   // otherwise "recovery" prescribes a harder set than last time. ~40% MORE assist, on the grid.
-  const inverted=!!(ex&&INVERTED_LOAD&&INVERTED_LOAD.has(ex.id));
+  const inverted=!!ex&&isAssist(ex.id);
   return last.map(s=>{const w=+s.w||0;
     const dw=w>0?(inverted?Math.round(w*1.4/inc)*inc:Math.max(inc,Math.round(w*0.6/inc)*inc)):w;
     return{w:dw,r:hi};});
@@ -1195,7 +1200,7 @@ function suggestion(sessions,exId,opts){
   const n=nextSets(lp.sets,ex,unit,opts.rr);
   const ramp=n.pattern!=='flat';
   const topLbl=n.pattern==='descending'?'opener':'top set';
-  const inverted=!!(ex&&INVERTED_LOAD&&INVERTED_LOAD.has(ex.id));   // assist machine: a bump means LESS assist
+  const inverted=!!ex&&isAssist(ex.id);   // assist machine: a bump means LESS assist
   if(n.bumped){
     // the REAL bump can differ from `inc` when the last top was off-grid (after a unit conversion) and
     // got snapped before adding — so report newTop − lastTop, not inc, or the label lies (#11/#29)
@@ -1261,7 +1266,7 @@ function calcStreak(sessions,now){
   return n;
 }
 
-IL.prog={DAY,startOfDay,e1rm,isWorking,setLoad,sbw,sessionVolume,sessionSets,sessionDuration,MAX_SESSION_MIN,setTimeline,lastSetAt,staleness,STALE_AFTER_MIN,LONG_SESSION_MIN,STALE_CONFIRM_MIN,END_PAD_MIN,finalizeSets,parseWeightInput,fmtVol,modeOf,real,lastPerf,lastModeFor,exerciseSeries,setScore,scoreMetric,liftKind,scoreSet,beatsScore,bestSetBefore,sessionPR,platesPerSide,sidesOf,holdsOf,sideMult,trackOf,sideDefault,lastSideFor,lastTrackFor,bestE1rmBefore,setPattern,fmtPerf,repRange,nextSets,deloadSets,suggestion,unitIncrement,setWeightSteps,convertWeight,convertSessions,calcStreak,weekIndex,weekStart};
+IL.prog={liftSessions,DAY,startOfDay,e1rm,isWorking,setLoad,sbw,sessionVolume,sessionSets,sessionDuration,MAX_SESSION_MIN,setTimeline,lastSetAt,staleness,STALE_AFTER_MIN,STALE_CONFIRM_MIN,END_PAD_MIN,finalizeSets,parseWeightInput,fmtVol,modeOf,real,lastPerf,lastModeFor,exerciseSeries,setScore,scoreMetric,liftKind,scoreSet,beatsScore,bestSetBefore,sessionPR,platesPerSide,sidesOf,holdsOf,sideMult,trackOf,sideDefault,lastSideFor,lastTrackFor,bestE1rmBefore,setPattern,fmtPerf,repRange,nextSets,deloadSets,suggestion,unitIncrement,setWeightSteps,convertWeight,convertSessions,calcStreak,weekIndex,weekStart};
 if(typeof module!=='undefined')module.exports=IL.prog;
 
 })();
@@ -1303,7 +1308,7 @@ if(typeof module!=='undefined')module.exports=IL.search;
 var IL=globalThis.IL||(globalThis.IL={});
 if(typeof require==='function'&&!IL.data)require('../data/exercises.js');
 if(typeof require==='function'&&!IL.prog)require('./progression.js');
-const {C,I,EXERCISES,EX,REGIONS,IDEAL_PATS,PAT_RANK,EQUIP_LOAD,LONG_LENGTH,INVERTED_LOAD,TIME_METRIC,UNILATERAL,regLabel,patLabel,hashId}=IL.data;
+const {C,I,EXERCISES,EX,REGIONS,IDEAL_PATS,PAT_RANK,EQUIP_LOAD,LONG_LENGTH,isAssist,TIME_METRIC,UNILATERAL,regLabel,patLabel,hashId}=IL.data;
 const {lastPerf,lastModeFor,lastSideFor,trackOf,sidesOf,scoreSet,sbw,nextSets,deloadSets,repRange,modeOf,real,DAY,unitIncrement}=IL.prog;
 
 // Working sets a movement deserves when you've never logged it: main lifts 4, other compounds 3,
@@ -1323,7 +1328,7 @@ function shapeStyle(sets,style,ex,unit){
   if(!sets.length)return sets;
   // the "top" set is the hardest one — for an assist machine that's the LEAST assist (full review 4.3:
   // straight sets spread the most-assisted, i.e. easiest, set across every set)
-  const inv=!!(ex&&INVERTED_LOAD&&INVERTED_LOAD.has(ex.id));
+  const inv=!!ex&&isAssist(ex.id);
   const w=(inv?Math.min:Math.max)(...sets.map(s=>+s.w||0));
   if(w<=0)return sets;
   // straight = every set at the top weight AND the top set's reps. Carrying each set's own reps would
@@ -1654,7 +1659,7 @@ function sessionGroups(s){const g={};s.exercises.forEach(e=>{const x=EX[e.id];if
 // holiday) it still continues but is flagged `meta.lapsed` so the caller skips stall/rotation/volume.
 function findPlan(groups,sessions,now,meta){
   now=now||Date.now();const want=new Set(groups);
-  const completed=(sessions||[]).filter(s=>s.completed!==false&&s.exercises&&s.exercises.length&&s.kind!=='cardio');   // newest-first (upsert/history keep it sorted)
+  const completed=IL.prog.liftSessions(sessions);   // newest-first (upsert/history keep it sorted)
   const scan=maxGap=>{
     let ref=now;
     for(const s of completed){
@@ -1699,7 +1704,7 @@ function recentPerfs(sessions,exId,opts){
   // Every axis below is normalized so HIGHER = BETTER, letting isStalled's comparisons stay direction-
   // agnostic across lift types. Assist machines: less assist is better, so top/score = −(least assist).
   // Time-held lifts: longer is better, so top/score = seconds. Everything else: heaviest weight / e1RM.
-  const inv=INVERTED_LOAD&&INVERTED_LOAD.has(exId), time=TIME_METRIC&&TIME_METRIC.has(exId);
+  const inv=isAssist(exId), time=TIME_METRIC&&TIME_METRIC.has(exId);
   for(let i=0;i<n;i++){
     const lp=lastPerf(sessions,exId,{beforeTs:before,mode:opts.mode,clean:true});if(!lp)break;   // a disowned set is not evidence of progress OR of a stall
     if(opts.since&&lp.date<opts.since)break;
@@ -1902,12 +1907,12 @@ if(typeof module!=='undefined')module.exports=IL.builder;
 var IL=globalThis.IL||(globalThis.IL={});
 if(typeof require==='function'&&!IL.data)require('../data/exercises.js');
 if(typeof require==='function'&&!IL.prog)require('./progression.js');
-const {EX,EXERCISES,REGIONS,IDEAL_PATS,LOWER_GROUPS,MODES,INVERTED_LOAD,TIME_METRIC,regLabel,patLabel,exampleFor,hashId}=IL.data;
+const {EX,EXERCISES,REGIONS,IDEAL_PATS,LOWER_GROUPS,MODES,isAssist,TIME_METRIC,regLabel,patLabel,hashId}=IL.data;
 const {DAY,startOfDay,e1rm,isWorking,setLoad,setScore,scoreSet,beatsScore,sbw,sessionVolume,sessionSets,sessionDuration,setTimeline,modeOf,trackOf,holdsOf,sidesOf,calcStreak,real,weekIndex,weekStart,lastPerf}=IL.prog;
 
 // completed() INCLUDES deloads on purpose — volume/frequency/PR-window analysis wants everything the
 // user actually did. Progression-only scans use real() (completed AND not a deload) instead.
-const completed=sessions=>sessions.filter(s=>s.completed!==false&&s.exercises.length&&s.kind!=='cardio');
+const completed=IL.prog.liftSessions;
 
 // A comparative judgment ("you press more than you pull", "legs are undertrained") needs a real
 // sample to mean anything — one heavy session can trip a raw set-count threshold. Require both a
@@ -2229,7 +2234,7 @@ function personalRecords(sessions,bw,limit){
   const beats=(c,b)=>beatsScore(c,b);
   real(sessions).forEach(s=>{const sb=sbw(s,bw);s.exercises.forEach(e=>{const mode=modeOf(e),track=trackOf(e),key=e.id+':'+track,ex=EX[e.id];   // one record per lift per TRACK: a one-arm cable curl never competes with the two-hand bar
     const holds=holdsOf(e),sides=sidesOf(e);
-    const inverted=!!(ex&&INVERTED_LOAD&&INVERTED_LOAD.has(e.id));   // assist machine: no 1RM estimate (#16)
+    const inverted=!!ex&&isAssist(e.id);   // assist machine: no 1RM estimate (#16)
     const time=!!(TIME_METRIC&&TIME_METRIC.has(e.id));   // time-held: "reps" are seconds → no 1RM
     e.sets.forEach(st=>{
     if(!isWorking(st))return;const w=setLoad(e.id,st.w,sb),r=+st.r||0;   // sb = this session's bodyweight (D-1)
@@ -2297,18 +2302,20 @@ function timeByGroup(s){
   tl.forEach(x=>{const dt=Math.min(Math.max(0,x.at-prev),cap);if(x.group)out[x.group]=(out[x.group]||0)+dt/60000;prev=x.at;});
   return out;
 }
-// Rest gaps (seconds) between consecutive stamped sets of the SAME exercise, split compound/isolation.
+// Rest gaps (seconds) between consecutive stamped sets of ONE exercise entry — the single copy of this
+// rule (the session view and the per-exercise history both use it).
+function exGaps(e){const t=e.sets.map(st=>+st.at).filter(a=>a>0).sort((a,b)=>a-b),out=[];
+  for(let i=1;i<t.length;i++){const g=(t[i]-t[i-1])/1000;if(g>=MIN_REST_S)out.push(g);}return out;}
+// …for a whole session, split compound/isolation.
 function restGaps(s){const all=[],comp=[],iso=[];
-  (s.exercises||[]).forEach(e=>{const ex=EX[e.id];const t=e.sets.map(st=>+st.at).filter(a=>a>0).sort((a,b)=>a-b);
-    for(let i=1;i<t.length;i++){const g=(t[i]-t[i-1])/1000;if(g<MIN_REST_S)continue;all.push(g);if(ex&&ex.type==='compound')comp.push(g);else if(ex)iso.push(g);}});
+  (s.exercises||[]).forEach(e=>{const ex=EX[e.id];exGaps(e).forEach(g=>{all.push(g);if(ex&&ex.type==='compound')comp.push(g);else if(ex)iso.push(g);});});
   return {all,comp,iso};}
 // Median rest actually taken (seconds), overall and by lift type. null when too few stamped sets.
 function restTaken(s){const g=restGaps(s);return {median:median(g.all),compound:median(g.comp),isolation:median(g.iso),n:g.all.length};}
 // Working sets per 10 minutes; null when the workout isn't timed.
 function sessionDensity(s){const d=sessionDuration(s);return (d&&d>0)?+(sessionSets(s)/d*10).toFixed(1):null;}
 // Median rest (seconds) for ONE exercise across all its stamped history — for the exercise detail sheet.
-function exerciseRest(sessions,id){const gaps=[];completed(sessions).forEach(s=>{const e=s.exercises.find(x=>x.id===id);if(!e)return;
-  const t=e.sets.map(st=>+st.at).filter(a=>a>0).sort((a,b)=>a-b);for(let i=1;i<t.length;i++){const g=(t[i]-t[i-1])/1000;if(g>=MIN_REST_S)gaps.push(g);}});return median(gaps);}
+function exerciseRest(sessions,id){const gaps=[];completed(sessions).forEach(s=>{const e=s.exercises.find(x=>x.id===id);if(e)gaps.push(...exGaps(e));});return median(gaps);}
 // 28-day time picture for the Progress "Time" card: how long, how dense, how much rest, split by muscle.
 function timeTrends(sessions,now){
   now=now||Date.now();
@@ -2933,7 +2940,6 @@ const setsOf=s=>P.sessionSets(s);
 // no context otherwise — see ROADMAP-v2 #1).
 function volLabel(label){return `<span data-vol-info style="cursor:pointer">${label||'Volume'} <span class="dim" style="font-weight:400">ⓘ</span></span>`;}
 const completedSessions=()=>state.sessions.filter(s=>s.completed!==false&&s.exercises.length&&s.kind!=='cardio');   // strength only — feeds every lifting stat
-const completedCardio=()=>state.sessions.filter(s=>s.completed!==false&&s.kind==='cardio');
 const completedAny=()=>state.sessions.filter(s=>s.completed!==false&&(s.exercises.length||s.kind==='cardio'));   // strength ∪ cardio — for History, "this week" count, streak
 const ICON_BACK='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>';
 function demoURL(id){const e=EX[id];if(!e)return 'https://www.youtube.com/';return 'https://www.youtube.com/results?search_query='+encodeURIComponent('how to '+e.name+' proper form technique');}
@@ -3168,7 +3174,7 @@ function homeView(){
     ${state.active?'':cardioBlock()}
     ${last?`<div class="eyebrow" style="margin:26px 2px 10px">Last session</div>${sessCard(last)}`:emptyHome()}
     <div class="eyebrow" style="margin:24px 2px 10px">Jump in</div>
-    <button class="btn ghost block" id="btnGoLibrary" data-action="goLibrary" style="justify-content:space-between">
+    <button class="btn ghost block" data-action="goLibrary" style="justify-content:space-between">
       <span>Browse exercise library</span><span class="dim mono">${EXERCISES.length} exercises ›</span></button>
   </div>`;
 }
@@ -3178,7 +3184,7 @@ function emptyHome(){return `<div class="card" style="padding:26px 18px;text-ali
 // shows up once you've chosen.
 function startBlock(){
   const START=`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>`;
-  return `<button class="btn primary block" id="btnStartFlow" data-action="startFlow" style="height:56px;font-size:16px">${START} Start a workout</button>`;
+  return `<button class="btn primary block" data-action="startFlow" style="height:56px;font-size:16px">${START} Start a workout</button>`;
 }
 /* ---------------- CARDIO ----------------
    A cardio session is its own kind (kind:'cardio', exercises:[]) — invisible to the lifting math.
@@ -3191,7 +3197,7 @@ const CARDIO_ICON=`<svg width="19" height="19" viewBox="0 0 24 24" fill="none" s
 // The last cardio type this person logged — a small nicety so the picker defaults to their usual.
 function lastCardioType(){const c=state.sessions.filter(s=>s.completed!==false&&s.kind==='cardio'&&s.cardio).sort((a,b)=>b.date-a.date)[0];return c?c.cardio.type:'treadmill';}
 function cardioBlock(){
-  return `<button class="btn ghost block" id="btnCardio" data-action="cardioOpen" style="margin-top:10px;height:50px;justify-content:center;gap:9px">${CARDIO_ICON} Log cardio</button>`;
+  return `<button class="btn ghost block" data-action="cardioOpen" style="margin-top:10px;height:50px;justify-content:center;gap:9px">${CARDIO_ICON} Log cardio</button>`;
 }
 // Live cardio: a running clock + the type/intensity/distance you can adjust while you go, then Finish.
 function cardioLiveView(s){
@@ -3240,7 +3246,7 @@ function cardioSheetBody(){
     <div class="row-between" style="margin:18px 2px 12px"><span class="eyebrow">Or log one you already did</span></div>
     <div class="settingrow" style="border:none;padding:6px 2px">
       <div><div style="font-weight:600">Minutes</div><div class="dim" style="font-size:12.5px">How long you went</div></div>
-      <div class="stepper"><button data-cardmin="-5">−</button><button class="val mono" id="cardMinVal">${c.mins}</button><button data-cardmin="5">＋</button></div></div>
+      <div class="stepper"><button data-cardmin="-5">−</button><button class="val mono">${c.mins}</button><button data-cardmin="5">＋</button></div></div>
     <div class="settingrow" style="border:none;padding:6px 2px">
       <div><div style="font-weight:600">When</div><div class="dim" style="font-size:12.5px">Defaults to today — back-date a walk you forgot</div></div>
       <input type="date" id="cardWhen" value="${esc(c.when||todayISO())}" max="${todayISO()}" class="field" style="width:auto;height:40px;padding:0 12px"></div>
@@ -3258,7 +3264,7 @@ function cardioEditBody(){
     ${cardioFields(c,'edit')}
     <div class="settingrow" style="border:none;padding:6px 2px">
       <div><div style="font-weight:600">Minutes</div><div class="dim" style="font-size:12.5px">How long you went</div></div>
-      <div class="stepper"><button data-cardmin="-5">−</button><button class="val mono" id="cardMinVal">${c.mins}</button><button data-cardmin="5">＋</button></div></div>
+      <div class="stepper"><button data-cardmin="-5">−</button><button class="val mono">${c.mins}</button><button data-cardmin="5">＋</button></div></div>
     <button class="btn primary block" id="btnCardioSave" style="margin-top:12px">Save changes</button>`;
 }
 // Begin a live cardio session from the sheet's current picks.
@@ -3279,12 +3285,12 @@ function profileIntroCard(){
 function resumeCard(){
   const s=state.active;
   if(s.kind==='cardio'){const c=s.cardio||{};
-    return `<button class="resume" id="btnResume" data-action="resume">
+    return `<button class="resume" data-action="resume">
       <span class="tri">${CARDIO_ICON}</span>
       <span style="flex:1;min-width:0"><span style="font-weight:700;display:block">Resume your cardio</span><span class="dim" style="font-size:13px">${cardioTypeLabel(c.type)} · running ${fmtElapsed(s.date)}</span></span>
       <span style="color:var(--accent);font-size:20px;flex-shrink:0">→</span></button>`;}
   const sets=setsOf(s);
-  return `<button class="resume" id="btnResume" data-action="resume">
+  return `<button class="resume" data-action="resume">
     <span class="tri"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></span>
     <span style="flex:1;min-width:0"><span style="font-weight:700;display:block">Resume your workout</span><span class="dim" style="font-size:13px">${s.exercises.length} exercise${s.exercises.length!==1?'s':''} · ${sets} set${sets!==1?'s':''} logged${P.staleness(s).sinceLastSet>=P.STALE_AFTER_MIN?` · <span style="color:var(--warn)">idle ${fmtDur(P.staleness(s).sinceLastSet)}</span>`:''}</span></span>
     <span style="color:var(--accent);font-size:20px;flex-shrink:0">→</span></button>`;
@@ -3292,7 +3298,7 @@ function resumeCard(){
 function startWorkoutView(){
   return `
   <div class="section">
-    <div class="topbar"><button class="backbtn" id="btnBackHome" data-action="backHome">${ICON_BACK} Home</button></div>
+    <div class="topbar"><button class="backbtn" data-action="backHome">${ICON_BACK} Home</button></div>
     <div style="padding:0 2px">
       <div class="eyebrow">New workout</div>
       <h2 style="font-size:24px;margin-top:6px">What are you training?</h2>
@@ -3300,14 +3306,14 @@ function startWorkoutView(){
     </div>
     <div style="height:18px"></div>${coachNudge()}
     <div class="eyebrow" style="margin:16px 2px 10px">Quick picks</div>
-    <div class="chips hscroll" id="presetPick">${PRESETS.map(p=>`<button class="chip ${presetOn(p)?'on':''}" data-action="preset" data-preset="${p.label}">${p.label}</button>`).join('')}</div>
+    <div class="chips hscroll">${PRESETS.map(p=>`<button class="chip ${presetOn(p)?'on':''}" data-action="preset" data-preset="${p.label}">${p.label}</button>`).join('')}</div>
     <div class="eyebrow" style="margin:16px 2px 10px">Target muscle groups</div>
     <div class="chips" id="groupPick">${GROUPS.map(g=>`<button class="chip ${draft.groups.has(g)?'on':''}" data-g="${g}">${g}</button>`).join('')}</div>
-    <div class="card settingrow" style="margin:18px 0 0;padding:14px 15px"><div><div style="font-weight:600">Deload / recovery session</div><div class="dim" style="font-size:12.5px">Sore or beat up? Build it ~60% lighter — full range, focus on the stretch. Won't count against your progress or PRs.</div></div><button class="sw ${draft.deload?'on':''}" id="deloadToggle" data-action="deloadToggle" aria-label="Deload session"></button></div>
+    <div class="card settingrow" style="margin:18px 0 0;padding:14px 15px"><div><div style="font-weight:600">Deload / recovery session</div><div class="dim" style="font-size:12.5px">Sore or beat up? Build it ~60% lighter — full range, focus on the stretch. Won't count against your progress or PRs.</div></div><button class="sw ${draft.deload?'on':''}" data-action="deloadToggle" aria-label="Deload session"></button></div>
     <div class="spacer"></div><div class="spacer"></div>
     <div id="buildBtns">${buildButtons()}</div>
     <div class="dim" data-action="profileOpen" style="text-align:center;font-size:12px;margin:10px 0 2px;cursor:pointer">Profile: ${profileSummary()} · <span style="color:var(--accent)">change</span></div>
-    <button class="btn ghost block" id="btnBlank" data-action="blank">Start from scratch</button>
+    <button class="btn ghost block" data-action="blank">Start from scratch</button>
     ${routineList()}
     ${recentTemplates()}
   </div>`;
@@ -3327,12 +3333,12 @@ function buildButtons(){
       <span style="display:flex;align-items:center;gap:8px">🌿 Build a deload</span>
       <span style="font-size:12.5px;font-weight:500;opacity:.85">same lifts as ${relDay(plan.date).toLowerCase()}, ~60% lighter</span></button>
     <div style="height:8px"></div>
-    <button class="btn ghost block" id="btnFresh" data-action="buildFresh">Different exercises instead</button>`;
+    <button class="btn ghost block" data-action="buildFresh">Different exercises instead</button>`;
   return `<button class="btn primary block" id="btnRecommend" data-action="build" style="height:auto;padding:12px 16px;font-size:16px;flex-direction:column;gap:2px">
       <span style="display:flex;align-items:center;gap:8px">${ICON_BUILD} Build my workout</span>
       <span style="font-size:12.5px;font-weight:500;opacity:.85">same lifts as ${relDay(plan.date).toLowerCase()} · weights prefilled from last time</span></button>
     <div style="height:8px"></div>
-    <button class="btn ghost block" id="btnFresh" data-action="buildFresh">Different exercises instead</button>`;
+    <button class="btn ghost block" data-action="buildFresh">Different exercises instead</button>`;
 }
 // Re-render just the build buttons in place (their label depends on the picked groups / deload).
 function refreshBuildBtns(){const bb=$('#buildBtns');if(bb)bb.innerHTML=buildButtons();}
@@ -3397,27 +3403,26 @@ function openModePicker(ei){
 // looks low has its reason next to it.
 function openNote(ei){
   const t=cur();if(!t||!t.exercises[ei])return;const ex=t.exercises[ei];
-  openSheet('Note · '+(EX[ex.id]?EX[ex.id].name:ex.name),`<div class="dim" style="font-size:13px;margin:-4px 2px 12px">Saved with this session and shown the next time you do this lift.</div>
-    <textarea id="noteText" class="field" style="height:110px;padding:12px 14px;resize:none;line-height:1.45" maxlength="500" placeholder="e.g. left shoulder pinchy at the bottom — stayed light">${esc(ex.note||'')}</textarea>
-    <button class="btn primary block" id="noteSave" style="margin-top:12px">Save note</button>
-    ${ex.note?'<button class="btn ghost block" id="noteClear" style="margin-top:8px">Remove note</button>':''}`);
-  const ta=$('#noteText');if(ta){ta.focus();ta.setSelectionRange(ta.value.length,ta.value.length);}
-  const live=()=>{const x=liveExercise(t,ex,ei);if(!x){closeSheet();staleToast();}return x;};
-  $('#noteSave').addEventListener('click',()=>{const x=live();if(!x)return;const v=(ta.value||'').trim();if(v)x.note=v.slice(0,500);else delete x.note;persistCur();closeSheet();render();toast(v?'Note saved':'Note removed');});
-  const nc=$('#noteClear');if(nc)nc.addEventListener('click',()=>{const x=live();if(!x)return;delete x.note;persistCur();closeSheet();render();toast('Note removed');});
+  noteSheet({id:'note',title:'Note · '+(EX[ex.id]?EX[ex.id].name:ex.name),note:ex.note,resolve:()=>liveExercise(t,ex,ei),
+    intro:'Saved with this session and shown the next time you do this lift.',placeholder:'e.g. left shoulder pinchy at the bottom — stayed light'});
 }
 // A note for the whole workout (D-4) — how the session felt, sleep, an injury flare. Kept on the session
 // and shown in History. Works on the live workout or a past one being edited (cur()).
 function openSessionNote(){
   const t=cur();if(!t)return;
-  openSheet('Workout note',`<div class="dim" style="font-size:13px;margin:-4px 2px 12px">A note for this whole session — how it felt, sleep, energy. Shown in your History.</div>
-    <textarea id="snoteText" class="field" style="height:110px;padding:12px 14px;resize:none;line-height:1.45" maxlength="500" placeholder="e.g. slept badly, everything felt heavy — still hit the numbers">${esc(t.note||'')}</textarea>
-    <button class="btn primary block" id="snoteSave" style="margin-top:12px">Save note</button>
-    ${t.note?'<button class="btn ghost block" id="snoteClear" style="margin-top:8px">Remove note</button>':''}`);
-  const ta=$('#snoteText');if(ta){ta.focus();ta.setSelectionRange(ta.value.length,ta.value.length);}
-  const live=()=>{const x=liveSession(t);if(!x){closeSheet();staleToast();}return x;};
-  $('#snoteSave').addEventListener('click',()=>{const x=live();if(!x)return;const v=(ta.value||'').trim();if(v)x.note=v.slice(0,500);else delete x.note;persistCur();closeSheet();render();toast(v?'Note saved':'Note removed');});
-  const nc=$('#snoteClear');if(nc)nc.addEventListener('click',()=>{const x=live();if(!x)return;delete x.note;persistCur();closeSheet();render();toast('Note removed');});
+  noteSheet({id:'snote',title:'Workout note',note:t.note,resolve:()=>liveSession(t),
+    intro:'A note for this whole session — how it felt, sleep, energy. Shown in your History.',placeholder:'e.g. slept badly, everything felt heavy — still hit the numbers'});
+}
+// The one note panel both use. `resolve` finds the LIVE object at save time (see liveSession, 7.5).
+function noteSheet(o){
+  openSheet(o.title,`<div class="dim" style="font-size:13px;margin:-4px 2px 12px">${esc(o.intro)}</div>
+    <textarea id="${o.id}Text" class="field" style="height:110px;padding:12px 14px;resize:none;line-height:1.45" maxlength="500" aria-label="Note" placeholder="${esc(o.placeholder)}">${esc(o.note||'')}</textarea>
+    <button class="btn primary block" id="${o.id}Save" style="margin-top:12px">Save note</button>
+    ${o.note?`<button class="btn ghost block" id="${o.id}Clear" style="margin-top:8px">Remove note</button>`:''}`);
+  const ta=$('#'+o.id+'Text');if(ta){ta.focus();ta.setSelectionRange(ta.value.length,ta.value.length);}
+  const write=v=>{const x=o.resolve();if(!x){closeSheet();staleToast();return;}if(v)x.note=v.slice(0,500);else delete x.note;persistCur();closeSheet();render();toast(v?'Note saved':'Note removed');};
+  $('#'+o.id+'Save').addEventListener('click',()=>write((ta.value||'').trim()));
+  const nc=$('#'+o.id+'Clear');if(nc)nc.addEventListener('click',()=>write(''));
 }
 /* ---- plate calculator (D-4) ---- barbell/Smith lifts log the TOTAL bar weight, so this shows how to
    load each side. The empty-bar weight is remembered per equipment (barbell vs Smith) AND per unit — a
@@ -3523,7 +3528,7 @@ function openExSetup(ei){
     <div class="eyebrow" style="margin:0 2px 8px">Machine setup</div>
     <input id="setupText" class="field" maxlength="120" placeholder="e.g. seat 4, back pad 3, pin at 7" value="${esc(exSetup(e.id))}" style="height:44px;padding:0 14px">
     <div class="eyebrow" style="margin:18px 2px 8px">Weight goes up by</div>
-    <div class="chips" id="stepChips">
+    <div class="chips">
       <button class="chip ${!pick?'on':''}" data-wstep="0">Auto (${defaultStep(ex)} ${u})</button>
       ${opts.map(v=>`<button class="chip ${pick===v?'on':''}" data-wstep="${v}">${v} ${u}</button>`).join('')}
     </div>
@@ -3568,7 +3573,7 @@ function buildAndStart(fresh){
 function coachNudge(){
   const h=A.buildHints(state.sessions,Date.now(),bw(),state.settings.profile);
   if(!h.suggestGroups.length)return '';
-  return `<button class="btn ghost block" id="coachNudge" data-action="coachNudge" data-groups="${h.suggestGroups.join(',')}" style="justify-content:flex-start;gap:10px;margin:0 0 4px;height:auto;padding:12px 14px;border-style:dashed;text-align:left">
+  return `<button class="btn ghost block" data-action="coachNudge" data-groups="${h.suggestGroups.join(',')}" style="justify-content:flex-start;gap:10px;margin:0 0 4px;height:auto;padding:12px 14px;border-style:dashed;text-align:left">
     <span style="color:var(--accent);font-size:16px;flex-shrink:0">✦</span>
     <span style="min-width:0"><span style="font-weight:700;display:block;font-size:13.5px">Coach suggests: ${esc(h.suggestGroups.join(' & '))}</span><span class="dim" style="font-size:12px">Light or unbalanced lately — tap to select</span></span></button>`;
 }
@@ -3588,7 +3593,7 @@ function editorView(s,mode){
   const vol=volOf(s),sets=setsOf(s),edit=mode==='edit';
   return `
   <div class="section">
-    <div class="topbar"><button class="backbtn" id="btnBackHome" data-action="backHome">${ICON_BACK} ${edit?'Cancel':'Home'}</button>
+    <div class="topbar"><button class="backbtn" data-action="backHome">${ICON_BACK} ${edit?'Cancel':'Home'}</button>
       ${edit?'':`<span style="display:flex;gap:10px;align-items:center"><button class="linkbtn dim" id="btnDiscard">Discard</button><button class="btn good sm" id="btnFinishTop" ${sets===0?'disabled style="opacity:.5"':''}>Finish</button></span>`}</div>
     <div style="padding:0 2px 2px"><div class="eyebrow">${edit?'Editing · '+fmtDate(s.date):`Workout in progress · saves automatically · <span id="elapsedLbl">${fmtElapsed(s.date)}</span>`}</div>
       <h2 style="font-size:23px;margin-top:4px">${new Date(s.date).toLocaleDateString(undefined,{weekday:'long'})}'s session${s.deload?' <span class="deload-badge">Deload</span>':''}</h2></div>
@@ -3663,7 +3668,7 @@ function logExercise(s,e,ei,mode){
   // Headers say exactly what to type: "Lb ea" = weight of ONE dumbbell / one stack; "/ side" = one side's reps
   const whdr=(U()==='kg'?'Kg':'Lb')+(holds===2?' ea':''),rhdr=(D.TIME_METRIC.has(e.id)?'Sec':'Reps')+(sides===2?' / side':'');
   // "⇆ Each side" only where doing it one-sided is realistic and changes the math
-  const sideOK=(emode==='cable'||emode==='dumbbell'||emode==='machine')&&!D.INVERTED_LOAD.has(e.id)&&!D.TIME_METRIC.has(e.id);
+  const sideOK=(emode==='cable'||emode==='dumbbell'||emode==='machine')&&!D.isAssist(e.id)&&!D.TIME_METRIC.has(e.id);
   return `<div class="card log-ex" data-ei="${ei}">
     <div class="log-ex-head">
       <div class="ex-ic">${exIcon(ex?ex.group:'Core')}</div>
@@ -3713,7 +3718,7 @@ function viewHistory(){
     <div class="view-title" style="margin:0 2px 14px;font-size:22px">History</div>
     <div class="card" style="padding:16px">${calendar(done)}</div>
     <div class="eyebrow" style="margin:22px 2px 12px">${selDay?fmtDate(selDay):'All sessions'}</div>
-    <div id="sessList">${sessionList(done)}</div>
+    <div>${sessionList(done)}</div>
   </div>`;
 }
 function calendar(done){
@@ -3848,12 +3853,14 @@ function prTip(){
     <button class="linkbtn dim" data-seentip="prAdjustTip" style="font-size:12px;padding:2px 4px;flex-shrink:0">Got it</button></div>`;
 }
 const CHEV_R='<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color:var(--ink-3)"><path d="M9 6l6 6-6 6"/></svg>';
+// A record's set, written the way the record reads: "Bodyweight +10lb × 8", "45lb/ea × 10", "60s",
+// "/side" when each side is counted. One copy for the PR list and the PR-adjust card.
+function prSetText(p,w,r){const tail=' × '+r+(p.time?'s':'')+(p.sides===2?'/side':'');
+  return p.bodyweight?(w?'Bodyweight +'+w+U():'Bodyweight')+tail:w+U()+(p.holds===2?'/ea':'')+tail;}
 function prList(){
   const arr=memoStat('prAll',()=>A.personalRecords(state.sessions,bw(),999)).slice(0,8);
   if(!arr.length)return`<div style="padding:22px;text-align:center" class="dim">Log a few sets and your PRs show up here.</div>`;
-  const rsuf=p=>p.time?'s':'';   // time-held lifts show seconds, not reps
-  const sideSuf=p=>p.sides===2?'/side':'';   // reps (or seconds) counted per side
-  const setStr=p=>p.bodyweight?(p.w?'Bodyweight +'+p.w+U():'Bodyweight')+' × '+p.r+rsuf(p)+sideSuf(p):p.w+U()+(p.holds===2?'/ea':'')+' × '+p.r+rsuf(p)+sideSuf(p);
+  const setStr=p=>prSetText(p,p.w,p.r);
   // show the modality only when it isn't the exercise's native equipment (so a Smith/cable variant
   // is distinguishable from the default; ordinary PRs stay uncluttered)
   const pill=t=>` <span class="pill" style="font-size:10px;padding:1px 7px">${esc(t)}</span>`;
@@ -4015,7 +4022,7 @@ function prAdjustCard(id){
   if(!p&&!marked)return '';
   // Format a w×r the same way the record itself reads: seconds for time-held lifts, "Bodyweight" moves,
   // per-hand dumbbells — so a set-aside plank shows "45s", not "0lb × 45".
-  const fmt=p?((w,r)=>p.bodyweight?(w?'Bodyweight +'+w+U():'Bodyweight')+' × '+r+(p.time?'s':''):w+U()+(p.holds===2?'/ea':'')+' × '+r+(p.time?'s':'')+(p.sides===2?'/side':'')):null;
+  const fmt=p?((w,r)=>prSetText(p,w,r)):null;
   return `<div class="card" style="padding:12px 15px;margin:0 0 12px">
     <div class="row-between"><span class="eyebrow">Your best set</span>
       <span class="mono" style="font-weight:600">${p?esc(fmt(p.w,p.r)):'—'}</span></div>
@@ -4338,21 +4345,18 @@ function convertUnits(from,to){
   state.settings.unit=to;S.saveSettingsCloud();
   if(state.cloud)state.cloud.flush();
 }
-async function exportData(){
-  const json=JSON.stringify(S.exportPayload(),null,2);
-  const fname='ironlog-backup-'+new Date().toISOString().slice(0,10)+'.json';
-  try{if(window.claude&&claude.use){const dl=await claude.use('downloads');if(dl){await dl.save({filename:fname,data:json});toast('Backup saved');return;}}}catch(e){}
-  try{const blob=new Blob([json],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=fname;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);toast('Backup downloaded');}
+// Hand a generated file to the viewer: the artifact's downloads capability inside claude.ai, else a
+// plain browser download. One copy of this (it was duplicated per export type).
+async function saveFile(base,ext,data,mime,label){
+  const fname=base+'-'+new Date().toISOString().slice(0,10)+'.'+ext;
+  try{if(window.claude&&claude.use){const dl=await claude.use('downloads');if(dl){await dl.save({filename:fname,data});toast(label+' saved');return;}}}catch(e){}
+  try{const blob=new Blob([data],{type:mime});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=fname;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);toast(label+' downloaded');}
   catch(e){toast('Could not export here');}
 }
-async function exportCsv(){
-  const done=state.sessions.filter(s=>s.completed!==false).length;
-  if(!done){toast('No finished workouts to export yet');return;}
-  const csv=IL.sync.sessionSummaryCsv(state.sessions,U(),bw());
-  const fname='ironlog-sessions-'+new Date().toISOString().slice(0,10)+'.csv';
-  try{if(window.claude&&claude.use){const dl=await claude.use('downloads');if(dl){await dl.save({filename:fname,data:csv});toast('CSV saved');return;}}}catch(e){}
-  try{const blob=new Blob([csv],{type:'text/csv'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=fname;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);toast('CSV downloaded');}
-  catch(e){toast('Could not export here');}
+function exportData(){return saveFile('ironlog-backup','json',JSON.stringify(S.exportPayload(),null,2),'application/json','Backup');}
+function exportCsv(){
+  if(!state.sessions.some(s=>s.completed!==false)){toast('No finished workouts to export yet');return;}
+  return saveFile('ironlog-sessions','csv',IL.sync.sessionSummaryCsv(state.sessions,U(),bw()),'text/csv','CSV');
 }
 function importData(ev){
   const f=ev.target.files[0];if(!f)return;const rd=new FileReader();
@@ -4877,7 +4881,7 @@ function bindLog(root){
         // Point the user at the weight field instead of silently accepting it. Bodyweight moves are exempt,
         // and so are time-held lifts (a carry can be logged by time alone; load is optional).
         // An assist machine may be ticked at an explicit 0 (unassisted — the goal); only a blank is nudged.
-        const inv=D.INVERTED_LOAD.has(cex&&cex.id),blankW=st.w==null||String(st.w).trim()==='';
+        const inv=!!cex&&D.isAssist(cex.id),blankW=st.w==null||String(st.w).trim()==='';
         if(cex&&cex.equip!=='Bodyweight'&&!D.TIME_METRIC.has(cex.id)&&(inv?blankW:!(+st.w>0))){const wi=$(`input[data-f="w"][data-ei="${ei}"][data-s="${si}"]`);if(wi){wi.focus();if(wi.select)wi.select();}toast(inv?'Enter the assist — 0 if unassisted':'Add a weight first');return;}
         // Timed lifts log seconds in the reps field. Ticking with it empty saves a set finalizeSets then
         // drops (r>0 required), losing the tick with no warning — require the seconds first.

@@ -7,7 +7,7 @@ function viewHistory(){
     <div class="view-title" style="margin:0 2px 14px;font-size:22px">History</div>
     <div class="card" style="padding:16px">${calendar(done)}</div>
     <div class="eyebrow" style="margin:22px 2px 12px">${selDay?fmtDate(selDay):'All sessions'}</div>
-    <div id="sessList">${sessionList(done)}</div>
+    <div>${sessionList(done)}</div>
   </div>`;
 }
 function calendar(done){
@@ -142,12 +142,14 @@ function prTip(){
     <button class="linkbtn dim" data-seentip="prAdjustTip" style="font-size:12px;padding:2px 4px;flex-shrink:0">Got it</button></div>`;
 }
 const CHEV_R='<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color:var(--ink-3)"><path d="M9 6l6 6-6 6"/></svg>';
+// A record's set, written the way the record reads: "Bodyweight +10lb × 8", "45lb/ea × 10", "60s",
+// "/side" when each side is counted. One copy for the PR list and the PR-adjust card.
+function prSetText(p,w,r){const tail=' × '+r+(p.time?'s':'')+(p.sides===2?'/side':'');
+  return p.bodyweight?(w?'Bodyweight +'+w+U():'Bodyweight')+tail:w+U()+(p.holds===2?'/ea':'')+tail;}
 function prList(){
   const arr=memoStat('prAll',()=>A.personalRecords(state.sessions,bw(),999)).slice(0,8);
   if(!arr.length)return`<div style="padding:22px;text-align:center" class="dim">Log a few sets and your PRs show up here.</div>`;
-  const rsuf=p=>p.time?'s':'';   // time-held lifts show seconds, not reps
-  const sideSuf=p=>p.sides===2?'/side':'';   // reps (or seconds) counted per side
-  const setStr=p=>p.bodyweight?(p.w?'Bodyweight +'+p.w+U():'Bodyweight')+' × '+p.r+rsuf(p)+sideSuf(p):p.w+U()+(p.holds===2?'/ea':'')+' × '+p.r+rsuf(p)+sideSuf(p);
+  const setStr=p=>prSetText(p,p.w,p.r);
   // show the modality only when it isn't the exercise's native equipment (so a Smith/cable variant
   // is distinguishable from the default; ordinary PRs stay uncluttered)
   const pill=t=>` <span class="pill" style="font-size:10px;padding:1px 7px">${esc(t)}</span>`;
@@ -309,7 +311,7 @@ function prAdjustCard(id){
   if(!p&&!marked)return '';
   // Format a w×r the same way the record itself reads: seconds for time-held lifts, "Bodyweight" moves,
   // per-hand dumbbells — so a set-aside plank shows "45s", not "0lb × 45".
-  const fmt=p?((w,r)=>p.bodyweight?(w?'Bodyweight +'+w+U():'Bodyweight')+' × '+r+(p.time?'s':''):w+U()+(p.holds===2?'/ea':'')+' × '+r+(p.time?'s':'')+(p.sides===2?'/side':'')):null;
+  const fmt=p?((w,r)=>prSetText(p,w,r)):null;
   return `<div class="card" style="padding:12px 15px;margin:0 0 12px">
     <div class="row-between"><span class="eyebrow">Your best set</span>
       <span class="mono" style="font-weight:600">${p?esc(fmt(p.w,p.r)):'—'}</span></div>
@@ -632,21 +634,18 @@ function convertUnits(from,to){
   state.settings.unit=to;S.saveSettingsCloud();
   if(state.cloud)state.cloud.flush();
 }
-async function exportData(){
-  const json=JSON.stringify(S.exportPayload(),null,2);
-  const fname='ironlog-backup-'+new Date().toISOString().slice(0,10)+'.json';
-  try{if(window.claude&&claude.use){const dl=await claude.use('downloads');if(dl){await dl.save({filename:fname,data:json});toast('Backup saved');return;}}}catch(e){}
-  try{const blob=new Blob([json],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=fname;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);toast('Backup downloaded');}
+// Hand a generated file to the viewer: the artifact's downloads capability inside claude.ai, else a
+// plain browser download. One copy of this (it was duplicated per export type).
+async function saveFile(base,ext,data,mime,label){
+  const fname=base+'-'+new Date().toISOString().slice(0,10)+'.'+ext;
+  try{if(window.claude&&claude.use){const dl=await claude.use('downloads');if(dl){await dl.save({filename:fname,data});toast(label+' saved');return;}}}catch(e){}
+  try{const blob=new Blob([data],{type:mime});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=fname;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);toast(label+' downloaded');}
   catch(e){toast('Could not export here');}
 }
-async function exportCsv(){
-  const done=state.sessions.filter(s=>s.completed!==false).length;
-  if(!done){toast('No finished workouts to export yet');return;}
-  const csv=IL.sync.sessionSummaryCsv(state.sessions,U(),bw());
-  const fname='ironlog-sessions-'+new Date().toISOString().slice(0,10)+'.csv';
-  try{if(window.claude&&claude.use){const dl=await claude.use('downloads');if(dl){await dl.save({filename:fname,data:csv});toast('CSV saved');return;}}}catch(e){}
-  try{const blob=new Blob([csv],{type:'text/csv'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=fname;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);toast('CSV downloaded');}
-  catch(e){toast('Could not export here');}
+function exportData(){return saveFile('ironlog-backup','json',JSON.stringify(S.exportPayload(),null,2),'application/json','Backup');}
+function exportCsv(){
+  if(!state.sessions.some(s=>s.completed!==false)){toast('No finished workouts to export yet');return;}
+  return saveFile('ironlog-sessions','csv',IL.sync.sessionSummaryCsv(state.sessions,U(),bw()),'text/csv','CSV');
 }
 function importData(ev){
   const f=ev.target.files[0];if(!f)return;const rd=new FileReader();

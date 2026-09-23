@@ -2,6 +2,20 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.67.0 — 2026-09-22 · Code tidy-up and new safety checks
+Almost nothing you can see changes here. It makes the app easier to change without breaking something.
+- **One bug fixed:** if saved data had an equipment type this version doesn't recognise, the Progress tab showed "Something went wrong". The app now uses the exercise's usual equipment in that case. A new test found this.
+- **One small consistency fix:** a set you set aside from a PR now reads the same as the record itself, including "/side" on bodyweight moves.
+- **Same rule, one place.** The app no longer writes out these rules separately in different files: which workouts count as lifting, what counts as an assist machine, how rest time between sets is measured, how a PR set is written, the backup and CSV downloads, and the two note panels.
+- **Removed unused code:** four unused helpers and settings, and 17 unused element IDs. Nothing called them.
+- **New safety checks that run with the tests:**
+  - The published app must match the source code. This catches a forgotten rebuild.
+  - Badly formed saved data must not blank any tab.
+  - A speed guard at 2,000 workouts counts how often history is scanned, so a slowdown can't slip in.
+  - A test covers the one-time bodyweight stamp on old workouts.
+
+Not verified on-device.
+
 ## v0.66.0 — 2026-09-22 · Steadier syncing, easier to read, works with VoiceOver
 - **Your other phone now sees a workout while it's in progress.** Before, changes to a workout you hadn't finished only reached Dropbox when some other change happened to sync.
 - **Syncing no longer redraws the screen.** Each Dropbox sync used to redraw the page twice, a few seconds after every edit, which could cut off a held + or −. Now only the little sync label updates. If new data arrives while you're typing a number, the screen waits until you're done.

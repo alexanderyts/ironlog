@@ -33,7 +33,6 @@ const setsOf=s=>P.sessionSets(s);
 // no context otherwise — see ROADMAP-v2 #1).
 function volLabel(label){return `<span data-vol-info style="cursor:pointer">${label||'Volume'} <span class="dim" style="font-weight:400">ⓘ</span></span>`;}
 const completedSessions=()=>state.sessions.filter(s=>s.completed!==false&&s.exercises.length&&s.kind!=='cardio');   // strength only — feeds every lifting stat
-const completedCardio=()=>state.sessions.filter(s=>s.completed!==false&&s.kind==='cardio');
 const completedAny=()=>state.sessions.filter(s=>s.completed!==false&&(s.exercises.length||s.kind==='cardio'));   // strength ∪ cardio — for History, "this week" count, streak
 const ICON_BACK='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>';
 function demoURL(id){const e=EX[id];if(!e)return 'https://www.youtube.com/';return 'https://www.youtube.com/results?search_query='+encodeURIComponent('how to '+e.name+' proper form technique');}

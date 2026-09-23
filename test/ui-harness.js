@@ -15,6 +15,8 @@ function launch(opts){
     beforeParse(window){
       window.scrollTo=()=>{};   // jsdom doesn't implement it; setTab calls it
       if(!window.matchMedia)window.matchMedia=()=>({matches:false,addEventListener(){},removeEventListener(){},addListener(){},removeListener(){}});
+      // opts.storage: {key:value} already on the phone BEFORE the app boots (boot-time migrations, bad data)
+      if(opts.storage)Object.keys(opts.storage).forEach(k=>window.localStorage.setItem(k,JSON.stringify(opts.storage[k])));
     }});
   const win=dom.window,doc=win.document;
   const IL=win.IL;

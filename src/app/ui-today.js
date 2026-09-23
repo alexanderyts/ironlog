@@ -33,7 +33,7 @@ function homeView(){
     ${state.active?'':cardioBlock()}
     ${last?`<div class="eyebrow" style="margin:26px 2px 10px">Last session</div>${sessCard(last)}`:emptyHome()}
     <div class="eyebrow" style="margin:24px 2px 10px">Jump in</div>
-    <button class="btn ghost block" id="btnGoLibrary" data-action="goLibrary" style="justify-content:space-between">
+    <button class="btn ghost block" data-action="goLibrary" style="justify-content:space-between">
       <span>Browse exercise library</span><span class="dim mono">${EXERCISES.length} exercises ›</span></button>
   </div>`;
 }
@@ -43,7 +43,7 @@ function emptyHome(){return `<div class="card" style="padding:26px 18px;text-ali
 // shows up once you've chosen.
 function startBlock(){
   const START=`<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>`;
-  return `<button class="btn primary block" id="btnStartFlow" data-action="startFlow" style="height:56px;font-size:16px">${START} Start a workout</button>`;
+  return `<button class="btn primary block" data-action="startFlow" style="height:56px;font-size:16px">${START} Start a workout</button>`;
 }
 /* ---------------- CARDIO ----------------
    A cardio session is its own kind (kind:'cardio', exercises:[]) — invisible to the lifting math.
@@ -56,7 +56,7 @@ const CARDIO_ICON=`<svg width="19" height="19" viewBox="0 0 24 24" fill="none" s
 // The last cardio type this person logged — a small nicety so the picker defaults to their usual.
 function lastCardioType(){const c=state.sessions.filter(s=>s.completed!==false&&s.kind==='cardio'&&s.cardio).sort((a,b)=>b.date-a.date)[0];return c?c.cardio.type:'treadmill';}
 function cardioBlock(){
-  return `<button class="btn ghost block" id="btnCardio" data-action="cardioOpen" style="margin-top:10px;height:50px;justify-content:center;gap:9px">${CARDIO_ICON} Log cardio</button>`;
+  return `<button class="btn ghost block" data-action="cardioOpen" style="margin-top:10px;height:50px;justify-content:center;gap:9px">${CARDIO_ICON} Log cardio</button>`;
 }
 // Live cardio: a running clock + the type/intensity/distance you can adjust while you go, then Finish.
 function cardioLiveView(s){
@@ -105,7 +105,7 @@ function cardioSheetBody(){
     <div class="row-between" style="margin:18px 2px 12px"><span class="eyebrow">Or log one you already did</span></div>
     <div class="settingrow" style="border:none;padding:6px 2px">
       <div><div style="font-weight:600">Minutes</div><div class="dim" style="font-size:12.5px">How long you went</div></div>
-      <div class="stepper"><button data-cardmin="-5">−</button><button class="val mono" id="cardMinVal">${c.mins}</button><button data-cardmin="5">＋</button></div></div>
+      <div class="stepper"><button data-cardmin="-5">−</button><button class="val mono">${c.mins}</button><button data-cardmin="5">＋</button></div></div>
     <div class="settingrow" style="border:none;padding:6px 2px">
       <div><div style="font-weight:600">When</div><div class="dim" style="font-size:12.5px">Defaults to today — back-date a walk you forgot</div></div>
       <input type="date" id="cardWhen" value="${esc(c.when||todayISO())}" max="${todayISO()}" class="field" style="width:auto;height:40px;padding:0 12px"></div>
@@ -123,7 +123,7 @@ function cardioEditBody(){
     ${cardioFields(c,'edit')}
     <div class="settingrow" style="border:none;padding:6px 2px">
       <div><div style="font-weight:600">Minutes</div><div class="dim" style="font-size:12.5px">How long you went</div></div>
-      <div class="stepper"><button data-cardmin="-5">−</button><button class="val mono" id="cardMinVal">${c.mins}</button><button data-cardmin="5">＋</button></div></div>
+      <div class="stepper"><button data-cardmin="-5">−</button><button class="val mono">${c.mins}</button><button data-cardmin="5">＋</button></div></div>
     <button class="btn primary block" id="btnCardioSave" style="margin-top:12px">Save changes</button>`;
 }
 // Begin a live cardio session from the sheet's current picks.
@@ -144,12 +144,12 @@ function profileIntroCard(){
 function resumeCard(){
   const s=state.active;
   if(s.kind==='cardio'){const c=s.cardio||{};
-    return `<button class="resume" id="btnResume" data-action="resume">
+    return `<button class="resume" data-action="resume">
       <span class="tri">${CARDIO_ICON}</span>
       <span style="flex:1;min-width:0"><span style="font-weight:700;display:block">Resume your cardio</span><span class="dim" style="font-size:13px">${cardioTypeLabel(c.type)} · running ${fmtElapsed(s.date)}</span></span>
       <span style="color:var(--accent);font-size:20px;flex-shrink:0">→</span></button>`;}
   const sets=setsOf(s);
-  return `<button class="resume" id="btnResume" data-action="resume">
+  return `<button class="resume" data-action="resume">
     <span class="tri"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></span>
     <span style="flex:1;min-width:0"><span style="font-weight:700;display:block">Resume your workout</span><span class="dim" style="font-size:13px">${s.exercises.length} exercise${s.exercises.length!==1?'s':''} · ${sets} set${sets!==1?'s':''} logged${P.staleness(s).sinceLastSet>=P.STALE_AFTER_MIN?` · <span style="color:var(--warn)">idle ${fmtDur(P.staleness(s).sinceLastSet)}</span>`:''}</span></span>
     <span style="color:var(--accent);font-size:20px;flex-shrink:0">→</span></button>`;
@@ -157,7 +157,7 @@ function resumeCard(){
 function startWorkoutView(){
   return `
   <div class="section">
-    <div class="topbar"><button class="backbtn" id="btnBackHome" data-action="backHome">${ICON_BACK} Home</button></div>
+    <div class="topbar"><button class="backbtn" data-action="backHome">${ICON_BACK} Home</button></div>
     <div style="padding:0 2px">
       <div class="eyebrow">New workout</div>
       <h2 style="font-size:24px;margin-top:6px">What are you training?</h2>
@@ -165,14 +165,14 @@ function startWorkoutView(){
     </div>
     <div style="height:18px"></div>${coachNudge()}
     <div class="eyebrow" style="margin:16px 2px 10px">Quick picks</div>
-    <div class="chips hscroll" id="presetPick">${PRESETS.map(p=>`<button class="chip ${presetOn(p)?'on':''}" data-action="preset" data-preset="${p.label}">${p.label}</button>`).join('')}</div>
+    <div class="chips hscroll">${PRESETS.map(p=>`<button class="chip ${presetOn(p)?'on':''}" data-action="preset" data-preset="${p.label}">${p.label}</button>`).join('')}</div>
     <div class="eyebrow" style="margin:16px 2px 10px">Target muscle groups</div>
     <div class="chips" id="groupPick">${GROUPS.map(g=>`<button class="chip ${draft.groups.has(g)?'on':''}" data-g="${g}">${g}</button>`).join('')}</div>
-    <div class="card settingrow" style="margin:18px 0 0;padding:14px 15px"><div><div style="font-weight:600">Deload / recovery session</div><div class="dim" style="font-size:12.5px">Sore or beat up? Build it ~60% lighter — full range, focus on the stretch. Won't count against your progress or PRs.</div></div><button class="sw ${draft.deload?'on':''}" id="deloadToggle" data-action="deloadToggle" aria-label="Deload session"></button></div>
+    <div class="card settingrow" style="margin:18px 0 0;padding:14px 15px"><div><div style="font-weight:600">Deload / recovery session</div><div class="dim" style="font-size:12.5px">Sore or beat up? Build it ~60% lighter — full range, focus on the stretch. Won't count against your progress or PRs.</div></div><button class="sw ${draft.deload?'on':''}" data-action="deloadToggle" aria-label="Deload session"></button></div>
     <div class="spacer"></div><div class="spacer"></div>
     <div id="buildBtns">${buildButtons()}</div>
     <div class="dim" data-action="profileOpen" style="text-align:center;font-size:12px;margin:10px 0 2px;cursor:pointer">Profile: ${profileSummary()} · <span style="color:var(--accent)">change</span></div>
-    <button class="btn ghost block" id="btnBlank" data-action="blank">Start from scratch</button>
+    <button class="btn ghost block" data-action="blank">Start from scratch</button>
     ${routineList()}
     ${recentTemplates()}
   </div>`;
@@ -192,12 +192,12 @@ function buildButtons(){
       <span style="display:flex;align-items:center;gap:8px">🌿 Build a deload</span>
       <span style="font-size:12.5px;font-weight:500;opacity:.85">same lifts as ${relDay(plan.date).toLowerCase()}, ~60% lighter</span></button>
     <div style="height:8px"></div>
-    <button class="btn ghost block" id="btnFresh" data-action="buildFresh">Different exercises instead</button>`;
+    <button class="btn ghost block" data-action="buildFresh">Different exercises instead</button>`;
   return `<button class="btn primary block" id="btnRecommend" data-action="build" style="height:auto;padding:12px 16px;font-size:16px;flex-direction:column;gap:2px">
       <span style="display:flex;align-items:center;gap:8px">${ICON_BUILD} Build my workout</span>
       <span style="font-size:12.5px;font-weight:500;opacity:.85">same lifts as ${relDay(plan.date).toLowerCase()} · weights prefilled from last time</span></button>
     <div style="height:8px"></div>
-    <button class="btn ghost block" id="btnFresh" data-action="buildFresh">Different exercises instead</button>`;
+    <button class="btn ghost block" data-action="buildFresh">Different exercises instead</button>`;
 }
 // Re-render just the build buttons in place (their label depends on the picked groups / deload).
 function refreshBuildBtns(){const bb=$('#buildBtns');if(bb)bb.innerHTML=buildButtons();}
@@ -262,27 +262,26 @@ function openModePicker(ei){
 // looks low has its reason next to it.
 function openNote(ei){
   const t=cur();if(!t||!t.exercises[ei])return;const ex=t.exercises[ei];
-  openSheet('Note · '+(EX[ex.id]?EX[ex.id].name:ex.name),`<div class="dim" style="font-size:13px;margin:-4px 2px 12px">Saved with this session and shown the next time you do this lift.</div>
-    <textarea id="noteText" class="field" style="height:110px;padding:12px 14px;resize:none;line-height:1.45" maxlength="500" placeholder="e.g. left shoulder pinchy at the bottom — stayed light">${esc(ex.note||'')}</textarea>
-    <button class="btn primary block" id="noteSave" style="margin-top:12px">Save note</button>
-    ${ex.note?'<button class="btn ghost block" id="noteClear" style="margin-top:8px">Remove note</button>':''}`);
-  const ta=$('#noteText');if(ta){ta.focus();ta.setSelectionRange(ta.value.length,ta.value.length);}
-  const live=()=>{const x=liveExercise(t,ex,ei);if(!x){closeSheet();staleToast();}return x;};
-  $('#noteSave').addEventListener('click',()=>{const x=live();if(!x)return;const v=(ta.value||'').trim();if(v)x.note=v.slice(0,500);else delete x.note;persistCur();closeSheet();render();toast(v?'Note saved':'Note removed');});
-  const nc=$('#noteClear');if(nc)nc.addEventListener('click',()=>{const x=live();if(!x)return;delete x.note;persistCur();closeSheet();render();toast('Note removed');});
+  noteSheet({id:'note',title:'Note · '+(EX[ex.id]?EX[ex.id].name:ex.name),note:ex.note,resolve:()=>liveExercise(t,ex,ei),
+    intro:'Saved with this session and shown the next time you do this lift.',placeholder:'e.g. left shoulder pinchy at the bottom — stayed light'});
 }
 // A note for the whole workout (D-4) — how the session felt, sleep, an injury flare. Kept on the session
 // and shown in History. Works on the live workout or a past one being edited (cur()).
 function openSessionNote(){
   const t=cur();if(!t)return;
-  openSheet('Workout note',`<div class="dim" style="font-size:13px;margin:-4px 2px 12px">A note for this whole session — how it felt, sleep, energy. Shown in your History.</div>
-    <textarea id="snoteText" class="field" style="height:110px;padding:12px 14px;resize:none;line-height:1.45" maxlength="500" placeholder="e.g. slept badly, everything felt heavy — still hit the numbers">${esc(t.note||'')}</textarea>
-    <button class="btn primary block" id="snoteSave" style="margin-top:12px">Save note</button>
-    ${t.note?'<button class="btn ghost block" id="snoteClear" style="margin-top:8px">Remove note</button>':''}`);
-  const ta=$('#snoteText');if(ta){ta.focus();ta.setSelectionRange(ta.value.length,ta.value.length);}
-  const live=()=>{const x=liveSession(t);if(!x){closeSheet();staleToast();}return x;};
-  $('#snoteSave').addEventListener('click',()=>{const x=live();if(!x)return;const v=(ta.value||'').trim();if(v)x.note=v.slice(0,500);else delete x.note;persistCur();closeSheet();render();toast(v?'Note saved':'Note removed');});
-  const nc=$('#snoteClear');if(nc)nc.addEventListener('click',()=>{const x=live();if(!x)return;delete x.note;persistCur();closeSheet();render();toast('Note removed');});
+  noteSheet({id:'snote',title:'Workout note',note:t.note,resolve:()=>liveSession(t),
+    intro:'A note for this whole session — how it felt, sleep, energy. Shown in your History.',placeholder:'e.g. slept badly, everything felt heavy — still hit the numbers'});
+}
+// The one note panel both use. `resolve` finds the LIVE object at save time (see liveSession, 7.5).
+function noteSheet(o){
+  openSheet(o.title,`<div class="dim" style="font-size:13px;margin:-4px 2px 12px">${esc(o.intro)}</div>
+    <textarea id="${o.id}Text" class="field" style="height:110px;padding:12px 14px;resize:none;line-height:1.45" maxlength="500" aria-label="Note" placeholder="${esc(o.placeholder)}">${esc(o.note||'')}</textarea>
+    <button class="btn primary block" id="${o.id}Save" style="margin-top:12px">Save note</button>
+    ${o.note?`<button class="btn ghost block" id="${o.id}Clear" style="margin-top:8px">Remove note</button>`:''}`);
+  const ta=$('#'+o.id+'Text');if(ta){ta.focus();ta.setSelectionRange(ta.value.length,ta.value.length);}
+  const write=v=>{const x=o.resolve();if(!x){closeSheet();staleToast();return;}if(v)x.note=v.slice(0,500);else delete x.note;persistCur();closeSheet();render();toast(v?'Note saved':'Note removed');};
+  $('#'+o.id+'Save').addEventListener('click',()=>write((ta.value||'').trim()));
+  const nc=$('#'+o.id+'Clear');if(nc)nc.addEventListener('click',()=>write(''));
 }
 /* ---- plate calculator (D-4) ---- barbell/Smith lifts log the TOTAL bar weight, so this shows how to
    load each side. The empty-bar weight is remembered per equipment (barbell vs Smith) AND per unit — a
@@ -388,7 +387,7 @@ function openExSetup(ei){
     <div class="eyebrow" style="margin:0 2px 8px">Machine setup</div>
     <input id="setupText" class="field" maxlength="120" placeholder="e.g. seat 4, back pad 3, pin at 7" value="${esc(exSetup(e.id))}" style="height:44px;padding:0 14px">
     <div class="eyebrow" style="margin:18px 2px 8px">Weight goes up by</div>
-    <div class="chips" id="stepChips">
+    <div class="chips">
       <button class="chip ${!pick?'on':''}" data-wstep="0">Auto (${defaultStep(ex)} ${u})</button>
       ${opts.map(v=>`<button class="chip ${pick===v?'on':''}" data-wstep="${v}">${v} ${u}</button>`).join('')}
     </div>
@@ -433,7 +432,7 @@ function buildAndStart(fresh){
 function coachNudge(){
   const h=A.buildHints(state.sessions,Date.now(),bw(),state.settings.profile);
   if(!h.suggestGroups.length)return '';
-  return `<button class="btn ghost block" id="coachNudge" data-action="coachNudge" data-groups="${h.suggestGroups.join(',')}" style="justify-content:flex-start;gap:10px;margin:0 0 4px;height:auto;padding:12px 14px;border-style:dashed;text-align:left">
+  return `<button class="btn ghost block" data-action="coachNudge" data-groups="${h.suggestGroups.join(',')}" style="justify-content:flex-start;gap:10px;margin:0 0 4px;height:auto;padding:12px 14px;border-style:dashed;text-align:left">
     <span style="color:var(--accent);font-size:16px;flex-shrink:0">✦</span>
     <span style="min-width:0"><span style="font-weight:700;display:block;font-size:13.5px">Coach suggests: ${esc(h.suggestGroups.join(' & '))}</span><span class="dim" style="font-size:12px">Light or unbalanced lately — tap to select</span></span></button>`;
 }
@@ -453,7 +452,7 @@ function editorView(s,mode){
   const vol=volOf(s),sets=setsOf(s),edit=mode==='edit';
   return `
   <div class="section">
-    <div class="topbar"><button class="backbtn" id="btnBackHome" data-action="backHome">${ICON_BACK} ${edit?'Cancel':'Home'}</button>
+    <div class="topbar"><button class="backbtn" data-action="backHome">${ICON_BACK} ${edit?'Cancel':'Home'}</button>
       ${edit?'':`<span style="display:flex;gap:10px;align-items:center"><button class="linkbtn dim" id="btnDiscard">Discard</button><button class="btn good sm" id="btnFinishTop" ${sets===0?'disabled style="opacity:.5"':''}>Finish</button></span>`}</div>
     <div style="padding:0 2px 2px"><div class="eyebrow">${edit?'Editing · '+fmtDate(s.date):`Workout in progress · saves automatically · <span id="elapsedLbl">${fmtElapsed(s.date)}</span>`}</div>
       <h2 style="font-size:23px;margin-top:4px">${new Date(s.date).toLocaleDateString(undefined,{weekday:'long'})}'s session${s.deload?' <span class="deload-badge">Deload</span>':''}</h2></div>
@@ -528,7 +527,7 @@ function logExercise(s,e,ei,mode){
   // Headers say exactly what to type: "Lb ea" = weight of ONE dumbbell / one stack; "/ side" = one side's reps
   const whdr=(U()==='kg'?'Kg':'Lb')+(holds===2?' ea':''),rhdr=(D.TIME_METRIC.has(e.id)?'Sec':'Reps')+(sides===2?' / side':'');
   // "⇆ Each side" only where doing it one-sided is realistic and changes the math
-  const sideOK=(emode==='cable'||emode==='dumbbell'||emode==='machine')&&!D.INVERTED_LOAD.has(e.id)&&!D.TIME_METRIC.has(e.id);
+  const sideOK=(emode==='cable'||emode==='dumbbell'||emode==='machine')&&!D.isAssist(e.id)&&!D.TIME_METRIC.has(e.id);
   return `<div class="card log-ex" data-ei="${ei}">
     <div class="log-ex-head">
       <div class="ex-ic">${exIcon(ex?ex.group:'Core')}</div>

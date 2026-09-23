@@ -3,7 +3,7 @@
 var IL=globalThis.IL||(globalThis.IL={});
 if(typeof require==='function'&&!IL.data)require('../data/exercises.js');
 if(typeof require==='function'&&!IL.prog)require('./progression.js');
-const {C,I,EXERCISES,EX,REGIONS,IDEAL_PATS,PAT_RANK,EQUIP_LOAD,LONG_LENGTH,INVERTED_LOAD,TIME_METRIC,UNILATERAL,regLabel,patLabel,hashId}=IL.data;
+const {C,I,EXERCISES,EX,REGIONS,IDEAL_PATS,PAT_RANK,EQUIP_LOAD,LONG_LENGTH,isAssist,TIME_METRIC,UNILATERAL,regLabel,patLabel,hashId}=IL.data;
 const {lastPerf,lastModeFor,lastSideFor,trackOf,sidesOf,scoreSet,sbw,nextSets,deloadSets,repRange,modeOf,real,DAY,unitIncrement}=IL.prog;
 
 // Working sets a movement deserves when you've never logged it: main lifts 4, other compounds 3,
@@ -23,7 +23,7 @@ function shapeStyle(sets,style,ex,unit){
   if(!sets.length)return sets;
   // the "top" set is the hardest one — for an assist machine that's the LEAST assist (full review 4.3:
   // straight sets spread the most-assisted, i.e. easiest, set across every set)
-  const inv=!!(ex&&INVERTED_LOAD&&INVERTED_LOAD.has(ex.id));
+  const inv=!!ex&&isAssist(ex.id);
   const w=(inv?Math.min:Math.max)(...sets.map(s=>+s.w||0));
   if(w<=0)return sets;
   // straight = every set at the top weight AND the top set's reps. Carrying each set's own reps would
@@ -354,7 +354,7 @@ function sessionGroups(s){const g={};s.exercises.forEach(e=>{const x=EX[e.id];if
 // holiday) it still continues but is flagged `meta.lapsed` so the caller skips stall/rotation/volume.
 function findPlan(groups,sessions,now,meta){
   now=now||Date.now();const want=new Set(groups);
-  const completed=(sessions||[]).filter(s=>s.completed!==false&&s.exercises&&s.exercises.length&&s.kind!=='cardio');   // newest-first (upsert/history keep it sorted)
+  const completed=IL.prog.liftSessions(sessions);   // newest-first (upsert/history keep it sorted)
   const scan=maxGap=>{
     let ref=now;
     for(const s of completed){
@@ -399,7 +399,7 @@ function recentPerfs(sessions,exId,opts){
   // Every axis below is normalized so HIGHER = BETTER, letting isStalled's comparisons stay direction-
   // agnostic across lift types. Assist machines: less assist is better, so top/score = −(least assist).
   // Time-held lifts: longer is better, so top/score = seconds. Everything else: heaviest weight / e1RM.
-  const inv=INVERTED_LOAD&&INVERTED_LOAD.has(exId), time=TIME_METRIC&&TIME_METRIC.has(exId);
+  const inv=isAssist(exId), time=TIME_METRIC&&TIME_METRIC.has(exId);
   for(let i=0;i<n;i++){
     const lp=lastPerf(sessions,exId,{beforeTs:before,mode:opts.mode,clean:true});if(!lp)break;   // a disowned set is not evidence of progress OR of a stall
     if(opts.since&&lp.date<opts.since)break;

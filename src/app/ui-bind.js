@@ -473,7 +473,7 @@ function bindLog(root){
         // Point the user at the weight field instead of silently accepting it. Bodyweight moves are exempt,
         // and so are time-held lifts (a carry can be logged by time alone; load is optional).
         // An assist machine may be ticked at an explicit 0 (unassisted — the goal); only a blank is nudged.
-        const inv=D.INVERTED_LOAD.has(cex&&cex.id),blankW=st.w==null||String(st.w).trim()==='';
+        const inv=!!cex&&D.isAssist(cex.id),blankW=st.w==null||String(st.w).trim()==='';
         if(cex&&cex.equip!=='Bodyweight'&&!D.TIME_METRIC.has(cex.id)&&(inv?blankW:!(+st.w>0))){const wi=$(`input[data-f="w"][data-ei="${ei}"][data-s="${si}"]`);if(wi){wi.focus();if(wi.select)wi.select();}toast(inv?'Enter the assist — 0 if unassisted':'Add a weight first');return;}
         // Timed lifts log seconds in the reps field. Ticking with it empty saves a set finalizeSets then
         // drops (r>0 required), losing the tick with no warning — require the seconds first.
