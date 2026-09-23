@@ -211,7 +211,7 @@ function statSig(){
   // tz offset so it rolls at LOCAL midnight (the same boundary weekStart/30-day windows use), not UTC —
   // otherwise a PWA left open across local midnight shows stale windows until the UTC rollover.
   const localDay=Math.floor((Date.now()-new Date().getTimezoneOffset()*60000)/DAY);
-  return ss.length+':'+mx+':'+bw()+':'+state.settings.unit+':'+localDay;
+  return ss.length+':'+mx+':'+bw()+':'+state.settings.unit+':'+localDay+':'+JSON.stringify(state.settings.records||0);   // record picks change what counts (batch 1); other settings (a panel fold) must not bust the cache
 }
 function memoStat(key,fn){
   const sig=statSig();

@@ -2,6 +2,29 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.71.0 — 2026-09-23 · Never lose a lift
+Batch 1 from the overnight review. Every item was a way a logged set could be lost or come out wrong.
+- **Finish can't wipe your workout.** With nothing ticked it used to clear the planned sets and *then* say "Log at least one set first". Finish now asks "Nothing is ticked yet — save all N as done, or go back and tick them?" The Finish button is no longer greyed out.
+- **Two devices can't erase each other's work:**
+  - If two copies of the same workout get merged, every ticked set from both is kept. Before, the newer copy won whole, even when it had fewer sets.
+  - If your other phone's sync would replace or end a workout you've ticked sets in, that workout is saved to History as "recovered", and you get a message saying so.
+- **Weights keep their unit.** Each workout now records whether it's in lb or kg, and a workout in the other unit is converted, never relabelled. A newer theme or timer change on another device can no longer switch your lb/kg back.
+- **Picking "Your record" no longer re-saves old workouts.** The choice is stored once in settings, so it can't overwrite an edit or bring back a delete made on your other phone.
+- **Dropbox:**
+  - If both devices sync at the same moment, the second one reads the file again and merges instead of overwriting it.
+  - A change made while an upload is running now uploads next time instead of being marked as done.
+  - If storage is full during a sync, the other device's workouts are fetched again next time.
+  - A lost Dropbox login now tells you to reconnect it in Settings.
+- **Restoring a backup on a new phone** now also brings your settings: units, bodyweight, machine setups, weight steps and bar weights. If the backup contains workouts you deleted, it offers to bring them back.
+- **Smaller safeguards:**
+  - After 3 workouts with no backup, Home shows "Your workouts are only on this phone", with Save a backup / Connect Dropbox.
+  - The app asks the browser to keep its storage.
+  - A save that can't be read is set aside instead of written over.
+  - A set can't be ticked without reps; it used to vanish at Finish.
+  - Imports and sync no longer stop at 2,000 workouts.
+
+Not verified on-device.
+
 ## v0.70.0 — 2026-09-23 · The app suggests, you decide
 Your three decisions from the overnight review:
 - **Heavier weight is now a one-tap "Try", never filled in for you.** When you earned an increase, the rows show last time's numbers and the card says "You hit the top of the range last time — ready for more?" with a **Try 140lb** button. Tapping it moves only the sets you haven't ticked yet. **Back to last time** undoes it. On assist machines it offers less assist, in those words.

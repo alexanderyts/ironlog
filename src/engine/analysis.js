@@ -54,8 +54,8 @@ function progressionStat(sessions,now,bw){
   // the one judge (scoreSet): a leg raise adding reps, a plank held longer, an assist machine with less
   // assist all count as improving (they used to be invisible here); per lift AND track (Smith ≠ dumbbells)
   done.forEach(s=>{const b=sbw(s,bw);s.exercises.forEach(e=>{let best=null;
-    e.sets.forEach(st=>{if(st.nc||!isWorking(st))return;const sc=scoreSet(e.id,st,b);if(beatsScore(sc,best))best=sc;});
-    const k=e.id+':'+trackOf(e);if(best)(byEx[k]=byEx[k]||[]).push(best);});});
+    const tr=trackOf(e);e.sets.forEach(st=>{if(!isWorking(st)||IL.prog.ncOf(e.id,tr,st,b))return;const sc=scoreSet(e.id,st,b);if(beatsScore(sc,best))best=sc;});
+    const k=e.id+':'+tr;if(best)(byEx[k]=byEx[k]||[]).push(best);});});
   let n=0,up=0;Object.values(byEx).forEach(arr=>{if(arr.length>=2){n++;if(beatsScore(arr[arr.length-1],arr[0]))up++;}});
   return {n,up};
 }
@@ -339,7 +339,7 @@ function personalRecords(sessions,bw,limit){
     // "Doesn't count as a record" (#PR-adjust): the user has disowned this rep, so it can never BE the
     // PR — but it is remembered here so the row can show what was set aside. The set itself is
     // untouched everywhere else: it still counts for volume, sets-per-muscle, rest and history.
-    if(st.nc){if(beats(cand,set_aside[key]))set_aside[key]=cand;return;}
+    if(IL.prog.ncOf(e.id,track,st,sb)){if(beats(cand,set_aside[key]))set_aside[key]=cand;return;}
     const showEst=!!ex&&ex.type==='compound'&&!inverted&&!time&&sc.kind==='e1rm'&&!!(MODES[mode]&&MODES[mode].e1rm);
     if(beats(cand,best[key]))best[key]={id:e.id,mode,track,holds,sides,w:cand.w,load:w,r,est,score:sc.score,tie:sc.tie,kind:sc.kind,name:ex?ex.name:e.name,date:s.date,compound:!!ex&&ex.type==='compound',showEst,inverted,time,bodyweight:mode==='bodyweight'};
   })})});
@@ -460,7 +460,7 @@ function liftStatus(sessions,now,bw){
   // BEFORE that session (so "is this a PR?" needs no second scan of history).
   real(sessions).filter(s=>s.date<now).slice().reverse().forEach(s=>{const b=sbw(s,bw);
     s.exercises.forEach(e=>{if(!EX[e.id])return;let best=null,bs=null;
-      e.sets.forEach(st=>{if(st.nc||!isWorking(st))return;const sc=scoreSet(e.id,st,b);if(beatsScore(sc,best)){best=sc;bs=st;}});
+      const tr0=trackOf(e);e.sets.forEach(st=>{if(!isWorking(st)||IL.prog.ncOf(e.id,tr0,st,b))return;const sc=scoreSet(e.id,st,b);if(beatsScore(sc,best)){best=sc;bs=st;}});
       if(!best)return;const tr=trackOf(e),k=e.id+'|'+tr;
       const L=keys[k]=keys[k]||{id:e.id,track:tr,mode:modeOf(e),sides:sidesOf(e),holds:holdsOf(e),perfs:[],top:null,topSet:null};
       L.perfs.push({date:s.date,sc:best,w:+bs.w||0,r:+bs.r||0,prior:L.top,priorSet:L.topSet});

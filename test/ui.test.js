@@ -169,16 +169,20 @@ test('UI: a workout with no set timestamps, finished two days later, is never lo
   }finally{h.teardown();}
 });
 
-test('UI: Finish is in the top bar of the live editor — disabled with no set, enabled after one, and it finishes',()=>{
+test('UI: Finish is in the top bar of the live editor — with nothing ticked it asks instead of wiping, and it finishes',()=>{
   const h=launch();
   try{
     buildWorkout(h,['Chest']);
     const active=h.state.active;
     assert.ok(h.has('#btnFinishTop'),'top-bar Finish present');
-    assert.equal(h.$('#btnFinishTop').disabled,true,'disabled before any set is checked');
+    // batch 1: Finish is never greyed out; with nothing ticked it asks, and the planned sets survive
+    const planned=active.exercises.reduce((n,e)=>n+e.sets.length,0);
+    h.click('#btnFinishTop');
+    assert.equal(h.text('#sheetTitle'),'Nothing is ticked yet','it asks instead of doing nothing');
+    h.click('#finBack');
+    assert.equal(h.state.active.exercises.reduce((n,e)=>n+e.sets.length,0),planned,'the plan is untouched');
     h.type(h.$$('input[data-f="w"]')[0],'135');               // weight before the tick (#19)
     h.click(h.$$('[data-check]')[0]);
-    assert.equal(h.$('#btnFinishTop').disabled,false,'enabled once a set is done');
     h.click('#btnFinishTop');
     assert.equal(h.state.active,null,'top-bar Finish ends the workout');
     assert.ok(h.state.sessions.some(s=>s.id===active.id&&s.completed),'and saves it');

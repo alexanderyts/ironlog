@@ -89,7 +89,19 @@ function showSummary(sm){
   const d=$('#sumDone');if(d)d.addEventListener('click',()=>{closeSheet();setTab('history');});
 }
 function finishWorkout(){
-  const s=state.active;
+  const s=state.active;if(!s)return;
+  // Nothing ticked yet (forgot to tick, or the "Still training?" banner sent you here): ask, don't wipe.
+  if(!setsOf(s)){
+    const planned=s.exercises.reduce((n,e)=>n+e.sets.filter(st=>!st.warm&&(+st.r||0)>0).length,0);
+    if(!planned){toast('Tick ✓ each set as you finish it — then Finish saves them');return;}
+    openSheet('Nothing is ticked yet',`<div class="dim" style="font-size:13.5px;margin:-2px 2px 15px;line-height:1.5">Did you do the ${planned} planned set${planned>1?'s':''} as written? You can also go back and tick the ones you did.</div>
+      <button class="btn primary block" id="finPlanned" style="margin-bottom:9px">Save all ${planned} as done</button>
+      <button class="btn ghost block" id="finBack">Go back and tick them</button>`);
+    const a=$('#finPlanned'),b=$('#finBack');
+    if(a)a.addEventListener('click',()=>{const now=Date.now();s.exercises.forEach(e=>e.sets.forEach(st=>{if(!st.warm&&(+st.r||0)>0){st.done=true;if(!(+st.at>0))st.at=now;}}));closeSheet();persistCur();confirmUnchecked(s,()=>chooseEndThenCommit(s));});
+    if(b)b.addEventListener('click',closeSheet);
+    return;
+  }
   confirmUnchecked(s,()=>chooseEndThenCommit(s));
 }
 // T2: when Finish was likely forgotten (last set a while ago), let the user log the real end time
@@ -121,11 +133,17 @@ function chooseEndThenCommit(s){
 }
 // endedAt may be null ("don't record a length"): the session then has no duration anywhere it's read.
 function commitFinish(s,endedAt,estimated){
-  closeSheet();stopRest();stopSw();stopElapsed();
+  // the live copy: a sync may have swapped in a newer copy of this same workout while a sheet was open
+  if(state.active&&state.active!==s&&state.active.id===s.id)s=state.active;
+  closeSheet();
+  // Work out what will be saved FIRST, on a copy. The old order cleaned the live workout and only then
+  // noticed nothing was ticked — so "Log at least one set first" arrived after the plan was gone (batch 1).
+  const fin=P.finalizeSets(s.exercises);
+  if(!fin.length){toast('Nothing ticked to save — tick ✓ the sets you did');return;}
+  stopRest();stopSw();stopElapsed();
   if(endedAt)s.endedAt=endedAt;else delete s.endedAt;
   if(estimated&&endedAt)s.endEstimated=true;else delete s.endEstimated;
-  cleanSets(s);delete s.offers;
-  if(!s.exercises.length){toast('Log at least one set first');return;}
+  s.exercises=fin;delete s.offers;
   const sm=workoutSummary(s);
   s.completed=true;s.updatedAt=Date.now();
   if(bw()>0&&!(+s.bw>0))s.bw=bw();   // snapshot the bodyweight this workout was done at, so its bodyweight-lift math stays put as your weight changes later (D-1)
@@ -142,8 +160,18 @@ function commitFinish(s,endedAt,estimated){
   render();showSummary(sm);
 }
 /* Record changes (v0.69.0) — both paths are P.pickRecord, then save + sync the sessions it touched. */
+// The pick is stored once in settings (batch 1) — choosing a record no longer re-saves old workouts,
+// which could overwrite an edit or bring back a delete from your other device. Flags an older version
+// wrote on this lift's sets are cleared once (those workouts, and only those, are re-saved).
+function saveRecordPick(id,track,target){
+  const k=P.pickKey(id,track),rec=Object.assign({},state.settings.records);
+  if(target)rec[k]={score:target.score,tie:target.tie||0};else delete rec[k];
+  state.settings.records=Object.keys(rec).length?rec:undefined;S.saveSettingsCloud();
+  const legacy=state.sessions.some(s=>s.exercises.some(e=>e.id===id&&P.trackOf(e)===track&&e.sets.some(st=>st.nc)));
+  if(legacy)P.pickRecord(state.sessions,id,track,bw(),null).forEach(s=>{s.updatedAt=Date.now();S.upsertSession(s,false);});
+}
 function setRecord(id,track,target,msg){
-  P.pickRecord(state.sessions,id,track,bw(),target).forEach(s=>{s.updatedAt=Date.now();S.upsertSession(s,false);});
+  saveRecordPick(id,track,target);
   render();openSheet(EX[id]?EX[id].name:id,exerciseDetail(id));toast(msg||(target?'Record updated':'Your best set is your record again'));
 }
 // "Don't count this" on the finish screen: keep the record you had before this workout. Stays on the
@@ -152,7 +180,7 @@ function dontCount(id,sid,btn){
   const s=state.sessions.find(x=>x.id===sid),e=s&&s.exercises.find(x=>x.id===id);if(!e)return;
   const track=P.trackOf(e),prev=P.bestSetBefore(state.sessions,id,{mode:track,bw:bw(),excludeId:sid});
   if(!prev)return;
-  P.pickRecord(state.sessions,id,track,bw(),prev).forEach(x=>{x.updatedAt=Date.now();S.upsertSession(x,false);});
+  saveRecordPick(id,track,prev);
   render();if(btn)btn.outerHTML='<span class="dim" style="font-size:12.5px;flex-shrink:0">Not counted ✓</span>';
   toast('Kept your previous record — this set stays in your history');
 }
@@ -326,7 +354,9 @@ const ACTIONS={
   resume:()=>{todayScreen='active';render();},
   goLibrary:()=>setTab('library'),
   backHome:()=>leaveEditor(),
-  build:()=>{if(!draft.groups.size)return;buildAndStart(false);},   // belt for the disabled button (a synthetic click could otherwise build the old Chest+Back default)
+  build:()=>{if(!draft.groups.size)return;buildAndStart(false);},
+  nudgeExport:()=>{exportData();},
+  nudgeDropbox:()=>{S.connectDropbox();},   // belt for the disabled button (a synthetic click could otherwise build the old Chest+Back default)
   buildFresh:()=>buildAndStart(true),
   coachNudge:el=>{draft.groups=new Set(el.dataset.groups.split(','));render();},
   preset:el=>{const p=PRESETS.find(x=>x.label===el.dataset.preset);if(!p)return;
@@ -455,7 +485,7 @@ function bindLog(root){
         if(cex&&cex.equip!=='Bodyweight'&&!D.TIME_METRIC.has(cex.id)&&(inv?blankW:!(+st.w>0))){const wi=$(`input[data-f="w"][data-ei="${ei}"][data-s="${si}"]`);if(wi){wi.focus();if(wi.select)wi.select();}toast(inv?'Enter the assist — 0 if unassisted':'Add a weight first');return;}
         // Timed lifts log seconds in the reps field. Ticking with it empty saves a set finalizeSets then
         // drops (r>0 required), losing the tick with no warning — require the seconds first.
-        if(cex&&D.TIME_METRIC.has(cex.id)&&!(+st.r>0)){const ri=$(`input[data-f="r"][data-ei="${ei}"][data-s="${si}"]`);if(ri){ri.focus();if(ri.select)ri.select();}toast('Add seconds first');return;}}
+        if(!(+st.r>0)){const ri=$(`input[data-f="r"][data-ei="${ei}"][data-s="${si}"]`);if(ri){ri.focus();if(ri.select)ri.select();}toast(cex&&D.TIME_METRIC.has(cex.id)?'Add seconds first':'Add reps first');return;}}   // a ticked set with no reps was silently dropped at Finish (batch 1)
       st.done=!st.done;
       // T1: stamp on completion, but keep an existing stamp on un-tick → re-tick (a mis-tap corrected
       // seconds later keeps its true time, instead of jumping to "now" and skewing the rest medians).
@@ -591,6 +621,10 @@ function boot(){
   state.sessions.forEach(s=>{if(!s.schema)s.schema=SCHEMA;});   // schema migrations live here
   // per-exercise weight steps: the engine reads them LIVE (a sync can replace state.settings wholesale)
   P.setWeightSteps(()=>state.settings.steps||{});
+  P.setRecordPicks(()=>state.settings.records||null);   // "Your record" picks, read live (batch 1)
+  // Ask the browser to keep this app's storage (Safari can otherwise clear an un-installed site's data
+  // after about a week unused). Best-effort; the answer is up to the browser.
+  try{if(navigator.storage&&navigator.storage.persist)navigator.storage.persist().catch(()=>{});}catch(e){}
   document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>setTab(b.dataset.tab)));
   $('#sheetClose').addEventListener('click',closeSheet);$('#scrim').addEventListener('click',closeSheet);
   $('#cdCancel').addEventListener('click',closeConfirm);$('#cscrim').addEventListener('click',closeConfirm);
@@ -621,7 +655,7 @@ function boot(){
   // Cloud changes: a status ping only refreshes the badge. A real data change re-renders — but never
   // mid-keystroke or mid-hold; it waits until the field loses focus / the finger lifts (review 7.4). The
   // old code skipped the render outright while typing, so the screen stayed stale until the next tap.
-  S.onChange(kind=>{updateCloud();if(kind==='status')return;if(busyUI()){_renderPending=true;return;}render();});
+  S.onChange(kind=>{updateCloud();if(state.notice){const n=state.notice;state.notice=null;toast(n);}if(kind==='status')return;if(busyUI()){_renderPending=true;return;}render();});
   document.addEventListener('focusout',()=>setTimeout(flushPendingRender,0));
   ['pointerup','pointercancel'].forEach(ev=>document.addEventListener(ev,()=>setTimeout(flushPendingRender,0)));
   applyTheme();watchViewport();initSheetGestures();setTab('today');S.initCloud();

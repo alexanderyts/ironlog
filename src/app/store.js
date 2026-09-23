@@ -7,7 +7,12 @@ const {mergeSessions,applyTombstones,pruneTombstones,cleanDeleted,exportPayload,
 const CFG=IL.config||{};
 
 const LS={sessions:'il_sessions',active:'il_active',settings:'il_settings',dirty:'il_dirty',routines:'il_routines',deleted:'il_deleted',dbxRev:'il_dbx_rev',activeCleared:'il_active_cleared',pushPending:'il_push_pending',blockedVer:'il_blocked_ver'};
-function lsGet(k,f){try{const v=localStorage.getItem(k);return v?JSON.parse(v):f;}catch(e){return f;}}
+function lsGet(k,f){let v=null;try{v=localStorage.getItem(k);return v?JSON.parse(v):f;}
+  catch(e){
+    // A stored value that won't parse must never be silently replaced by the default and saved over —
+    // for the workouts that would erase them. Keep the raw text aside first (batch 1).
+    try{if(v&&k==='il_sessions'&&!localStorage.getItem('il_sessions_corrupt'))localStorage.setItem('il_sessions_corrupt',v);}catch(_){}
+    return f;}}
 // Returns false when the write is refused (private mode, or the ~5 MB quota is full). Callers that
 // hold the only copy of something (a finished workout) MUST check this and not discard it on false.
 function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v));return true;}catch(e){return false;}}
@@ -52,6 +57,30 @@ function resetDemo(){try{Object.values(LS).forEach(k=>localStorage.removeItem(k)
   }catch(e){}
 })();
 
+/* Units (batch 1). Every workout carries the unit its weights are in, so a lb↔kg switch on one device
+   and a newer settings change on another can no longer relabel history (225 lb reading as 225 kg).
+   normalizeUnits converts any workout in the other unit to the current one and stamps it; it never
+   bumps updatedAt (a local view of the same data). Unstamped workouts (older versions) are assumed to be
+   in the unit they've always been shown in. */
+function normalizeUnits(list,unit){
+  unit=unit||state.settings.unit||'lb';let changed=false;
+  (list||[]).forEach(s=>{if(!s||typeof s!=='object')return;
+    if(!s.unit){s.unit=unit;changed=true;return;}
+    if(s.unit!==unit&&IL.prog&&IL.prog.convertSessions){IL.prog.convertSessions([s],s.unit,unit,0,false);s.unit=unit;changed=true;}});
+  return changed;
+}
+if(normalizeUnits(state.sessions))lsSet(LS.sessions,state.sessions);
+if(state.active&&!state.active.unit)state.active.unit=state.settings.unit||'lb';
+// A workout another device's sync would have thrown away (it had ticked sets) is kept as a finished,
+// "recovered" workout instead, and the UI says so (batch 1).
+function recoverWorkout(a){
+  if(!a||state.sessions.some(x=>x.id===a.id))return false;
+  const ex=IL.prog&&IL.prog.finalizeSets?IL.prog.finalizeSets(a.exercises||[]):(a.exercises||[]);
+  if(!ex.length)return false;
+  const s=Object.assign({},a,{exercises:ex,completed:true,recovered:true,updatedAt:Date.now()});delete s.offers;
+  upsertSession(s,false);state.notice='Kept a workout from another device so nothing was lost — it’s in History.';
+  return true;
+}
 const saveSessions=()=>{const ok=lsSet(LS.sessions,state.sessions);state.storageError=!ok;return ok;};   // the big blob is where the quota bites; track it so the UI can warn
 const saveActive=()=>{const a=lsSet(LS.active,state.active);const b=lsSet(LS.activeCleared,state.activeClearedAt||0);return a&&b;};   // the active workout is the SOLE copy of live data until Finish — report if it didn't land
 const saveSettings=()=>lsSet(LS.settings,state.settings);
@@ -70,6 +99,7 @@ function emit(kind){listeners.forEach(fn=>{try{fn(kind||'data');}catch(e){}});}
 /* ---- sessions ---- */
 function upsertSession(s,fromCloud){
   s.updatedAt=s.updatedAt||Date.now();
+  if(!s.unit&&!fromCloud)s.unit=state.settings.unit||'lb';
   const i=state.sessions.findIndex(x=>x.id===s.id);
   if(i>=0){if(!fromCloud||s.updatedAt>=(state.sessions[i].updatedAt||0))state.sessions[i]=s;}
   else state.sessions.push(s);
@@ -112,7 +142,7 @@ function persistActive(){
   if(state.cloud){clearTimeout(activeTimer);activeTimer=setTimeout(()=>state.cloud.pushActive(),1500);}
   return ok;
 }
-function setActive(s){state.active=s;persistActive();}
+function setActive(s){if(s&&!s.unit)s.unit=state.settings.unit||'lb';state.active=s;persistActive();}
 
 /* ---- merging a remote snapshot (Dropbox file / import) ---- */
 function absorbRemote(remote,opts){
@@ -129,27 +159,50 @@ function absorbRemote(remote,opts){
   if(remote.settings&&(remote.settings.settingsUpdatedAt||0)>(state.settings.settingsUpdatedAt||0)){
     // REBUILD from defaults + the cleaned remote, don't merge — a merge keeps a key the remote dropped
     // (e.g. a profile the user reset on the other phone), so the reset would never propagate.
-    state.settings=Object.assign(defSettings(),cleanSettings(remote.settings)||{});changed=true;
+    const keepUnit=(state.settings.unitUpdatedAt||0)>((remote.settings&&remote.settings.unitUpdatedAt)||0)?{unit:state.settings.unit,unitUpdatedAt:state.settings.unitUpdatedAt}:null;
+    state.settings=Object.assign(defSettings(),cleanSettings(remote.settings)||{},keepUnit||{});changed=true;   // a newer theme/rest change can't flip the unit you chose more recently
+    if(keepUnit)pushNeeded=true;
   }else if((state.settings.settingsUpdatedAt||0)>((remote.settings&&remote.settings.settingsUpdatedAt)||0))pushNeeded=true;
   if(!opts.skipActive){
     const r=IL.sync.resolveActive({active:state.active,activeClearedAt:state.activeClearedAt},{active:remote.active,activeClearedAt:remote.activeClearedAt});
     if(r.changed){state.active=r.active;state.activeClearedAt=r.activeClearedAt;changed=true;}
     if(r.pushNeeded)pushNeeded=true;
+    if(r.dropped&&recoverWorkout(r.dropped)){changed=true;pushNeeded=true;}
   }
-  saveSessions();saveRoutines();saveDeleted();saveSettings();saveActive();
-  return {changed,pushNeeded};
+  // every workout (and the live one) in the unit now in force — converted, never relabelled
+  if(normalizeUnits(state.sessions))changed=true;
+  if(state.active)normalizeUnits([state.active]);
+  opts.saved=saveSessions();saveRoutines();saveDeleted();saveSettings();saveActive();
+  return {changed,pushNeeded,saved:opts.saved};
 }
 function importBackup(json){
   const d=parseImport(json);const before=state.sessions.length;
-  // If the backup was recorded in a different unit, convert its weights to the current unit first —
-  // otherwise kg numbers would show as lb (or vice versa).
-  const fromUnit=d.settings&&d.settings.unit,toUnit=state.settings.unit;
-  if(fromUnit&&toUnit&&fromUnit!==toUnit&&IL.prog&&IL.prog.convertSessions)IL.prog.convertSessions(d.sessions,fromUnit,toUnit,Date.now());
-  const r=absorbRemote({sessions:d.sessions,routines:d.routines,deleted:{},settings:null,active:null},{skipActive:true});
+  // Workouts carry their own unit now; older backups don't, so stamp those with the backup's unit and
+  // let normalizeUnits convert to this phone's (kg numbers must never show as lb).
+  const fromUnit=(d.settings&&d.settings.unit)||state.settings.unit;
+  d.sessions.forEach(s=>{if(!s.unit)s.unit=fromUnit;});if(d.active&&!d.active.unit)d.active.unit=fromUnit;
+  // A phone that's never been set up takes the backup's settings (units, bodyweight, machine setups,
+  // weight steps, bar weights) and its in-progress workout — restoring onto a new phone kept neither.
+  const fresh=!(state.settings.settingsUpdatedAt>0);
+  const blocked=d.sessions.filter(s=>state.deleted[s.id]&&state.deleted[s.id]>=(s.updatedAt||0)).length;
+  absorbRemote({sessions:d.sessions,routines:d.routines,deleted:{},settings:fresh?d.settings:null,active:!state.active?d.active:null,activeClearedAt:0},{skipActive:!!state.active});
   d.sessions.forEach(s=>{state.dirty.add(s.id);});saveDirty();
   if(state.cloud){state.cloud.flush();}
   emit();
+  lastImport={json,blocked};
   return state.sessions.length-before;
+}
+// Backups can hold workouts you deleted (on purpose or by mistake). The UI offers to bring them back:
+// this drops those deletions and re-imports them with a fresh timestamp so every device takes them.
+let lastImport=null;
+function deletedInLastImport(){return lastImport?lastImport.blocked:0;}
+function restoreDeletedFromLastImport(){
+  if(!lastImport)return 0;const d=parseImport(lastImport.json),now=Date.now();let n=0;
+  d.sessions.forEach(s=>{if(state.deleted[s.id]){delete state.deleted[s.id];s.updatedAt=now;if(!s.unit)s.unit=(d.settings&&d.settings.unit)||state.settings.unit;n++;}});
+  saveDeleted();absorbRemote({sessions:d.sessions.filter(s=>s.updatedAt===now),routines:[],deleted:{},settings:null,active:null},{skipActive:true});
+  d.sessions.forEach(s=>{if(s.updatedAt===now)state.dirty.add(s.id);});saveDirty();
+  if(state.cloud){if(state.cloud.pushTombstones)state.cloud.pushTombstones();state.cloud.flush();}
+  lastImport=null;emit();return n;
 }
 
 /* ---- cloud adapters ----
@@ -167,22 +220,25 @@ function artifactAdapter(){
     async init(){
       db=await claude.use('db');if(!db)return false;
       try{const snap=await db.doc('settings/app').get();if(snap.exists){const rs=cleanSettings(snap.data())||{};
-        if((rs.settingsUpdatedAt||0)>(state.settings.settingsUpdatedAt||0)){state.settings=Object.assign(defSettings(),rs);saveSettings();}   // rebuild, not merge (see absorbRemote) so a reset propagates
+        if((rs.settingsUpdatedAt||0)>(state.settings.settingsUpdatedAt||0)){const keep=(state.settings.unitUpdatedAt||0)>(rs.unitUpdatedAt||0)?{unit:state.settings.unit,unitUpdatedAt:state.settings.unitUpdatedAt}:{};state.settings=Object.assign(defSettings(),rs,keep);saveSettings();if(normalizeUnits(state.sessions))saveSessions();}   // rebuild, not merge (see absorbRemote) so a reset propagates
         else if((state.settings.settingsUpdatedAt||0)>(rs.settingsUpdatedAt||0))A.pushSettings();}}catch(e){}
       try{const snap=await db.doc('active/current').get();
         if(snap.exists){const raw=snap.data();
           const remoteTs=(raw&&raw.updatedAt)||0,localTs=state.active?(state.active.updatedAt||0):(state.activeClearedAt||0);
-          if(raw&&raw.id&&remoteTs>localTs){state.active=cleanSession(raw);saveActive();}                                    // remote has a newer active
-          else if(raw&&raw.empty&&remoteTs>localTs&&state.active){state.active=null;state.activeClearedAt=Math.max(state.activeClearedAt||0,remoteTs);saveActive();}  // remote ended a workout more recently → don't resurrect it
+          if(raw&&raw.id&&remoteTs>localTs){const r=IL.sync.resolveActive({active:state.active,activeClearedAt:state.activeClearedAt},{active:cleanSession(raw),activeClearedAt:0});state.active=r.active;if(state.active)normalizeUnits([state.active]);saveActive();if(r.dropped)recoverWorkout(r.dropped);}                                    // remote has a newer active
+          else if(raw&&raw.empty&&remoteTs>localTs&&state.active){if(IL.sync.hasTicked(state.active))recoverWorkout(state.active);state.active=null;state.activeClearedAt=Math.max(state.activeClearedAt||0,remoteTs);saveActive();}  // remote ended a workout more recently → don't resurrect it
           else if(localTs>remoteTs)A.pushActive();
         }else if(state.active)A.pushActive();}catch(e){}
       await A.flush();
       db.collection('sessions').onSnapshot(qs=>{
         const remote=[];qs.docs.forEach(d=>{const data=d.data();if(data){data.id=d.id;remote.push(cleanSession(data));}});
+        normalizeUnits(remote);   // in this phone's unit before comparing
         const m=mergeSessions(state.sessions,remote,state.deleted);
+        const rById=new Map(remote.map(r=>[r.id,r]));m.merged.forEach(s=>{const r=rById.get(s.id);if(r&&(s.updatedAt||0)>(r.updatedAt||0)){state.dirty.add(s.id);}});   // a merged copy that gained the other side's sets goes back up
         // sessions we deleted locally but the cloud still has → delete there too
         remote.forEach(r=>{if(state.deleted[r.id]&&state.deleted[r.id]>=(r.updatedAt||0))db.doc('sessions/'+r.id).delete().catch(()=>{});});
         if(m.changedLocal){state.sessions=m.merged;saveSessions();emit();}
+        if(state.dirty.size){saveDirty();A.flush();}
         state.lastSync=Date.now();emit('status');
       },()=>{});
       // Shared tombstone doc: mergeSessions can add/update but never REMOVE, so without this a delete on one
@@ -208,7 +264,9 @@ function artifactAdapter(){
     },
     async pushSession(s){try{await db.doc('sessions/'+s.id).set(s);state.dirty.delete(s.id);saveDirty();state.lastSync=Date.now();state.cloudError='';emit('status');}catch(e){state.cloudError='Sync failed';emit('status');}},
     deleteSession(id){db.doc('sessions/'+id).delete().catch(()=>{});A.pushTombstones();},
-    pushTombstones(){db.doc('meta/deleted').set({map:state.deleted,updatedAt:Date.now()}).catch(()=>{});},   // publish the deletion so other devices don't resurrect it (D2)
+    async pushTombstones(){try{const snap=await db.doc('meta/deleted').get();const rd=snap.exists?cleanDeleted((snap.data()||{}).map):{};
+        const merged=Object.assign({},rd);Object.keys(state.deleted).forEach(k=>{if(!merged[k]||state.deleted[k]>merged[k])merged[k]=state.deleted[k];});
+        await db.doc('meta/deleted').set({map:pruneTombstones(merged),updatedAt:Date.now()});}catch(e){}},   // merge with the cloud's list first — a plain set() erased the other device's deletes (batch 1)   // publish the deletion so other devices don't resurrect it (D2)
     pushSettings(){db.doc('settings/app').set(state.settings).catch(()=>{});},
     pushRoutine(r){db.doc('routines/'+r.id).set(r).catch(()=>{});},
     deleteRoutine(id){db.doc('routines/'+id).delete().catch(()=>{});A.pushTombstones();},
@@ -224,7 +282,8 @@ function dropboxAdapter(){
   // A change that doesn't dirty a session (a setting, a routine, a DELETE) still has to reach the one
   // shared file. `dirty` only tracks sessions, so without this flag those changes upload only when the
   // NEXT session happens to — the profile you set never reaches your other phone, the delete comes back.
-  function markPending(){pushPending=true;lsSet(LS.pushPending,true);schedule();}
+  let pendVer=0;   // bumped on every change; an upload only clears "pending" if nothing changed while it ran (batch 1)
+  function markPending(){pendVer++;pushPending=true;lsSet(LS.pushPending,true);schedule();}
   const A={name:'dropbox',
     async init(){
       try{await D.handleRedirect();}catch(e){state.cloudError=e.message;}
@@ -258,15 +317,20 @@ function dropboxAdapter(){
             if(nv!==blockedVer){blockedVer=nv;lsSet(LS.blockedVer,nv);}
             remoteNewer=!!nv;
             const r=absorbRemote({sessions:remote.sessions,routines:remote.routines,deleted:remote.deleted,settings:remote.settings,active:remote.active,activeClearedAt:remote.activeClearedAt});
-            if(r.changed)emit();if(r.pushNeeded)pushNeeded=true;}catch(e){pushNeeded=true;}
-            rev=f.rev;}
+            if(r.changed)emit();if(r.pushNeeded)pushNeeded=true;
+            if(r.saved!==false)rev=f.rev;   // storage full: don't remember this version, or the next sync skips the other device's workouts
+          }catch(e){pushNeeded=true;rev=f.rev;}
+          }
         }
         if(remoteNewer){state.cloudError='Update Ironlog on this phone to sync — your backup is from a newer version.';}
         else if(!meta||pushNeeded||meta.rev!==rev){
-          const pushIds=[...state.dirty];   // snapshot BEFORE the await, so sessions logged mid-upload aren't wrongly cleared
-          rev=await D.upload(JSON.stringify(exportPayload(state,CFG.VERSION)));
-          pushIds.forEach(id=>state.dirty.delete(id));saveDirty();
-          pushPending=false;lsSet(LS.pushPending,false);   // everything that was pending is now in the file
+          // snapshot BEFORE the await: which sessions (and which version of each) this upload carries, and
+          // the pending counter — anything changed while it runs stays pending for the next sync
+          const pushIds=[...state.dirty].map(id=>{const s=state.sessions.find(x=>x.id===id);return [id,s?s.updatedAt:0];}),ver0=pendVer;
+          try{rev=await D.upload(JSON.stringify(exportPayload(state,CFG.VERSION)),meta?rev:null);}
+          catch(e){if(e&&e.conflict){rev=null;lsSet(LS.dbxRev,null);A._pending=true;throw new Error('Another device synced at the same moment — merging and retrying');}throw e;}
+          pushIds.forEach(([id,u])=>{const s=state.sessions.find(x=>x.id===id);if(!s||s.updatedAt===u)state.dirty.delete(id);});saveDirty();
+          if(pendVer===ver0){pushPending=false;lsSet(LS.pushPending,false);}   // everything that was pending is now in the file
         }
         lsSet(LS.dbxRev,rev);state.lastSync=Date.now();
       }catch(e){state.cloudError=e.message||'Sync failed';}
@@ -292,6 +356,6 @@ async function initCloud(){
 function connectDropbox(){return IL.dropbox.connect();}
 function disconnectDropbox(){IL.dropbox.disconnect();state.cloud=null;state.cloudName='none';emit();}
 
-IL.store={state,LS,uid,saveSessions,saveActive,saveSettings,saveRoutines,saveDirty,onChange,emit,storageBytes,
+IL.store={normalizeUnits,recoverWorkout,deletedInLastImport,restoreDeletedFromLastImport,state,LS,uid,saveSessions,saveActive,saveSettings,saveRoutines,saveDirty,onChange,emit,storageBytes,
   upsertSession,deleteSession,restoreSession,saveRoutine,deleteRoutine,saveSettingsCloud,persistActive,setActive,
   absorbRemote,importBackup,initCloud,connectDropbox,disconnectDropbox,resetDemo,exportPayload:()=>exportPayload(state,CFG.VERSION)};

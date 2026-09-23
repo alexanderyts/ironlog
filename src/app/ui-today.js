@@ -22,6 +22,7 @@ function homeView(){
     </div>
     ${profileIntroCard()}
     ${state.active?resumeCard():''}
+    ${backupNudge()}
     <div class="dim" id="homeSummary" style="font-size:13.5px;margin:10px 2px 16px">${wkAny} workout${wkAny!==1?'s':''} this week${streak?` · ${streak}-week streak`:''}</div>   <!-- one line: the full tiles live on Progress (review 5.6) -->
     ${state.active?'':startBlock()}
     ${state.active?'':cardioBlock()}
@@ -30,6 +31,21 @@ function homeView(){
     <button class="btn ghost block" data-action="goLibrary" style="justify-content:space-between">
       <span>Browse exercise library</span><span class="dim mono">${EXERCISES.length} exercises ›</span></button>
   </div>`;
+}
+// "Your lifts live only on this phone" (batch 1): after 3 workouts with no cloud backup, once per 20
+// workouts. Export always works; Dropbox is offered where this build has it.
+function backupNudge(){
+  if(CFG.DEMO||state.cloudName!=='none')return '';
+  const n=completedAny().length,key='backupNudge:'+Math.floor(n/20);
+  if(n<3||seenFlag(key))return '';
+  const dbx=CFG.BUILD==='site'&&DBX&&DBX.isConfigured&&DBX.isConfigured();
+  return `<div class="card" style="padding:14px 15px;margin:14px 0 4px;border-color:color-mix(in srgb,var(--warn) 45%,var(--line))">
+    <div style="font-weight:700;font-size:14px">Your ${n} workouts are only on this phone</div>
+    <div class="dim" style="font-size:12.5px;margin-top:3px;line-height:1.45">If the phone is lost or its storage is cleared, they’re gone. ${dbx?'Connect Dropbox (2 min) to back up automatically, or save a copy now.':'Save a backup copy now — it takes a tap.'}</div>
+    <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+      ${dbx?'<button class="btn primary sm" data-action="nudgeDropbox">Connect Dropbox</button>':''}
+      <button class="btn ${dbx?'ghost':'primary'} sm" data-action="nudgeExport">Save a backup</button>
+      <button class="linkbtn dim" data-seentip="${key}" style="font-size:12.5px">Not now</button></div></div>`;
 }
 function emptyHome(){return `<div class="card" style="padding:26px 18px;text-align:center;margin-top:20px"><div class="dim">No workouts logged yet.<br>Tap <b style="color:var(--accent)">Start a workout</b> above to log your first session.</div></div>`;}
 // Home's primary action: YOU choose what to train. The app doesn't lead with a "plan" it decided —
@@ -456,7 +472,7 @@ function editorView(s,mode){
   return `
   <div class="section">
     <div class="topbar"><button class="backbtn" data-action="backHome">${ICON_BACK} ${edit?'Cancel':'Home'}</button>
-      ${edit?'':`<span style="display:flex;gap:10px;align-items:center"><button class="linkbtn dim" id="btnDiscard">Discard</button><button class="btn good sm" id="btnFinishTop" ${sets===0?'disabled style="opacity:.5"':''}>Finish</button></span>`}</div>
+      ${edit?'':`<span style="display:flex;gap:10px;align-items:center"><button class="linkbtn dim" id="btnDiscard">Discard</button><button class="btn good sm" id="btnFinishTop">Finish</button></span>`}</div>
     <div style="padding:0 2px 2px"><div class="eyebrow">${edit?'Editing · '+fmtDate(s.date):`Workout in progress · saves automatically · <span id="elapsedLbl">${fmtElapsed(s.date)}</span>`}</div>
       <h2 style="font-size:23px;margin-top:4px">${new Date(s.date).toLocaleDateString(undefined,{weekday:'long'})}'s session${s.deload?' <span class="deload-badge">Deload</span>':''}</h2></div>
     ${edit?`<div class="settingrow" style="border:none;padding:8px 2px;margin:2px 0 0"><div><div style="font-weight:600;font-size:13.5px">Date</div><div class="dim" style="font-size:12px">Move this workout to another day</div></div>
@@ -478,7 +494,7 @@ function editorView(s,mode){
     <button class="btn ghost block" id="btnAddEx" style="margin-top:4px">＋ Add exercise</button>
     <div style="height:14px"></div>
     ${edit?`<button class="btn primary block" id="btnSaveEdit">Save changes</button>`
-          :`<button class="btn good block" id="btnFinish" ${sets===0?'disabled style="opacity:.5"':''}>Finish &amp; save workout</button>`}
+          :`<button class="btn good block" id="btnFinish">Finish &amp; save workout</button>`}
   </div>`;
 }
 function emptyLog(){return `<div class="card" style="padding:26px 18px;text-align:center;margin-bottom:14px"><div class="dim">No exercises yet.<br>Add one to start logging sets.</div></div>`;}

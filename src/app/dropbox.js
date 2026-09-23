@@ -41,7 +41,7 @@ async function accessToken(){
   if(t.at&&t.exp>Date.now())return t.at;
   const body=new URLSearchParams({grant_type:'refresh_token',refresh_token:t.rt,client_id:appKey()});
   const r=await fetch('https://api.dropboxapi.com/oauth2/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body});
-  if(!r.ok){if(r.status===400||r.status===401)disconnect();throw new Error('Dropbox session expired');}
+  if(!r.ok){if(r.status===400||r.status===401)disconnect();throw new Error('Dropbox disconnected — reconnect it in Settings');}
   const j=await r.json();
   t.at=j.access_token;t.exp=Date.now()+(j.expires_in||14400)*1000-60000;lsSet(KEY,t);
   return t.at;
@@ -62,9 +62,14 @@ async function download(){
   const meta=JSON.parse(r.headers.get('dropbox-api-result')||'{}');
   return {rev:meta.rev,text:await r.text()};
 }
-async function upload(text){
+// Only replace the file if it's still the version we read (`rev`); with no rev, only create it. If
+// another device uploaded in between, Dropbox answers 409 and we re-read and merge instead of
+// overwriting its workout (batch 1 — uploads used to overwrite blindly).
+async function upload(text,rev){
   const at=await accessToken();
-  const r=await fetch('https://content.dropboxapi.com/2/files/upload',{method:'POST',headers:{Authorization:'Bearer '+at,'Dropbox-API-Arg':JSON.stringify({path:FILE,mode:'overwrite',mute:true}),'Content-Type':'application/octet-stream'},body:text});
+  const mode=rev?{'.tag':'update',update:rev}:'add';
+  const r=await fetch('https://content.dropboxapi.com/2/files/upload',{method:'POST',headers:{Authorization:'Bearer '+at,'Dropbox-API-Arg':JSON.stringify({path:FILE,mode,mute:true}),'Content-Type':'application/octet-stream'},body:text});
+  if(r.status===409){const e=new Error('conflict');e.conflict=true;throw e;}
   if(!r.ok)throw new Error('Dropbox upload failed');
   const j=await r.json();return j.rev;
 }

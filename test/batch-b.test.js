@@ -144,6 +144,7 @@ test('D2: deleting a session publishes the tombstone doc to the artifact backend
     h.win.claude={use:async(x)=>x==='db'?db:null};
     await h.S.initCloud();
     h.S.deleteSession('sess-y');
+    await new Promise(r=>setTimeout(r,20));   // batch 1: it reads the cloud's list and merges before writing
     assert.ok(db._sets['meta/deleted'],'the tombstone doc was written on delete');
     assert.ok(db._sets['meta/deleted'].slice(-1)[0].map['sess-y'],'and it carries the deleted id');
   }finally{h.teardown();}

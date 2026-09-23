@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-srhHbQaPFys5O8E9Os2Lxp+n29xt8OyUDYQAK1m8RDw=' 'sha256-WPBob/luB2k1aalTWXpi6zk3SrIbj8GlZV7AlFdG7oA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-kPJRQjeHMkOJHIk77TQ3/EhJuFF+HO7gOtfnX4QXAr4=' 'sha256-WPBob/luB2k1aalTWXpi6zk3SrIbj8GlZV7AlFdG7oA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Ironlog</title>
@@ -456,8 +456,8 @@ html.kb-open .tabbar{display:none}
 </div>
 
 <script>
-/* Ironlog v0.70.0 · site build */
-var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.70.0",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
+/* Ironlog v0.71.0 · site build */
+var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.71.0",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
 
 /* ===== src/data/exercises.js ===== */
 (function(){'use strict';
@@ -894,6 +894,17 @@ const real=sessions=>(sessions||[]).filter(s=>s.completed!==false&&!s.deload&&s.
 // Coach analysis and the builder's plan detection share this rule (review §8: it was written out per file).
 const liftSessions=sessions=>(sessions||[]).filter(s=>s&&s.completed!==false&&s.exercises&&s.exercises.length&&s.kind!=='cardio');
 
+/* Record picks (batch 1). "Your record" is stored ONCE per lift+version in settings.records as the
+   picked set's {score,tie}; a set that beats the pick doesn't count as a record. Worked out when read,
+   so choosing a record never rewrites old workouts (v0.69 did, and a re-saved workout could overwrite
+   an edit or bring back a delete made on another device). The per-set `nc` flag from older versions is
+   still honoured. The app registers a live getter at boot, like setWeightSteps. */
+let _picks=()=>null;
+function setRecordPicks(g){_picks=typeof g==='function'?g:()=>g||null;}
+function pickKey(exId,track){return exId+':'+String(track||'').replace('|',':');}
+function recordPick(exId,track){const m=_picks(),p=m&&m[pickKey(exId,track)];return p&&Number.isFinite(+p.score)?{score:+p.score,tie:+p.tie||0}:null;}
+// Doesn't count as a record: flagged by an older version, or better than this lift's picked record.
+function ncOf(exId,track,st,b){if(st.nc)return true;const p=recordPick(exId,track);if(!p)return false;const sc=scoreSet(exId,st,b);return !!sc&&beatsScore(sc,p);}
 // Most recent completed performance of an exercise. opts: {beforeTs, excludeId, mode}
 // When `mode` is given, only instances performed with that modality match — so progression compares
 // like-for-like (25 lb dumbbells never chase a 75 lb Smith). Omit mode to match regardless.
@@ -911,9 +922,9 @@ function lastPerf(sessions,exId,opts){
     // so it must not seed the next workout or anchor the next suggestion. Because `some(perfSet)` uses
     // the same predicate, a session whose every working set is marked is skipped whole and the scan
     // falls through to the one before it — the fallback chain costs no extra code.
-    const perfSet=st=>isWorking(st)&&(+st.r||0)>0&&!(opts.clean&&st.nc);
-    const e=s.exercises.find(x=>x.id===exId&&(!opts.mode||trackOf(x)===opts.mode)&&x.sets.some(perfSet));
-    if(e)return{date:s.date,mode:modeOf(e),sets:e.sets.filter(perfSet).map(st=>({w:+st.w||0,r:+st.r||0})),note:e.note||'',bw:s.bw};   // bw: that session's bodyweight, for scoring it
+    const perfFor=x=>{const tr=trackOf(x),b=sbw(s,opts.bw);return st=>isWorking(st)&&(+st.r||0)>0&&!(opts.clean&&ncOf(x.id,tr,st,b));};
+    const e=s.exercises.find(x=>x.id===exId&&(!opts.mode||trackOf(x)===opts.mode)&&x.sets.some(perfFor(x)));
+    if(e)return{date:s.date,mode:modeOf(e),sets:e.sets.filter(perfFor(e)).map(st=>({w:+st.w||0,r:+st.r||0})),note:e.note||'',bw:s.bw};   // bw: that session's bodyweight, for scoring it
   }
   return null;
 }
@@ -988,7 +999,7 @@ function exerciseSeries(sessions,exId,opts){
     let best=null,bs=null,nc=null;
     e.sets.forEach(st=>{if(!isWorking(st))return;
       const sc=scoreSet(exId,st,b);if(!sc)return;
-      if(st.nc){if(beatsScore(sc,nc))nc=sc;return;}
+      if(ncOf(exId,trackOf(e),st,b)){if(beatsScore(sc,nc))nc=sc;return;}
       if(beatsScore(sc,best)){best=sc;bs=st;}});
     if(best)out.push({date:s.date,est:best.score,w:+bs.w||0,r:+bs.r||0,metric:best.kind,adj:(nc&&beatsScore(nc,best))||undefined});
   }
@@ -1008,7 +1019,7 @@ function bestSetBefore(sessions,exId,opts){
     const e=s.exercises.find(x=>x.id===exId&&(!opts.mode||trackOf(x)===opts.mode));
     if(!e)continue;
     const b=sbw(s,bw);   // each session scored by its own bodyweight (D-1)
-    e.sets.forEach(st=>{if(st.nc||!isWorking(st))return;const sc=scoreSet(exId,st,b);if(beatsScore(sc,best))best=sc;});
+    const tr=trackOf(e);e.sets.forEach(st=>{if(!isWorking(st)||ncOf(exId,tr,st,b))return;const sc=scoreSet(exId,st,b);if(beatsScore(sc,best))best=sc;});
   }
   return best;
 }
@@ -1054,7 +1065,7 @@ function sessionPR(sessions,e,session,bw,hist){
   const h=hist!==undefined?hist:bestSetBefore(sessions,e.id,{mode:trackOf(e),bw,excludeId:session&&session.id});
   if(!h)return null;
   const b=sbw(session,bw);let best=null,bs=null;
-  e.sets.forEach(st=>{if(st.warm||st.nc||!isWorking(st))return;const sc=scoreSet(e.id,st,b);if(beatsScore(sc,best)){best=sc;bs=st;}});
+  const tr=trackOf(e);e.sets.forEach(st=>{if(st.warm||!isWorking(st)||ncOf(e.id,tr,st,b))return;const sc=scoreSet(e.id,st,b);if(beatsScore(sc,best)){best=sc;bs=st;}});
   return best&&beatsScore(best,h)?{set:bs,score:best.score,kind:best.kind}:null;
 }
 // The modality used the last time this exercise was logged (for "remembering" the user's choice);
@@ -1313,7 +1324,7 @@ function calcStreak(sessions,now){
   return n;
 }
 
-IL.prog={AWAY_DAYS,recordChoices,pickRecord,liftSessions,DAY,startOfDay,e1rm,isWorking,setLoad,sbw,sessionVolume,sessionSets,sessionDuration,MAX_SESSION_MIN,setTimeline,lastSetAt,staleness,STALE_AFTER_MIN,STALE_CONFIRM_MIN,END_PAD_MIN,finalizeSets,parseWeightInput,fmtVol,modeOf,real,lastPerf,lastModeFor,exerciseSeries,setScore,scoreMetric,liftKind,scoreSet,beatsScore,bestSetBefore,sessionPR,platesPerSide,sidesOf,holdsOf,sideMult,trackOf,sideDefault,lastSideFor,lastTrackFor,bestE1rmBefore,setPattern,fmtPerf,repRange,nextSets,deloadSets,suggestion,unitIncrement,setWeightSteps,convertWeight,convertSessions,calcStreak,weekIndex,weekStart};
+IL.prog={setRecordPicks,recordPick,pickKey,ncOf,AWAY_DAYS,recordChoices,pickRecord,liftSessions,DAY,startOfDay,e1rm,isWorking,setLoad,sbw,sessionVolume,sessionSets,sessionDuration,MAX_SESSION_MIN,setTimeline,lastSetAt,staleness,STALE_AFTER_MIN,STALE_CONFIRM_MIN,END_PAD_MIN,finalizeSets,parseWeightInput,fmtVol,modeOf,real,lastPerf,lastModeFor,exerciseSeries,setScore,scoreMetric,liftKind,scoreSet,beatsScore,bestSetBefore,sessionPR,platesPerSide,sidesOf,holdsOf,sideMult,trackOf,sideDefault,lastSideFor,lastTrackFor,bestE1rmBefore,setPattern,fmtPerf,repRange,nextSets,deloadSets,suggestion,unitIncrement,setWeightSteps,convertWeight,convertSessions,calcStreak,weekIndex,weekStart};
 if(typeof module!=='undefined')module.exports=IL.prog;
 
 })();
@@ -2015,8 +2026,8 @@ function progressionStat(sessions,now,bw){
   // the one judge (scoreSet): a leg raise adding reps, a plank held longer, an assist machine with less
   // assist all count as improving (they used to be invisible here); per lift AND track (Smith ≠ dumbbells)
   done.forEach(s=>{const b=sbw(s,bw);s.exercises.forEach(e=>{let best=null;
-    e.sets.forEach(st=>{if(st.nc||!isWorking(st))return;const sc=scoreSet(e.id,st,b);if(beatsScore(sc,best))best=sc;});
-    const k=e.id+':'+trackOf(e);if(best)(byEx[k]=byEx[k]||[]).push(best);});});
+    const tr=trackOf(e);e.sets.forEach(st=>{if(!isWorking(st)||IL.prog.ncOf(e.id,tr,st,b))return;const sc=scoreSet(e.id,st,b);if(beatsScore(sc,best))best=sc;});
+    const k=e.id+':'+tr;if(best)(byEx[k]=byEx[k]||[]).push(best);});});
   let n=0,up=0;Object.values(byEx).forEach(arr=>{if(arr.length>=2){n++;if(beatsScore(arr[arr.length-1],arr[0]))up++;}});
   return {n,up};
 }
@@ -2300,7 +2311,7 @@ function personalRecords(sessions,bw,limit){
     // "Doesn't count as a record" (#PR-adjust): the user has disowned this rep, so it can never BE the
     // PR — but it is remembered here so the row can show what was set aside. The set itself is
     // untouched everywhere else: it still counts for volume, sets-per-muscle, rest and history.
-    if(st.nc){if(beats(cand,set_aside[key]))set_aside[key]=cand;return;}
+    if(IL.prog.ncOf(e.id,track,st,sb)){if(beats(cand,set_aside[key]))set_aside[key]=cand;return;}
     const showEst=!!ex&&ex.type==='compound'&&!inverted&&!time&&sc.kind==='e1rm'&&!!(MODES[mode]&&MODES[mode].e1rm);
     if(beats(cand,best[key]))best[key]={id:e.id,mode,track,holds,sides,w:cand.w,load:w,r,est,score:sc.score,tie:sc.tie,kind:sc.kind,name:ex?ex.name:e.name,date:s.date,compound:!!ex&&ex.type==='compound',showEst,inverted,time,bodyweight:mode==='bodyweight'};
   })})});
@@ -2421,7 +2432,7 @@ function liftStatus(sessions,now,bw){
   // BEFORE that session (so "is this a PR?" needs no second scan of history).
   real(sessions).filter(s=>s.date<now).slice().reverse().forEach(s=>{const b=sbw(s,bw);
     s.exercises.forEach(e=>{if(!EX[e.id])return;let best=null,bs=null;
-      e.sets.forEach(st=>{if(st.nc||!isWorking(st))return;const sc=scoreSet(e.id,st,b);if(beatsScore(sc,best)){best=sc;bs=st;}});
+      const tr0=trackOf(e);e.sets.forEach(st=>{if(!isWorking(st)||IL.prog.ncOf(e.id,tr0,st,b))return;const sc=scoreSet(e.id,st,b);if(beatsScore(sc,best)){best=sc;bs=st;}});
       if(!best)return;const tr=trackOf(e),k=e.id+'|'+tr;
       const L=keys[k]=keys[k]||{id:e.id,track:tr,mode:modeOf(e),sides:sidesOf(e),holds:holdsOf(e),perfs:[],top:null,topSet:null};
       L.perfs.push({date:s.date,sc:best,w:+bs.w||0,r:+bs.r||0,prior:L.top,priorSet:L.topSet});
@@ -2554,7 +2565,27 @@ function cleanSeen(v){if(!v||typeof v!=='object')return undefined;const o={};let
 
 const TOMB_KEEP=400*86400000;   // remember deletions ~13 months — longer than a phone left off for a season, so a device coming back online can't resurrect a delete (a tombstone is ~30 B; 500 of them is 15 KB)
 
-// Merge by id, newest updatedAt wins. tomb = {id: deletedAt}. Returns what changed on each side.
+/* Never lose a ticked set in a merge (batch 1). Merging used to be "the newest copy of a workout wins,
+   whole" — so an older copy finished on the iPad could replace a fuller copy logged on the phone.
+   Now the winning copy also takes every TICKED, time-stamped set the other copy has and it lacks
+   (matched by exercise + tick time). Sets without a tick time (old data) fall back to newest-wins.
+   The trade-off, chosen on purpose: a set deleted on one device can come back from a stale copy —
+   annoying but visible and fixable, where a lost lift is not. */
+const clone=o=>JSON.parse(JSON.stringify(o));
+function tickKeys(s){const k=new Set();(s&&s.exercises||[]).forEach(e=>(e.sets||[]).forEach(st=>{if(st&&st.done!==false&&+st.at>0)k.add(e.id+'@'+(+st.at));}));return k;}
+function hasTicked(s){return !!(s&&(s.exercises||[]).some(e=>(e.sets||[]).some(st=>st&&st.done!==false&&((+st.r||0)>0||(+st.w||0)>0))));}
+// Copy into `into` (mutated) the ticked, time-stamped sets of `from` that it lacks. Returns how many.
+function unionSets(into,from){
+  if(!into||!from||!Array.isArray(into.exercises)||!Array.isArray(from.exercises))return 0;
+  const have=tickKeys(into);let n=0;
+  from.exercises.forEach(fe=>(fe.sets||[]).forEach(st=>{
+    if(!(st&&st.done!==false&&+st.at>0))return;const k=fe.id+'@'+(+st.at);if(have.has(k))return;
+    let e=into.exercises.find(x=>x.id===fe.id&&(x.mode||'')===(fe.mode||'')&&x.side===fe.side)||into.exercises.find(x=>x.id===fe.id);
+    if(!e){e=clone(Object.assign({},fe,{sets:[]}));into.exercises.push(e);}
+    e.sets.push(clone(st));have.add(k);n++;}));
+  return n;
+}
+// Merge by id, newest updatedAt wins — plus the ticked sets of the losing copy (unionSets). tomb = {id: deletedAt}.
 function mergeSessions(local,remote,tomb){
   tomb=tomb||{};
   const map=new Map((local||[]).map(s=>[s.id,s]));
@@ -2564,8 +2595,10 @@ function mergeSessions(local,remote,tomb){
     if(tomb[r.id]&&tomb[r.id]>=(r.updatedAt||0)){pushNeeded=true;return;}   // deleted here after remote's copy → stays deleted
     const l=map.get(r.id);
     if(!l){map.set(r.id,r);changedLocal=true;}
-    else if((r.updatedAt||0)>(l.updatedAt||0)){map.set(r.id,r);changedLocal=true;}
-    else if((l.updatedAt||0)>(r.updatedAt||0))pushNeeded=true;
+    else if((r.updatedAt||0)>(l.updatedAt||0)){const c=clone(r);
+      if(unionSets(c,l)){c.updatedAt=Math.max(r.updatedAt||0,l.updatedAt||0)+1;pushNeeded=true;map.set(r.id,c);}else map.set(r.id,r);changedLocal=true;}
+    else if((l.updatedAt||0)>(r.updatedAt||0)){const c=clone(l);
+      if(unionSets(c,r)){c.updatedAt=(l.updatedAt||0)+1;map.set(l.id,c);changedLocal=true;}pushNeeded=true;}
   });
   const remoteIds=new Set((remote||[]).map(r=>r&&r.id));
   (local||[]).forEach(l=>{if(!remoteIds.has(l.id))pushNeeded=true;});
@@ -2597,7 +2630,7 @@ function exportPayload(st,version){
    known literal keys to fresh objects, this is structurally immune to prototype pollution
    (__proto__/constructor keys in the JSON are simply never copied). Escaping in the views and the CSP
    are defense-in-depth on top of this. */
-const MAX_STR=120, MAX_ARR=2000, MAX_SETS=100, MAX_EX=60, MAX_KEYS=5000;   // key-count cap for the deleted/seen maps
+const MAX_STR=120, MAX_ARR=2000, MAX_SESSIONS=50000, MAX_SETS=100, MAX_EX=60, MAX_KEYS=5000;   // key-count cap for the deleted/seen maps
 function sStr(v,max){return typeof v==='string'?v.slice(0,max||MAX_STR):'';}
 function sId(v){return (typeof v==='string'?v:'').replace(/[^A-Za-z0-9_:.-]/g,'').slice(0,64);}
 function sNum(v){const n=typeof v==='number'?v:(typeof v==='string'&&v.trim()!==''?+v:NaN);return Number.isFinite(n)?n:0;}
@@ -2608,12 +2641,14 @@ const rid=p=>p+Math.random().toString(36).slice(2,9);
 function cleanSet(st){st=st&&typeof st==='object'?st:{};const o={w:sNumBlank(st.w),r:sNumBlank(st.r),done:st.done!==false};if(st.warm)o.warm=true;if(st.nc)o.nc=true;const at=+st.at;if(Number.isFinite(at)&&at>0)o.at=at;return o;}   // missing done => done; `at` (check timestamp) kept if a real number; `nc` = "doesn't count as a record"
 function cleanExercise(e){e=e&&typeof e==='object'?e:{};const o={id:sId(e.id),name:sStr(e.name),sets:sArr(e.sets,MAX_SETS).map(cleanSet)};if(e.mode&&MODES[e.mode])o.mode=sId(e.mode);if(typeof e.side==='boolean')o.side=e.side;if(typeof e.note==='string'&&e.note.trim())o.note=sStr(e.note,500);return o;}   // drop an unknown mode (a bad import would white-screen Progress via MODES[mode].label)
 function cleanSession(s){s=s&&typeof s==='object'?s:{};const o={id:sId(s.id)||rid('imp'),schema:sNum(s.schema)||1,date:sNum(s.date)||Date.now(),updatedAt:sNum(s.updatedAt)||sNum(s.date)||Date.now(),completed:s.completed!==false,exercises:sArr(s.exercises,MAX_EX).map(cleanExercise)};if(s.deload)o.deload=true;const b=sNum(s.bw);if(b>0)o.bw=Math.min(2000,b);/* per-session bodyweight snapshot (D-1) — preserve through cloud/import */if(typeof s.note==='string'&&s.note.trim())o.note=sStr(s.note,500);/* whole-workout note (D-4) */const end=+s.endedAt;if(Number.isFinite(end)&&end>0){o.endedAt=end;if(s.endEstimated===true)o.endEstimated=true;}
+  if(s.unit==='lb'||s.unit==='kg')o.unit=s.unit;/* the unit its weights are in (batch 1) */if(s.recovered===true)o.recovered=true;
   if(s.kind==='cardio'){o.kind='cardio';o.exercises=[];o.cardio=cleanCardio(s.cardio);}   // cardio never carries exercises → every strength filter drops it
   return o;}
 function cleanRoutine(r){r=r&&typeof r==='object'?r:{};return {id:sId(r.id)||rid('r'),name:sStr(r.name),exIds:sArr(r.exIds,MAX_EX).map(sId).filter(Boolean),updatedAt:sNum(r.updatedAt)||Date.now()};}
 function cleanSettings(o){if(!o||typeof o!=='object')return null;
   const s={settingsUpdatedAt:sNum(o.settingsUpdatedAt)};
   if(o.unit==='kg'||o.unit==='lb')s.unit=o.unit;
+  const uu=sNum(o.unitUpdatedAt);if(uu>0)s.unitUpdatedAt=uu;   // when the unit itself last changed (an unrelated newer settings change can't flip it)
   if(o.theme==='system'||o.theme==='light'||o.theme==='dark')s.theme=o.theme;
   s.bodyweight=Math.max(0,Math.min(2000,sNum(o.bodyweight)));
   const r=o.rest&&typeof o.rest==='object'?o.rest:{};
@@ -2631,6 +2666,8 @@ function cleanSettings(o){if(!o||typeof o!=='object')return null;
   const steps=idMap(o.steps,x=>{if(!x||typeof x!=='object')return null;const r={};['lb','kg'].forEach(u=>{const n=sNum(x[u]);if(n>0&&n<=50)r[u]=n;});return Object.keys(r).length?r:null;});
   if(steps)s.steps=steps;
   const setup=idMap(o.setup,x=>typeof x==='string'&&x.trim()?sStr(x.trim(),120):null);if(setup)s.setup=setup;
+  // "Your record" picks {exId:track: {score,tie}} (batch 1 — stored once instead of re-stamping old workouts)
+  const records=idMap(o.records,x=>{if(!x||typeof x!=='object')return null;const sc=+x.score,ti=+x.tie;return Number.isFinite(sc)?{score:sc,tie:Number.isFinite(ti)?ti:0}:null;});if(records)s.records=records;
   return s;
 }
 const DANGER_KEY=/^(__proto__|constructor|prototype)$/;
@@ -2644,7 +2681,7 @@ function parseImport(json){
   if(!d||typeof d!=='object'||!Array.isArray(d.sessions))throw new Error('Not an Ironlog backup');
   return {
     settings:cleanSettings(d.settings),
-    sessions:sArr(d.sessions).map(cleanSession),
+    sessions:sArr(d.sessions,MAX_SESSIONS).map(cleanSession),   // was capped at 2,000 — a long-time lifter's oldest workouts were silently cut
     routines:sArr(d.routines).map(cleanRoutine),
     deleted:cleanDeleted(d.deleted),
     active:(d.active&&typeof d.active==='object')?cleanSession(d.active):null,
@@ -2655,13 +2692,21 @@ function parseImport(json){
 // Resolve the active workout between two devices. Each side is {active, activeClearedAt}; the more
 // recent EVENT wins — a workout updated at T, or ended/cleared at T. So a finished workout (cleared)
 // is never resurrected by another device's older, still-open active session. Pure and testable.
+// Batch 1: a live workout with ticked sets is never silently thrown away. When the other device's
+// newer event would REPLACE it (a different workout) or END it, it comes back as `dropped` so the store
+// can keep it as a recovered workout. The same workout open on both sides merges its ticked sets.
 function resolveActive(local,remote){
   const lc=local.activeClearedAt||0,rc=remote.activeClearedAt||0;
-  const localEvt=local.active?(local.active.updatedAt||0):lc;
-  const remoteEvt=remote.active?(remote.active.updatedAt||0):rc;
-  if(remoteEvt>localEvt)return remote.active?{active:remote.active,activeClearedAt:lc,changed:true,pushNeeded:false}
-                                            :{active:null,activeClearedAt:Math.max(lc,rc),changed:true,pushNeeded:false};
-  return {active:local.active,activeClearedAt:lc,changed:false,pushNeeded:remoteEvt<localEvt};
+  const la=local.active,ra=remote.active;
+  const localEvt=la?(la.updatedAt||0):lc;
+  const remoteEvt=ra?(ra.updatedAt||0):rc;
+  if(remoteEvt>localEvt){
+    if(ra){if(la&&la.id===ra.id){const c=clone(ra);unionSets(c,la);return {active:c,activeClearedAt:lc,changed:true,pushNeeded:tickKeys(c).size>tickKeys(ra).size};}
+      return {active:ra,activeClearedAt:lc,changed:true,pushNeeded:false,dropped:la&&hasTicked(la)?la:null};}
+    return {active:null,activeClearedAt:Math.max(lc,rc),changed:true,pushNeeded:false,dropped:la&&hasTicked(la)?la:null};
+  }
+  if(la&&ra&&la.id===ra.id){const c=clone(la);if(unionSets(c,ra)){c.updatedAt=(la.updatedAt||0)+1;return {active:c,activeClearedAt:lc,changed:true,pushNeeded:true};}}
+  return {active:la,activeClearedAt:lc,changed:false,pushNeeded:remoteEvt<localEvt};
 }
 
 // One row per finished workout — a health-app / spreadsheet friendly summary (D-4 CSV export). Volume
@@ -2684,7 +2729,7 @@ function sessionSummaryCsv(sessions,unit,bw){
   return rows.map(r=>r.join(',')).join('\r\n')+'\r\n';
 }
 
-IL.sync={mergeSessions,applyTombstones,pruneTombstones,cleanDeleted,exportPayload,parseImport,resolveActive,cleanSession,cleanRoutine,cleanSettings,cleanProfile,cleanCardio,sessionSummaryCsv,PROFILE_ENUM,CARDIO_ENUM,TOMB_KEEP};
+IL.sync={unionSets,hasTicked,MAX_SESSIONS,mergeSessions,applyTombstones,pruneTombstones,cleanDeleted,exportPayload,parseImport,resolveActive,cleanSession,cleanRoutine,cleanSettings,cleanProfile,cleanCardio,sessionSummaryCsv,PROFILE_ENUM,CARDIO_ENUM,TOMB_KEEP};
 if(typeof module!=='undefined')module.exports=IL.sync;
 
 })();
@@ -2735,7 +2780,7 @@ async function accessToken(){
   if(t.at&&t.exp>Date.now())return t.at;
   const body=new URLSearchParams({grant_type:'refresh_token',refresh_token:t.rt,client_id:appKey()});
   const r=await fetch('https://api.dropboxapi.com/oauth2/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body});
-  if(!r.ok){if(r.status===400||r.status===401)disconnect();throw new Error('Dropbox session expired');}
+  if(!r.ok){if(r.status===400||r.status===401)disconnect();throw new Error('Dropbox disconnected — reconnect it in Settings');}
   const j=await r.json();
   t.at=j.access_token;t.exp=Date.now()+(j.expires_in||14400)*1000-60000;lsSet(KEY,t);
   return t.at;
@@ -2756,9 +2801,14 @@ async function download(){
   const meta=JSON.parse(r.headers.get('dropbox-api-result')||'{}');
   return {rev:meta.rev,text:await r.text()};
 }
-async function upload(text){
+// Only replace the file if it's still the version we read (`rev`); with no rev, only create it. If
+// another device uploaded in between, Dropbox answers 409 and we re-read and merge instead of
+// overwriting its workout (batch 1 — uploads used to overwrite blindly).
+async function upload(text,rev){
   const at=await accessToken();
-  const r=await fetch('https://content.dropboxapi.com/2/files/upload',{method:'POST',headers:{Authorization:'Bearer '+at,'Dropbox-API-Arg':JSON.stringify({path:FILE,mode:'overwrite',mute:true}),'Content-Type':'application/octet-stream'},body:text});
+  const mode=rev?{'.tag':'update',update:rev}:'add';
+  const r=await fetch('https://content.dropboxapi.com/2/files/upload',{method:'POST',headers:{Authorization:'Bearer '+at,'Dropbox-API-Arg':JSON.stringify({path:FILE,mode,mute:true}),'Content-Type':'application/octet-stream'},body:text});
+  if(r.status===409){const e=new Error('conflict');e.conflict=true;throw e;}
   if(!r.ok)throw new Error('Dropbox upload failed');
   const j=await r.json();return j.rev;
 }
@@ -2779,7 +2829,12 @@ const {mergeSessions,applyTombstones,pruneTombstones,cleanDeleted,exportPayload,
 const CFG=IL.config||{};
 
 const LS={sessions:'il_sessions',active:'il_active',settings:'il_settings',dirty:'il_dirty',routines:'il_routines',deleted:'il_deleted',dbxRev:'il_dbx_rev',activeCleared:'il_active_cleared',pushPending:'il_push_pending',blockedVer:'il_blocked_ver'};
-function lsGet(k,f){try{const v=localStorage.getItem(k);return v?JSON.parse(v):f;}catch(e){return f;}}
+function lsGet(k,f){let v=null;try{v=localStorage.getItem(k);return v?JSON.parse(v):f;}
+  catch(e){
+    // A stored value that won't parse must never be silently replaced by the default and saved over —
+    // for the workouts that would erase them. Keep the raw text aside first (batch 1).
+    try{if(v&&k==='il_sessions'&&!localStorage.getItem('il_sessions_corrupt'))localStorage.setItem('il_sessions_corrupt',v);}catch(_){}
+    return f;}}
 // Returns false when the write is refused (private mode, or the ~5 MB quota is full). Callers that
 // hold the only copy of something (a finished workout) MUST check this and not discard it on false.
 function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v));return true;}catch(e){return false;}}
@@ -2824,6 +2879,30 @@ function resetDemo(){try{Object.values(LS).forEach(k=>localStorage.removeItem(k)
   }catch(e){}
 })();
 
+/* Units (batch 1). Every workout carries the unit its weights are in, so a lb↔kg switch on one device
+   and a newer settings change on another can no longer relabel history (225 lb reading as 225 kg).
+   normalizeUnits converts any workout in the other unit to the current one and stamps it; it never
+   bumps updatedAt (a local view of the same data). Unstamped workouts (older versions) are assumed to be
+   in the unit they've always been shown in. */
+function normalizeUnits(list,unit){
+  unit=unit||state.settings.unit||'lb';let changed=false;
+  (list||[]).forEach(s=>{if(!s||typeof s!=='object')return;
+    if(!s.unit){s.unit=unit;changed=true;return;}
+    if(s.unit!==unit&&IL.prog&&IL.prog.convertSessions){IL.prog.convertSessions([s],s.unit,unit,0,false);s.unit=unit;changed=true;}});
+  return changed;
+}
+if(normalizeUnits(state.sessions))lsSet(LS.sessions,state.sessions);
+if(state.active&&!state.active.unit)state.active.unit=state.settings.unit||'lb';
+// A workout another device's sync would have thrown away (it had ticked sets) is kept as a finished,
+// "recovered" workout instead, and the UI says so (batch 1).
+function recoverWorkout(a){
+  if(!a||state.sessions.some(x=>x.id===a.id))return false;
+  const ex=IL.prog&&IL.prog.finalizeSets?IL.prog.finalizeSets(a.exercises||[]):(a.exercises||[]);
+  if(!ex.length)return false;
+  const s=Object.assign({},a,{exercises:ex,completed:true,recovered:true,updatedAt:Date.now()});delete s.offers;
+  upsertSession(s,false);state.notice='Kept a workout from another device so nothing was lost — it’s in History.';
+  return true;
+}
 const saveSessions=()=>{const ok=lsSet(LS.sessions,state.sessions);state.storageError=!ok;return ok;};   // the big blob is where the quota bites; track it so the UI can warn
 const saveActive=()=>{const a=lsSet(LS.active,state.active);const b=lsSet(LS.activeCleared,state.activeClearedAt||0);return a&&b;};   // the active workout is the SOLE copy of live data until Finish — report if it didn't land
 const saveSettings=()=>lsSet(LS.settings,state.settings);
@@ -2842,6 +2921,7 @@ function emit(kind){listeners.forEach(fn=>{try{fn(kind||'data');}catch(e){}});}
 /* ---- sessions ---- */
 function upsertSession(s,fromCloud){
   s.updatedAt=s.updatedAt||Date.now();
+  if(!s.unit&&!fromCloud)s.unit=state.settings.unit||'lb';
   const i=state.sessions.findIndex(x=>x.id===s.id);
   if(i>=0){if(!fromCloud||s.updatedAt>=(state.sessions[i].updatedAt||0))state.sessions[i]=s;}
   else state.sessions.push(s);
@@ -2884,7 +2964,7 @@ function persistActive(){
   if(state.cloud){clearTimeout(activeTimer);activeTimer=setTimeout(()=>state.cloud.pushActive(),1500);}
   return ok;
 }
-function setActive(s){state.active=s;persistActive();}
+function setActive(s){if(s&&!s.unit)s.unit=state.settings.unit||'lb';state.active=s;persistActive();}
 
 /* ---- merging a remote snapshot (Dropbox file / import) ---- */
 function absorbRemote(remote,opts){
@@ -2901,27 +2981,50 @@ function absorbRemote(remote,opts){
   if(remote.settings&&(remote.settings.settingsUpdatedAt||0)>(state.settings.settingsUpdatedAt||0)){
     // REBUILD from defaults + the cleaned remote, don't merge — a merge keeps a key the remote dropped
     // (e.g. a profile the user reset on the other phone), so the reset would never propagate.
-    state.settings=Object.assign(defSettings(),cleanSettings(remote.settings)||{});changed=true;
+    const keepUnit=(state.settings.unitUpdatedAt||0)>((remote.settings&&remote.settings.unitUpdatedAt)||0)?{unit:state.settings.unit,unitUpdatedAt:state.settings.unitUpdatedAt}:null;
+    state.settings=Object.assign(defSettings(),cleanSettings(remote.settings)||{},keepUnit||{});changed=true;   // a newer theme/rest change can't flip the unit you chose more recently
+    if(keepUnit)pushNeeded=true;
   }else if((state.settings.settingsUpdatedAt||0)>((remote.settings&&remote.settings.settingsUpdatedAt)||0))pushNeeded=true;
   if(!opts.skipActive){
     const r=IL.sync.resolveActive({active:state.active,activeClearedAt:state.activeClearedAt},{active:remote.active,activeClearedAt:remote.activeClearedAt});
     if(r.changed){state.active=r.active;state.activeClearedAt=r.activeClearedAt;changed=true;}
     if(r.pushNeeded)pushNeeded=true;
+    if(r.dropped&&recoverWorkout(r.dropped)){changed=true;pushNeeded=true;}
   }
-  saveSessions();saveRoutines();saveDeleted();saveSettings();saveActive();
-  return {changed,pushNeeded};
+  // every workout (and the live one) in the unit now in force — converted, never relabelled
+  if(normalizeUnits(state.sessions))changed=true;
+  if(state.active)normalizeUnits([state.active]);
+  opts.saved=saveSessions();saveRoutines();saveDeleted();saveSettings();saveActive();
+  return {changed,pushNeeded,saved:opts.saved};
 }
 function importBackup(json){
   const d=parseImport(json);const before=state.sessions.length;
-  // If the backup was recorded in a different unit, convert its weights to the current unit first —
-  // otherwise kg numbers would show as lb (or vice versa).
-  const fromUnit=d.settings&&d.settings.unit,toUnit=state.settings.unit;
-  if(fromUnit&&toUnit&&fromUnit!==toUnit&&IL.prog&&IL.prog.convertSessions)IL.prog.convertSessions(d.sessions,fromUnit,toUnit,Date.now());
-  const r=absorbRemote({sessions:d.sessions,routines:d.routines,deleted:{},settings:null,active:null},{skipActive:true});
+  // Workouts carry their own unit now; older backups don't, so stamp those with the backup's unit and
+  // let normalizeUnits convert to this phone's (kg numbers must never show as lb).
+  const fromUnit=(d.settings&&d.settings.unit)||state.settings.unit;
+  d.sessions.forEach(s=>{if(!s.unit)s.unit=fromUnit;});if(d.active&&!d.active.unit)d.active.unit=fromUnit;
+  // A phone that's never been set up takes the backup's settings (units, bodyweight, machine setups,
+  // weight steps, bar weights) and its in-progress workout — restoring onto a new phone kept neither.
+  const fresh=!(state.settings.settingsUpdatedAt>0);
+  const blocked=d.sessions.filter(s=>state.deleted[s.id]&&state.deleted[s.id]>=(s.updatedAt||0)).length;
+  absorbRemote({sessions:d.sessions,routines:d.routines,deleted:{},settings:fresh?d.settings:null,active:!state.active?d.active:null,activeClearedAt:0},{skipActive:!!state.active});
   d.sessions.forEach(s=>{state.dirty.add(s.id);});saveDirty();
   if(state.cloud){state.cloud.flush();}
   emit();
+  lastImport={json,blocked};
   return state.sessions.length-before;
+}
+// Backups can hold workouts you deleted (on purpose or by mistake). The UI offers to bring them back:
+// this drops those deletions and re-imports them with a fresh timestamp so every device takes them.
+let lastImport=null;
+function deletedInLastImport(){return lastImport?lastImport.blocked:0;}
+function restoreDeletedFromLastImport(){
+  if(!lastImport)return 0;const d=parseImport(lastImport.json),now=Date.now();let n=0;
+  d.sessions.forEach(s=>{if(state.deleted[s.id]){delete state.deleted[s.id];s.updatedAt=now;if(!s.unit)s.unit=(d.settings&&d.settings.unit)||state.settings.unit;n++;}});
+  saveDeleted();absorbRemote({sessions:d.sessions.filter(s=>s.updatedAt===now),routines:[],deleted:{},settings:null,active:null},{skipActive:true});
+  d.sessions.forEach(s=>{if(s.updatedAt===now)state.dirty.add(s.id);});saveDirty();
+  if(state.cloud){if(state.cloud.pushTombstones)state.cloud.pushTombstones();state.cloud.flush();}
+  lastImport=null;emit();return n;
 }
 
 /* ---- cloud adapters ----
@@ -2939,22 +3042,25 @@ function artifactAdapter(){
     async init(){
       db=await claude.use('db');if(!db)return false;
       try{const snap=await db.doc('settings/app').get();if(snap.exists){const rs=cleanSettings(snap.data())||{};
-        if((rs.settingsUpdatedAt||0)>(state.settings.settingsUpdatedAt||0)){state.settings=Object.assign(defSettings(),rs);saveSettings();}   // rebuild, not merge (see absorbRemote) so a reset propagates
+        if((rs.settingsUpdatedAt||0)>(state.settings.settingsUpdatedAt||0)){const keep=(state.settings.unitUpdatedAt||0)>(rs.unitUpdatedAt||0)?{unit:state.settings.unit,unitUpdatedAt:state.settings.unitUpdatedAt}:{};state.settings=Object.assign(defSettings(),rs,keep);saveSettings();if(normalizeUnits(state.sessions))saveSessions();}   // rebuild, not merge (see absorbRemote) so a reset propagates
         else if((state.settings.settingsUpdatedAt||0)>(rs.settingsUpdatedAt||0))A.pushSettings();}}catch(e){}
       try{const snap=await db.doc('active/current').get();
         if(snap.exists){const raw=snap.data();
           const remoteTs=(raw&&raw.updatedAt)||0,localTs=state.active?(state.active.updatedAt||0):(state.activeClearedAt||0);
-          if(raw&&raw.id&&remoteTs>localTs){state.active=cleanSession(raw);saveActive();}                                    // remote has a newer active
-          else if(raw&&raw.empty&&remoteTs>localTs&&state.active){state.active=null;state.activeClearedAt=Math.max(state.activeClearedAt||0,remoteTs);saveActive();}  // remote ended a workout more recently → don't resurrect it
+          if(raw&&raw.id&&remoteTs>localTs){const r=IL.sync.resolveActive({active:state.active,activeClearedAt:state.activeClearedAt},{active:cleanSession(raw),activeClearedAt:0});state.active=r.active;if(state.active)normalizeUnits([state.active]);saveActive();if(r.dropped)recoverWorkout(r.dropped);}                                    // remote has a newer active
+          else if(raw&&raw.empty&&remoteTs>localTs&&state.active){if(IL.sync.hasTicked(state.active))recoverWorkout(state.active);state.active=null;state.activeClearedAt=Math.max(state.activeClearedAt||0,remoteTs);saveActive();}  // remote ended a workout more recently → don't resurrect it
           else if(localTs>remoteTs)A.pushActive();
         }else if(state.active)A.pushActive();}catch(e){}
       await A.flush();
       db.collection('sessions').onSnapshot(qs=>{
         const remote=[];qs.docs.forEach(d=>{const data=d.data();if(data){data.id=d.id;remote.push(cleanSession(data));}});
+        normalizeUnits(remote);   // in this phone's unit before comparing
         const m=mergeSessions(state.sessions,remote,state.deleted);
+        const rById=new Map(remote.map(r=>[r.id,r]));m.merged.forEach(s=>{const r=rById.get(s.id);if(r&&(s.updatedAt||0)>(r.updatedAt||0)){state.dirty.add(s.id);}});   // a merged copy that gained the other side's sets goes back up
         // sessions we deleted locally but the cloud still has → delete there too
         remote.forEach(r=>{if(state.deleted[r.id]&&state.deleted[r.id]>=(r.updatedAt||0))db.doc('sessions/'+r.id).delete().catch(()=>{});});
         if(m.changedLocal){state.sessions=m.merged;saveSessions();emit();}
+        if(state.dirty.size){saveDirty();A.flush();}
         state.lastSync=Date.now();emit('status');
       },()=>{});
       // Shared tombstone doc: mergeSessions can add/update but never REMOVE, so without this a delete on one
@@ -2980,7 +3086,9 @@ function artifactAdapter(){
     },
     async pushSession(s){try{await db.doc('sessions/'+s.id).set(s);state.dirty.delete(s.id);saveDirty();state.lastSync=Date.now();state.cloudError='';emit('status');}catch(e){state.cloudError='Sync failed';emit('status');}},
     deleteSession(id){db.doc('sessions/'+id).delete().catch(()=>{});A.pushTombstones();},
-    pushTombstones(){db.doc('meta/deleted').set({map:state.deleted,updatedAt:Date.now()}).catch(()=>{});},   // publish the deletion so other devices don't resurrect it (D2)
+    async pushTombstones(){try{const snap=await db.doc('meta/deleted').get();const rd=snap.exists?cleanDeleted((snap.data()||{}).map):{};
+        const merged=Object.assign({},rd);Object.keys(state.deleted).forEach(k=>{if(!merged[k]||state.deleted[k]>merged[k])merged[k]=state.deleted[k];});
+        await db.doc('meta/deleted').set({map:pruneTombstones(merged),updatedAt:Date.now()});}catch(e){}},   // merge with the cloud's list first — a plain set() erased the other device's deletes (batch 1)   // publish the deletion so other devices don't resurrect it (D2)
     pushSettings(){db.doc('settings/app').set(state.settings).catch(()=>{});},
     pushRoutine(r){db.doc('routines/'+r.id).set(r).catch(()=>{});},
     deleteRoutine(id){db.doc('routines/'+id).delete().catch(()=>{});A.pushTombstones();},
@@ -2996,7 +3104,8 @@ function dropboxAdapter(){
   // A change that doesn't dirty a session (a setting, a routine, a DELETE) still has to reach the one
   // shared file. `dirty` only tracks sessions, so without this flag those changes upload only when the
   // NEXT session happens to — the profile you set never reaches your other phone, the delete comes back.
-  function markPending(){pushPending=true;lsSet(LS.pushPending,true);schedule();}
+  let pendVer=0;   // bumped on every change; an upload only clears "pending" if nothing changed while it ran (batch 1)
+  function markPending(){pendVer++;pushPending=true;lsSet(LS.pushPending,true);schedule();}
   const A={name:'dropbox',
     async init(){
       try{await D.handleRedirect();}catch(e){state.cloudError=e.message;}
@@ -3030,15 +3139,20 @@ function dropboxAdapter(){
             if(nv!==blockedVer){blockedVer=nv;lsSet(LS.blockedVer,nv);}
             remoteNewer=!!nv;
             const r=absorbRemote({sessions:remote.sessions,routines:remote.routines,deleted:remote.deleted,settings:remote.settings,active:remote.active,activeClearedAt:remote.activeClearedAt});
-            if(r.changed)emit();if(r.pushNeeded)pushNeeded=true;}catch(e){pushNeeded=true;}
-            rev=f.rev;}
+            if(r.changed)emit();if(r.pushNeeded)pushNeeded=true;
+            if(r.saved!==false)rev=f.rev;   // storage full: don't remember this version, or the next sync skips the other device's workouts
+          }catch(e){pushNeeded=true;rev=f.rev;}
+          }
         }
         if(remoteNewer){state.cloudError='Update Ironlog on this phone to sync — your backup is from a newer version.';}
         else if(!meta||pushNeeded||meta.rev!==rev){
-          const pushIds=[...state.dirty];   // snapshot BEFORE the await, so sessions logged mid-upload aren't wrongly cleared
-          rev=await D.upload(JSON.stringify(exportPayload(state,CFG.VERSION)));
-          pushIds.forEach(id=>state.dirty.delete(id));saveDirty();
-          pushPending=false;lsSet(LS.pushPending,false);   // everything that was pending is now in the file
+          // snapshot BEFORE the await: which sessions (and which version of each) this upload carries, and
+          // the pending counter — anything changed while it runs stays pending for the next sync
+          const pushIds=[...state.dirty].map(id=>{const s=state.sessions.find(x=>x.id===id);return [id,s?s.updatedAt:0];}),ver0=pendVer;
+          try{rev=await D.upload(JSON.stringify(exportPayload(state,CFG.VERSION)),meta?rev:null);}
+          catch(e){if(e&&e.conflict){rev=null;lsSet(LS.dbxRev,null);A._pending=true;throw new Error('Another device synced at the same moment — merging and retrying');}throw e;}
+          pushIds.forEach(([id,u])=>{const s=state.sessions.find(x=>x.id===id);if(!s||s.updatedAt===u)state.dirty.delete(id);});saveDirty();
+          if(pendVer===ver0){pushPending=false;lsSet(LS.pushPending,false);}   // everything that was pending is now in the file
         }
         lsSet(LS.dbxRev,rev);state.lastSync=Date.now();
       }catch(e){state.cloudError=e.message||'Sync failed';}
@@ -3064,7 +3178,7 @@ async function initCloud(){
 function connectDropbox(){return IL.dropbox.connect();}
 function disconnectDropbox(){IL.dropbox.disconnect();state.cloud=null;state.cloudName='none';emit();}
 
-IL.store={state,LS,uid,saveSessions,saveActive,saveSettings,saveRoutines,saveDirty,onChange,emit,storageBytes,
+IL.store={normalizeUnits,recoverWorkout,deletedInLastImport,restoreDeletedFromLastImport,state,LS,uid,saveSessions,saveActive,saveSettings,saveRoutines,saveDirty,onChange,emit,storageBytes,
   upsertSession,deleteSession,restoreSession,saveRoutine,deleteRoutine,saveSettingsCloud,persistActive,setActive,
   absorbRemote,importBackup,initCloud,connectDropbox,disconnectDropbox,resetDemo,exportPayload:()=>exportPayload(state,CFG.VERSION)};
 
@@ -3286,7 +3400,7 @@ function statSig(){
   // tz offset so it rolls at LOCAL midnight (the same boundary weekStart/30-day windows use), not UTC —
   // otherwise a PWA left open across local midnight shows stale windows until the UTC rollover.
   const localDay=Math.floor((Date.now()-new Date().getTimezoneOffset()*60000)/DAY);
-  return ss.length+':'+mx+':'+bw()+':'+state.settings.unit+':'+localDay;
+  return ss.length+':'+mx+':'+bw()+':'+state.settings.unit+':'+localDay+':'+JSON.stringify(state.settings.records||0);   // record picks change what counts (batch 1); other settings (a panel fold) must not bust the cache
 }
 function memoStat(key,fn){
   const sig=statSig();
@@ -3334,6 +3448,7 @@ function homeView(){
     </div>
     ${profileIntroCard()}
     ${state.active?resumeCard():''}
+    ${backupNudge()}
     <div class="dim" id="homeSummary" style="font-size:13.5px;margin:10px 2px 16px">${wkAny} workout${wkAny!==1?'s':''} this week${streak?` · ${streak}-week streak`:''}</div>   <!-- one line: the full tiles live on Progress (review 5.6) -->
     ${state.active?'':startBlock()}
     ${state.active?'':cardioBlock()}
@@ -3342,6 +3457,21 @@ function homeView(){
     <button class="btn ghost block" data-action="goLibrary" style="justify-content:space-between">
       <span>Browse exercise library</span><span class="dim mono">${EXERCISES.length} exercises ›</span></button>
   </div>`;
+}
+// "Your lifts live only on this phone" (batch 1): after 3 workouts with no cloud backup, once per 20
+// workouts. Export always works; Dropbox is offered where this build has it.
+function backupNudge(){
+  if(CFG.DEMO||state.cloudName!=='none')return '';
+  const n=completedAny().length,key='backupNudge:'+Math.floor(n/20);
+  if(n<3||seenFlag(key))return '';
+  const dbx=CFG.BUILD==='site'&&DBX&&DBX.isConfigured&&DBX.isConfigured();
+  return `<div class="card" style="padding:14px 15px;margin:14px 0 4px;border-color:color-mix(in srgb,var(--warn) 45%,var(--line))">
+    <div style="font-weight:700;font-size:14px">Your ${n} workouts are only on this phone</div>
+    <div class="dim" style="font-size:12.5px;margin-top:3px;line-height:1.45">If the phone is lost or its storage is cleared, they’re gone. ${dbx?'Connect Dropbox (2 min) to back up automatically, or save a copy now.':'Save a backup copy now — it takes a tap.'}</div>
+    <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+      ${dbx?'<button class="btn primary sm" data-action="nudgeDropbox">Connect Dropbox</button>':''}
+      <button class="btn ${dbx?'ghost':'primary'} sm" data-action="nudgeExport">Save a backup</button>
+      <button class="linkbtn dim" data-seentip="${key}" style="font-size:12.5px">Not now</button></div></div>`;
 }
 function emptyHome(){return `<div class="card" style="padding:26px 18px;text-align:center;margin-top:20px"><div class="dim">No workouts logged yet.<br>Tap <b style="color:var(--accent)">Start a workout</b> above to log your first session.</div></div>`;}
 // Home's primary action: YOU choose what to train. The app doesn't lead with a "plan" it decided —
@@ -3768,7 +3898,7 @@ function editorView(s,mode){
   return `
   <div class="section">
     <div class="topbar"><button class="backbtn" data-action="backHome">${ICON_BACK} ${edit?'Cancel':'Home'}</button>
-      ${edit?'':`<span style="display:flex;gap:10px;align-items:center"><button class="linkbtn dim" id="btnDiscard">Discard</button><button class="btn good sm" id="btnFinishTop" ${sets===0?'disabled style="opacity:.5"':''}>Finish</button></span>`}</div>
+      ${edit?'':`<span style="display:flex;gap:10px;align-items:center"><button class="linkbtn dim" id="btnDiscard">Discard</button><button class="btn good sm" id="btnFinishTop">Finish</button></span>`}</div>
     <div style="padding:0 2px 2px"><div class="eyebrow">${edit?'Editing · '+fmtDate(s.date):`Workout in progress · saves automatically · <span id="elapsedLbl">${fmtElapsed(s.date)}</span>`}</div>
       <h2 style="font-size:23px;margin-top:4px">${new Date(s.date).toLocaleDateString(undefined,{weekday:'long'})}'s session${s.deload?' <span class="deload-badge">Deload</span>':''}</h2></div>
     ${edit?`<div class="settingrow" style="border:none;padding:8px 2px;margin:2px 0 0"><div><div style="font-weight:600;font-size:13.5px">Date</div><div class="dim" style="font-size:12px">Move this workout to another day</div></div>
@@ -3790,7 +3920,7 @@ function editorView(s,mode){
     <button class="btn ghost block" id="btnAddEx" style="margin-top:4px">＋ Add exercise</button>
     <div style="height:14px"></div>
     ${edit?`<button class="btn primary block" id="btnSaveEdit">Save changes</button>`
-          :`<button class="btn good block" id="btnFinish" ${sets===0?'disabled style="opacity:.5"':''}>Finish &amp; save workout</button>`}
+          :`<button class="btn good block" id="btnFinish">Finish &amp; save workout</button>`}
   </div>`;
 }
 function emptyLog(){return `<div class="card" style="padding:26px 18px;text-align:center;margin-bottom:14px"><div class="dim">No exercises yet.<br>Add one to start logging sets.</div></div>`;}
@@ -4582,7 +4712,8 @@ function convertUnits(from,to){
   if(state.active){state.active.exercises.forEach(e=>e.sets.forEach(st=>{st.w=P.convertWeight(st.w,from,to);}));S.persistActive();}
   if(editSession)editSession.exercises.forEach(e=>e.sets.forEach(st=>{st.w=P.convertWeight(st.w,from,to);}));
   state.settings.bodyweight=Math.round(P.convertWeight(bw(),from,to)||0);
-  state.settings.unit=to;S.saveSettingsCloud();
+  state.sessions.forEach(s=>{s.unit=to;});if(state.active)state.active.unit=to;if(editSession)editSession.unit=to;S.saveSessions();   // every workout now says which unit it's in (batch 1)
+  state.settings.unit=to;state.settings.unitUpdatedAt=Date.now();S.saveSettingsCloud();   // the unit keeps its own timestamp so an unrelated settings change on another device can't flip it back
   if(state.cloud)state.cloud.flush();
 }
 // Hand a generated file to the viewer: the artifact's downloads capability inside claude.ai, else a
@@ -4600,7 +4731,9 @@ function exportCsv(){
 }
 function importData(ev){
   const f=ev.target.files[0];if(!f)return;const rd=new FileReader();
-  rd.onload=()=>{try{const added=S.importBackup(rd.result);applyTheme();toast('Imported '+added+' new session'+(added!==1?'s':''));closeSheet();render();}
+  rd.onload=()=>{try{const added=S.importBackup(rd.result);applyTheme();toast('Imported '+added+' new session'+(added!==1?'s':''));closeSheet();render();
+      const del=S.deletedInLastImport();
+      if(del)setTimeout(()=>showConfirm('Restore '+del+' deleted workout'+(del>1?'s':'')+'?','This backup has '+del+' workout'+(del>1?'s':'')+' you deleted on this phone. Bring '+(del>1?'them':'it')+' back?','Restore',()=>{const n=S.restoreDeletedFromLastImport();render();toast('Restored '+n+' workout'+(n!==1?'s':''));},'primary'),400);}
     catch(e){toast('That file could not be read');}};
   rd.readAsText(f);
 }
@@ -4737,7 +4870,19 @@ function showSummary(sm){
   const d=$('#sumDone');if(d)d.addEventListener('click',()=>{closeSheet();setTab('history');});
 }
 function finishWorkout(){
-  const s=state.active;
+  const s=state.active;if(!s)return;
+  // Nothing ticked yet (forgot to tick, or the "Still training?" banner sent you here): ask, don't wipe.
+  if(!setsOf(s)){
+    const planned=s.exercises.reduce((n,e)=>n+e.sets.filter(st=>!st.warm&&(+st.r||0)>0).length,0);
+    if(!planned){toast('Tick ✓ each set as you finish it — then Finish saves them');return;}
+    openSheet('Nothing is ticked yet',`<div class="dim" style="font-size:13.5px;margin:-2px 2px 15px;line-height:1.5">Did you do the ${planned} planned set${planned>1?'s':''} as written? You can also go back and tick the ones you did.</div>
+      <button class="btn primary block" id="finPlanned" style="margin-bottom:9px">Save all ${planned} as done</button>
+      <button class="btn ghost block" id="finBack">Go back and tick them</button>`);
+    const a=$('#finPlanned'),b=$('#finBack');
+    if(a)a.addEventListener('click',()=>{const now=Date.now();s.exercises.forEach(e=>e.sets.forEach(st=>{if(!st.warm&&(+st.r||0)>0){st.done=true;if(!(+st.at>0))st.at=now;}}));closeSheet();persistCur();confirmUnchecked(s,()=>chooseEndThenCommit(s));});
+    if(b)b.addEventListener('click',closeSheet);
+    return;
+  }
   confirmUnchecked(s,()=>chooseEndThenCommit(s));
 }
 // T2: when Finish was likely forgotten (last set a while ago), let the user log the real end time
@@ -4769,11 +4914,17 @@ function chooseEndThenCommit(s){
 }
 // endedAt may be null ("don't record a length"): the session then has no duration anywhere it's read.
 function commitFinish(s,endedAt,estimated){
-  closeSheet();stopRest();stopSw();stopElapsed();
+  // the live copy: a sync may have swapped in a newer copy of this same workout while a sheet was open
+  if(state.active&&state.active!==s&&state.active.id===s.id)s=state.active;
+  closeSheet();
+  // Work out what will be saved FIRST, on a copy. The old order cleaned the live workout and only then
+  // noticed nothing was ticked — so "Log at least one set first" arrived after the plan was gone (batch 1).
+  const fin=P.finalizeSets(s.exercises);
+  if(!fin.length){toast('Nothing ticked to save — tick ✓ the sets you did');return;}
+  stopRest();stopSw();stopElapsed();
   if(endedAt)s.endedAt=endedAt;else delete s.endedAt;
   if(estimated&&endedAt)s.endEstimated=true;else delete s.endEstimated;
-  cleanSets(s);delete s.offers;
-  if(!s.exercises.length){toast('Log at least one set first');return;}
+  s.exercises=fin;delete s.offers;
   const sm=workoutSummary(s);
   s.completed=true;s.updatedAt=Date.now();
   if(bw()>0&&!(+s.bw>0))s.bw=bw();   // snapshot the bodyweight this workout was done at, so its bodyweight-lift math stays put as your weight changes later (D-1)
@@ -4790,8 +4941,18 @@ function commitFinish(s,endedAt,estimated){
   render();showSummary(sm);
 }
 /* Record changes (v0.69.0) — both paths are P.pickRecord, then save + sync the sessions it touched. */
+// The pick is stored once in settings (batch 1) — choosing a record no longer re-saves old workouts,
+// which could overwrite an edit or bring back a delete from your other device. Flags an older version
+// wrote on this lift's sets are cleared once (those workouts, and only those, are re-saved).
+function saveRecordPick(id,track,target){
+  const k=P.pickKey(id,track),rec=Object.assign({},state.settings.records);
+  if(target)rec[k]={score:target.score,tie:target.tie||0};else delete rec[k];
+  state.settings.records=Object.keys(rec).length?rec:undefined;S.saveSettingsCloud();
+  const legacy=state.sessions.some(s=>s.exercises.some(e=>e.id===id&&P.trackOf(e)===track&&e.sets.some(st=>st.nc)));
+  if(legacy)P.pickRecord(state.sessions,id,track,bw(),null).forEach(s=>{s.updatedAt=Date.now();S.upsertSession(s,false);});
+}
 function setRecord(id,track,target,msg){
-  P.pickRecord(state.sessions,id,track,bw(),target).forEach(s=>{s.updatedAt=Date.now();S.upsertSession(s,false);});
+  saveRecordPick(id,track,target);
   render();openSheet(EX[id]?EX[id].name:id,exerciseDetail(id));toast(msg||(target?'Record updated':'Your best set is your record again'));
 }
 // "Don't count this" on the finish screen: keep the record you had before this workout. Stays on the
@@ -4800,7 +4961,7 @@ function dontCount(id,sid,btn){
   const s=state.sessions.find(x=>x.id===sid),e=s&&s.exercises.find(x=>x.id===id);if(!e)return;
   const track=P.trackOf(e),prev=P.bestSetBefore(state.sessions,id,{mode:track,bw:bw(),excludeId:sid});
   if(!prev)return;
-  P.pickRecord(state.sessions,id,track,bw(),prev).forEach(x=>{x.updatedAt=Date.now();S.upsertSession(x,false);});
+  saveRecordPick(id,track,prev);
   render();if(btn)btn.outerHTML='<span class="dim" style="font-size:12.5px;flex-shrink:0">Not counted ✓</span>';
   toast('Kept your previous record — this set stays in your history');
 }
@@ -4974,7 +5135,9 @@ const ACTIONS={
   resume:()=>{todayScreen='active';render();},
   goLibrary:()=>setTab('library'),
   backHome:()=>leaveEditor(),
-  build:()=>{if(!draft.groups.size)return;buildAndStart(false);},   // belt for the disabled button (a synthetic click could otherwise build the old Chest+Back default)
+  build:()=>{if(!draft.groups.size)return;buildAndStart(false);},
+  nudgeExport:()=>{exportData();},
+  nudgeDropbox:()=>{S.connectDropbox();},   // belt for the disabled button (a synthetic click could otherwise build the old Chest+Back default)
   buildFresh:()=>buildAndStart(true),
   coachNudge:el=>{draft.groups=new Set(el.dataset.groups.split(','));render();},
   preset:el=>{const p=PRESETS.find(x=>x.label===el.dataset.preset);if(!p)return;
@@ -5103,7 +5266,7 @@ function bindLog(root){
         if(cex&&cex.equip!=='Bodyweight'&&!D.TIME_METRIC.has(cex.id)&&(inv?blankW:!(+st.w>0))){const wi=$(`input[data-f="w"][data-ei="${ei}"][data-s="${si}"]`);if(wi){wi.focus();if(wi.select)wi.select();}toast(inv?'Enter the assist — 0 if unassisted':'Add a weight first');return;}
         // Timed lifts log seconds in the reps field. Ticking with it empty saves a set finalizeSets then
         // drops (r>0 required), losing the tick with no warning — require the seconds first.
-        if(cex&&D.TIME_METRIC.has(cex.id)&&!(+st.r>0)){const ri=$(`input[data-f="r"][data-ei="${ei}"][data-s="${si}"]`);if(ri){ri.focus();if(ri.select)ri.select();}toast('Add seconds first');return;}}
+        if(!(+st.r>0)){const ri=$(`input[data-f="r"][data-ei="${ei}"][data-s="${si}"]`);if(ri){ri.focus();if(ri.select)ri.select();}toast(cex&&D.TIME_METRIC.has(cex.id)?'Add seconds first':'Add reps first');return;}}   // a ticked set with no reps was silently dropped at Finish (batch 1)
       st.done=!st.done;
       // T1: stamp on completion, but keep an existing stamp on un-tick → re-tick (a mis-tap corrected
       // seconds later keeps its true time, instead of jumping to "now" and skewing the rest medians).
@@ -5239,6 +5402,10 @@ function boot(){
   state.sessions.forEach(s=>{if(!s.schema)s.schema=SCHEMA;});   // schema migrations live here
   // per-exercise weight steps: the engine reads them LIVE (a sync can replace state.settings wholesale)
   P.setWeightSteps(()=>state.settings.steps||{});
+  P.setRecordPicks(()=>state.settings.records||null);   // "Your record" picks, read live (batch 1)
+  // Ask the browser to keep this app's storage (Safari can otherwise clear an un-installed site's data
+  // after about a week unused). Best-effort; the answer is up to the browser.
+  try{if(navigator.storage&&navigator.storage.persist)navigator.storage.persist().catch(()=>{});}catch(e){}
   document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>setTab(b.dataset.tab)));
   $('#sheetClose').addEventListener('click',closeSheet);$('#scrim').addEventListener('click',closeSheet);
   $('#cdCancel').addEventListener('click',closeConfirm);$('#cscrim').addEventListener('click',closeConfirm);
@@ -5269,7 +5436,7 @@ function boot(){
   // Cloud changes: a status ping only refreshes the badge. A real data change re-renders — but never
   // mid-keystroke or mid-hold; it waits until the field loses focus / the finger lifts (review 7.4). The
   // old code skipped the render outright while typing, so the screen stayed stale until the next tap.
-  S.onChange(kind=>{updateCloud();if(kind==='status')return;if(busyUI()){_renderPending=true;return;}render();});
+  S.onChange(kind=>{updateCloud();if(state.notice){const n=state.notice;state.notice=null;toast(n);}if(kind==='status')return;if(busyUI()){_renderPending=true;return;}render();});
   document.addEventListener('focusout',()=>setTimeout(flushPendingRender,0));
   ['pointerup','pointercancel'].forEach(ev=>document.addEventListener(ev,()=>setTimeout(flushPendingRender,0)));
   applyTheme();watchViewport();initSheetGestures();setTab('today');S.initCloud();

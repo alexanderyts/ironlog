@@ -690,7 +690,8 @@ function convertUnits(from,to){
   if(state.active){state.active.exercises.forEach(e=>e.sets.forEach(st=>{st.w=P.convertWeight(st.w,from,to);}));S.persistActive();}
   if(editSession)editSession.exercises.forEach(e=>e.sets.forEach(st=>{st.w=P.convertWeight(st.w,from,to);}));
   state.settings.bodyweight=Math.round(P.convertWeight(bw(),from,to)||0);
-  state.settings.unit=to;S.saveSettingsCloud();
+  state.sessions.forEach(s=>{s.unit=to;});if(state.active)state.active.unit=to;if(editSession)editSession.unit=to;S.saveSessions();   // every workout now says which unit it's in (batch 1)
+  state.settings.unit=to;state.settings.unitUpdatedAt=Date.now();S.saveSettingsCloud();   // the unit keeps its own timestamp so an unrelated settings change on another device can't flip it back
   if(state.cloud)state.cloud.flush();
 }
 // Hand a generated file to the viewer: the artifact's downloads capability inside claude.ai, else a
@@ -708,7 +709,9 @@ function exportCsv(){
 }
 function importData(ev){
   const f=ev.target.files[0];if(!f)return;const rd=new FileReader();
-  rd.onload=()=>{try{const added=S.importBackup(rd.result);applyTheme();toast('Imported '+added+' new session'+(added!==1?'s':''));closeSheet();render();}
+  rd.onload=()=>{try{const added=S.importBackup(rd.result);applyTheme();toast('Imported '+added+' new session'+(added!==1?'s':''));closeSheet();render();
+      const del=S.deletedInLastImport();
+      if(del)setTimeout(()=>showConfirm('Restore '+del+' deleted workout'+(del>1?'s':'')+'?','This backup has '+del+' workout'+(del>1?'s':'')+' you deleted on this phone. Bring '+(del>1?'them':'it')+' back?','Restore',()=>{const n=S.restoreDeletedFromLastImport();render();toast('Restored '+n+' workout'+(n!==1?'s':''));},'primary'),400);}
     catch(e){toast('That file could not be read');}};
   rd.readAsText(f);
 }

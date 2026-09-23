@@ -44,6 +44,7 @@ function launch(opts){
       if(opts.fakeClock)clock=installFakeClock(window);
       // opts.storage: {key:value} already on the phone BEFORE the app boots (boot-time migrations, bad data)
       if(opts.storage)Object.keys(opts.storage).forEach(k=>window.localStorage.setItem(k,JSON.stringify(opts.storage[k])));
+      if(opts.rawStorage)Object.keys(opts.rawStorage).forEach(k=>window.localStorage.setItem(k,opts.rawStorage[k]));   // exact text, e.g. a half-written save
     }});
   const win=dom.window,doc=win.document;
   const IL=win.IL;

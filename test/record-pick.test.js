@@ -102,7 +102,8 @@ test('UI: "Don’t count this" on the finish screen keeps the old record and sta
     h.click('#sheetBody [data-nocount]');
     assert.equal(h.text('#sheetTitle'),'New PR! 💪','still on the summary');assert.ok(h.has('#sumDone'));
     assert.match(h.text('#sheetBody'),/Not counted ✓/);
-    assert.equal(A.personalRecords(h.state.sessions,0,9).find(p=>p.id==='barbell-row').w,100,'the 100 is still the record');
+    assert.equal(h.IL.analysis.personalRecords(h.state.sessions,0,9).find(p=>p.id==='barbell-row').w,100,'the 100 is still the record');   // the app's engine: picks live in its settings (batch 1)
+    assert.ok(!h.state.sessions.some(s=>s.id!==h.state.sessions[0].id&&s.exercises.some(e=>e.sets.some(t=>t.nc))),'no old workout was rewritten');
     assert.equal(h.state.settings.seen.prWord,true,'…once');
   }finally{h.teardown();}
 });

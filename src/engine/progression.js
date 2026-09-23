@@ -115,6 +115,17 @@ const real=sessions=>(sessions||[]).filter(s=>s.completed!==false&&!s.deload&&s.
 // Coach analysis and the builder's plan detection share this rule (review §8: it was written out per file).
 const liftSessions=sessions=>(sessions||[]).filter(s=>s&&s.completed!==false&&s.exercises&&s.exercises.length&&s.kind!=='cardio');
 
+/* Record picks (batch 1). "Your record" is stored ONCE per lift+version in settings.records as the
+   picked set's {score,tie}; a set that beats the pick doesn't count as a record. Worked out when read,
+   so choosing a record never rewrites old workouts (v0.69 did, and a re-saved workout could overwrite
+   an edit or bring back a delete made on another device). The per-set `nc` flag from older versions is
+   still honoured. The app registers a live getter at boot, like setWeightSteps. */
+let _picks=()=>null;
+function setRecordPicks(g){_picks=typeof g==='function'?g:()=>g||null;}
+function pickKey(exId,track){return exId+':'+String(track||'').replace('|',':');}
+function recordPick(exId,track){const m=_picks(),p=m&&m[pickKey(exId,track)];return p&&Number.isFinite(+p.score)?{score:+p.score,tie:+p.tie||0}:null;}
+// Doesn't count as a record: flagged by an older version, or better than this lift's picked record.
+function ncOf(exId,track,st,b){if(st.nc)return true;const p=recordPick(exId,track);if(!p)return false;const sc=scoreSet(exId,st,b);return !!sc&&beatsScore(sc,p);}
 // Most recent completed performance of an exercise. opts: {beforeTs, excludeId, mode}
 // When `mode` is given, only instances performed with that modality match — so progression compares
 // like-for-like (25 lb dumbbells never chase a 75 lb Smith). Omit mode to match regardless.
@@ -132,9 +143,9 @@ function lastPerf(sessions,exId,opts){
     // so it must not seed the next workout or anchor the next suggestion. Because `some(perfSet)` uses
     // the same predicate, a session whose every working set is marked is skipped whole and the scan
     // falls through to the one before it — the fallback chain costs no extra code.
-    const perfSet=st=>isWorking(st)&&(+st.r||0)>0&&!(opts.clean&&st.nc);
-    const e=s.exercises.find(x=>x.id===exId&&(!opts.mode||trackOf(x)===opts.mode)&&x.sets.some(perfSet));
-    if(e)return{date:s.date,mode:modeOf(e),sets:e.sets.filter(perfSet).map(st=>({w:+st.w||0,r:+st.r||0})),note:e.note||'',bw:s.bw};   // bw: that session's bodyweight, for scoring it
+    const perfFor=x=>{const tr=trackOf(x),b=sbw(s,opts.bw);return st=>isWorking(st)&&(+st.r||0)>0&&!(opts.clean&&ncOf(x.id,tr,st,b));};
+    const e=s.exercises.find(x=>x.id===exId&&(!opts.mode||trackOf(x)===opts.mode)&&x.sets.some(perfFor(x)));
+    if(e)return{date:s.date,mode:modeOf(e),sets:e.sets.filter(perfFor(e)).map(st=>({w:+st.w||0,r:+st.r||0})),note:e.note||'',bw:s.bw};   // bw: that session's bodyweight, for scoring it
   }
   return null;
 }
@@ -209,7 +220,7 @@ function exerciseSeries(sessions,exId,opts){
     let best=null,bs=null,nc=null;
     e.sets.forEach(st=>{if(!isWorking(st))return;
       const sc=scoreSet(exId,st,b);if(!sc)return;
-      if(st.nc){if(beatsScore(sc,nc))nc=sc;return;}
+      if(ncOf(exId,trackOf(e),st,b)){if(beatsScore(sc,nc))nc=sc;return;}
       if(beatsScore(sc,best)){best=sc;bs=st;}});
     if(best)out.push({date:s.date,est:best.score,w:+bs.w||0,r:+bs.r||0,metric:best.kind,adj:(nc&&beatsScore(nc,best))||undefined});
   }
@@ -229,7 +240,7 @@ function bestSetBefore(sessions,exId,opts){
     const e=s.exercises.find(x=>x.id===exId&&(!opts.mode||trackOf(x)===opts.mode));
     if(!e)continue;
     const b=sbw(s,bw);   // each session scored by its own bodyweight (D-1)
-    e.sets.forEach(st=>{if(st.nc||!isWorking(st))return;const sc=scoreSet(exId,st,b);if(beatsScore(sc,best))best=sc;});
+    const tr=trackOf(e);e.sets.forEach(st=>{if(!isWorking(st)||ncOf(exId,tr,st,b))return;const sc=scoreSet(exId,st,b);if(beatsScore(sc,best))best=sc;});
   }
   return best;
 }
@@ -275,7 +286,7 @@ function sessionPR(sessions,e,session,bw,hist){
   const h=hist!==undefined?hist:bestSetBefore(sessions,e.id,{mode:trackOf(e),bw,excludeId:session&&session.id});
   if(!h)return null;
   const b=sbw(session,bw);let best=null,bs=null;
-  e.sets.forEach(st=>{if(st.warm||st.nc||!isWorking(st))return;const sc=scoreSet(e.id,st,b);if(beatsScore(sc,best)){best=sc;bs=st;}});
+  const tr=trackOf(e);e.sets.forEach(st=>{if(st.warm||!isWorking(st)||ncOf(e.id,tr,st,b))return;const sc=scoreSet(e.id,st,b);if(beatsScore(sc,best)){best=sc;bs=st;}});
   return best&&beatsScore(best,h)?{set:bs,score:best.score,kind:best.kind}:null;
 }
 // The modality used the last time this exercise was logged (for "remembering" the user's choice);
@@ -534,5 +545,5 @@ function calcStreak(sessions,now){
   return n;
 }
 
-IL.prog={AWAY_DAYS,recordChoices,pickRecord,liftSessions,DAY,startOfDay,e1rm,isWorking,setLoad,sbw,sessionVolume,sessionSets,sessionDuration,MAX_SESSION_MIN,setTimeline,lastSetAt,staleness,STALE_AFTER_MIN,STALE_CONFIRM_MIN,END_PAD_MIN,finalizeSets,parseWeightInput,fmtVol,modeOf,real,lastPerf,lastModeFor,exerciseSeries,setScore,scoreMetric,liftKind,scoreSet,beatsScore,bestSetBefore,sessionPR,platesPerSide,sidesOf,holdsOf,sideMult,trackOf,sideDefault,lastSideFor,lastTrackFor,bestE1rmBefore,setPattern,fmtPerf,repRange,nextSets,deloadSets,suggestion,unitIncrement,setWeightSteps,convertWeight,convertSessions,calcStreak,weekIndex,weekStart};
+IL.prog={setRecordPicks,recordPick,pickKey,ncOf,AWAY_DAYS,recordChoices,pickRecord,liftSessions,DAY,startOfDay,e1rm,isWorking,setLoad,sbw,sessionVolume,sessionSets,sessionDuration,MAX_SESSION_MIN,setTimeline,lastSetAt,staleness,STALE_AFTER_MIN,STALE_CONFIRM_MIN,END_PAD_MIN,finalizeSets,parseWeightInput,fmtVol,modeOf,real,lastPerf,lastModeFor,exerciseSeries,setScore,scoreMetric,liftKind,scoreSet,beatsScore,bestSetBefore,sessionPR,platesPerSide,sidesOf,holdsOf,sideMult,trackOf,sideDefault,lastSideFor,lastTrackFor,bestE1rmBefore,setPattern,fmtPerf,repRange,nextSets,deloadSets,suggestion,unitIncrement,setWeightSteps,convertWeight,convertSessions,calcStreak,weekIndex,weekStart};
 if(typeof module!=='undefined')module.exports=IL.prog;
