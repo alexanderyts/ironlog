@@ -2,6 +2,24 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.72.0 — 2026-09-23 · Suggestions you can trust
+Batch 3 from the overnight review: the "next time" numbers and the Stuck label have to be right.
+- **"Stuck" no longer misreads progress:**
+  - Adding reps on your later sets now counts. Pec deck 15/13/12 → 15/15/13 was being called Stuck, and the lift could get swapped out.
+  - A carry where you took the suggested heavier weight, with a shorter hold, now counts as progress. When a carry earns more weight, the hold drops to the middle of your range instead of nearly halving.
+- **Your machine's weight step is respected.** Set pec deck to 15 lb and it goes 100 → 115, not 112.5. It follows stacks that aren't multiples of the step, like 25 → 40.
+- **Barbell weights stay on whole plates** after a lb/kg switch. No more 1.25 lb leftovers.
+- **Assist machines:** a lighter back-off set loses at most one step of assist, instead of being halved or dropped to zero.
+- **Push-ups, chin-ups and dips show up even with no bodyweight entered.** They're judged by reps in Your lifts and on the chart.
+- **Push/pull balance counts pec deck and flies as pressing.** A normal machine chest day no longer triggers "Add more pressing".
+- **Clearer targets:** "Reach 20 reps on every set to earn more weight" instead of "19 more reps earns +2.5lb".
+- **Smaller fixes:**
+  - "Don't count this" no longer drops a set from next time's plan.
+  - A deload on an assist machine you'd been doing unassisted now adds assist.
+  - A dumbbell row done with both arms at once counts both dumbbells.
+
+Not verified on-device.
+
 ## v0.71.0 — 2026-09-23 · Never lose a lift
 Batch 1 from the overnight review. Every item was a way a logged set could be lost or come out wrong.
 - **Finish can't wipe your workout.** With nothing ticked it used to clear the planned sets and *then* say "Log at least one set first". Finish now asks "Nothing is ticked yet — save all N as done, or go back and tick them?" The Finish button is no longer greyed out.

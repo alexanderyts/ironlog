@@ -406,15 +406,16 @@ function recentPerfs(sessions,exId,opts){
   for(let i=0;i<n;i++){
     const lp=lastPerf(sessions,exId,{beforeTs:before,mode:opts.mode,clean:true});if(!lp)break;   // a disowned set is not evidence of progress OR of a stall
     if(opts.since&&lp.date<opts.since)break;
-    let top,topR,score;
-    if(inv){const minA=Math.min(...lp.sets.map(s=>+s.w||0));top=-minA;score=-minA;topR=Math.max(...lp.sets.filter(s=>(+s.w||0)===minA).map(s=>+s.r||0));}
-    else if(time){const maxS=Math.max(...lp.sets.map(s=>+s.r||0));top=maxS;score=maxS;topR=maxS;}
+    let top,topR,score,totR=0;
+    if(inv){const minA=Math.min(...lp.sets.map(s=>+s.w||0)),atA=lp.sets.filter(s=>(+s.w||0)===minA);top=-minA;score=-minA;topR=Math.max(...atA.map(s=>+s.r||0));totR=atA.reduce((a,s)=>a+(+s.r||0),0);}
+    // timed: heavier load is progress first (a carry that took the suggested +2.5 lb read as "stuck"), then longer
+    else if(time){const maxW=Math.max(...lp.sets.map(s=>+s.w||0)),atW=lp.sets.filter(s=>(+s.w||0)===maxW);top=maxW;topR=Math.max(...atW.map(s=>+s.r||0));score=topR;totR=atW.reduce((a,s)=>a+(+s.r||0),0);}
     // score = the ONE judge with that session's bodyweight: a pull-up at +10×6 is no longer "equal" to a
     // bodyweight ×12 (the raw-weight maths ignored the bodyweight). With no bodyweight known it may fall
     // back to reps — fine here, since a stall only ever compares a lift with itself (full review 4.1).
-    else{const b=sbw({bw:lp.bw},opts.bw);top=Math.max(...lp.sets.map(s=>+s.w||0));topR=Math.max(...lp.sets.filter(s=>(+s.w||0)===top).map(s=>+s.r||0));
+    else{const b=sbw({bw:lp.bw},opts.bw);top=Math.max(...lp.sets.map(s=>+s.w||0));const atT=lp.sets.filter(s=>(+s.w||0)===top);topR=Math.max(...atT.map(s=>+s.r||0));totR=atT.reduce((a,s)=>a+(+s.r||0),0);
       score=Math.max(...lp.sets.map(s=>{const x=scoreSet(exId,s,b,{repsFallback:true});return x?x.score:0;}));}
-    out.push({date:lp.date,score,top,topR});
+    out.push({date:lp.date,score,top,topR,totR});
     before=lp.date;
   }
   return out;
@@ -443,6 +444,10 @@ function isStalled(sessions,exId,opts){
     const rReps=Math.max(...recent.filter(x=>x.top===rTop).map(x=>x.topR));
     const oReps=Math.max(...old.filter(x=>x.top===oTop).map(x=>x.topR));
     if(rReps>oReps)return false;
+    // …or more reps ACROSS the sets at that weight (15/13/12 → 15/15/13): the back sets catching up is
+    // progress too — the best set alone never moved, so this read as "stuck" and got swapped (batch 3)
+    const rTot=Math.max(...recent.filter(x=>x.top===rTop).map(x=>x.totR||0)),oTot=Math.max(...old.filter(x=>x.top===oTop).map(x=>x.totR||0));
+    if(rTot>oTot)return false;
   }
   return Math.max(...recent.map(x=>x.score))<=Math.max(...old.map(x=>x.score));
 }

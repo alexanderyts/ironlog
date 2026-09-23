@@ -26,7 +26,8 @@ function modeOf(e){return (e&&e.mode&&MODES[e.mode]?e.mode:null)||EQUIP_MODE[EX[
 function sideDefault(id){return !!(UNILATERAL&&UNILATERAL.has(id));}
 function sidesOf(e){return (typeof(e&&e.side)==='boolean'?e.side:sideDefault(e&&e.id))?2:1;}
 function holdsOf(e){const m=modeOf(e),id=e&&e.id;
-  if(m==='dumbbell')return (ONE_DB&&ONE_DB.has(id))||(e.side===true&&!sideDefault(id))?1:2;
+  // a one-dumbbell lift switched to "both sides" is done with two dumbbells (batch 3: its volume was halved)
+  if(m==='dumbbell')return (ONE_DB&&ONE_DB.has(id)&&e.side!==false)||(e.side===true&&!sideDefault(id))?1:2;
   if(m==='cable'&&DUAL_STACK&&DUAL_STACK.has(id))return 2;
   return 1;}
 function sideMult(e){return holdsOf(e)*sidesOf(e);}
@@ -145,7 +146,12 @@ function lastPerf(sessions,exId,opts){
     // falls through to the one before it — the fallback chain costs no extra code.
     const perfFor=x=>{const tr=trackOf(x),b=sbw(s,opts.bw);return st=>isWorking(st)&&(+st.r||0)>0&&!(opts.clean&&ncOf(x.id,tr,st,b));};
     const e=s.exercises.find(x=>x.id===exId&&(!opts.mode||trackOf(x)===opts.mode)&&x.sets.some(perfFor(x)));
-    if(e)return{date:s.date,mode:modeOf(e),sets:e.sets.filter(perfFor(e)).map(st=>({w:+st.w||0,r:+st.r||0})),note:e.note||'',bw:s.bw};   // bw: that session's bodyweight, for scoring it
+    if(e){const ok=perfFor(e),all=e.sets.filter(st=>isWorking(st)&&(+st.r||0)>0),keep=all.filter(ok);
+      // "Doesn't count" sets are replaced by your best set that does count — dropping them shrank next
+      // time's workout by a set (3 sets became 2 after "Don't count this", batch 3)
+      const best=keep.reduce((a,st)=>(+st.w||0)>(+a.w||0)?st:a,keep[0]);
+      const sets=(opts.clean?all.map(st=>ok(st)?st:best):keep).map(st=>({w:+st.w||0,r:+st.r||0}));
+      return{date:s.date,mode:modeOf(e),sets,note:e.note||'',bw:s.bw};}   // bw: that session's bodyweight, for scoring it
   }
   return null;
 }
@@ -219,7 +225,7 @@ function exerciseSeries(sessions,exId,opts){
     // and a rep-only bodyweight move all DO
     let best=null,bs=null,nc=null;
     e.sets.forEach(st=>{if(!isWorking(st))return;
-      const sc=scoreSet(exId,st,b);if(!sc)return;
+      const sc=scoreSet(exId,st,b,{repsFallback:true});if(!sc)return;   // no bodyweight set: a push-up's trend is in reps, like Your lifts (batch 3)
       if(ncOf(exId,trackOf(e),st,b)){if(beatsScore(sc,nc))nc=sc;return;}
       if(beatsScore(sc,best)){best=sc;bs=st;}});
     if(best)out.push({date:s.date,est:best.score,w:+bs.w||0,r:+bs.r||0,metric:best.kind,adj:(nc&&beatsScore(nc,best))||undefined});
@@ -328,6 +334,8 @@ function lastTrackFor(sessions,exId){
 // setWeightSteps accepts the map itself, or a function returning it (the app passes a live getter).
 let WEIGHT_STEPS={};
 function setWeightSteps(src){WEIGHT_STEPS=typeof src==='function'||(src&&typeof src==='object')?src:{};}
+// The step the user set for this exercise (Machine setup & weight step), or 0 when none is set.
+function userStep(unit,ex){const map=typeof WEIGHT_STEPS==='function'?(WEIGHT_STEPS()||{}):WEIGHT_STEPS;const o=ex&&map&&map[ex.id],v=o&&+o[unit==='kg'?'kg':'lb'];return v>0?v:0;}
 function unitIncrement(unit,ex){
   const map=typeof WEIGHT_STEPS==='function'?(WEIGHT_STEPS()||{}):WEIGHT_STEPS;
   const o=ex&&map[ex.id],v=o&&+o[unit==='kg'?'kg':'lb'];if(v>0)return v;
@@ -411,19 +419,29 @@ function nextSets(last,ex,unit,rr){
   const under=anchorSets.some(s=>(+s.r||0)<lo);
   const weighted=p.top>0;
   const ready=weighted&&short===0;
-  if(!ready)return{sets:last.map(s=>({w:+s.w||0,r:+s.r||0})),bumped:false,pattern:p.pattern,anchor:p.anchor,short,under,weighted};
-  // Snap an off-grid top (a converted 102.1 kg) onto the plate half-grid BEFORE adding, so it lands
-  // on 102.5→105 instead of drifting 104.6/107.1 forever (#29); a value already on the grid is unchanged.
-  const half=baseInc/2,off=Math.abs(p.top/half-Math.round(p.top/half))>1e-6;
-  let newTop=(off?roundTo(p.top,half):p.top)+inc;
+  if(!ready)return{sets:last.map(s=>({w:+s.w||0,r:+s.r||0})),bumped:false,pattern:p.pattern,anchor:p.anchor,short,under,weighted,hi,single:p.anchor.length===1};
+  // Snap an off-grid top (a converted 102.1 kg) onto a grid BEFORE adding, so it lands on a real weight
+  // instead of drifting 104.6/107.1 forever (#29). Barbell/Smith use the FULL plate step (a half step needs
+  // 1.25 lb plates); other lifts the half step. But when you've SET this machine's step, never snap: your
+  // last weight came off that stack, so last + step is on it too (stacks like 25/40/55 aren't multiples
+  // of 15 — the old half-step snap turned 100 into 97.5 + 15 = 112.5, a weight the stack doesn't have).
+  const own=userStep(unit||'lb',ex)>0,full=/^(barbell|smith)$/.test(EQUIP_MODE[ex&&ex.equip]||'');
+  const grid=full?baseInc:baseInc/2,off=!own&&Math.abs(p.top/grid-Math.round(p.top/grid))>1e-6;
+  let newTop=(off?roundTo(p.top,grid):p.top)+inc;
   if(inverted)newTop=Math.max(0,newTop);
+  // A held carry that earns more weight keeps most of its time: resetting a 40 s hold to 21 s made
+  // following the suggestion look like going backwards (batch 3). Timed work resets to mid-range.
+  const timed=!!(ex&&TIME_METRIC&&TIME_METRIC.has(ex.id)),reset=timed?Math.round((lo+hi)/2):resetR;
   const sets=last.map((s,i)=>{
     const w=+s.w||0;
-    if(p.anchor.includes(i))return{w:newTop,r:resetR};
+    if(p.anchor.includes(i))return{w:newTop,r:reset};
+    // assist machines: a back-off set loses at most ONE step of assist (scaling by newTop/top cut a
+    // 40 lb back-off to 20, and from 5/20 to 0/0 — batch 3)
+    if(inverted)return{w:Math.max(newTop,w-baseInc),r:+s.r||0};
     const scaled=roundTo(w*newTop/p.top,baseInc);
-    return{w:inverted?Math.max(0,scaled):Math.min(newTop,Math.max(w,scaled)),r:+s.r||0};
+    return{w:Math.min(newTop,Math.max(w,scaled)),r:+s.r||0};
   });
-  return{sets,bumped:true,pattern:p.pattern,anchor:p.anchor,short:0,under:false,weighted,newTop};
+  return{sets,bumped:true,pattern:p.pattern,anchor:p.anchor,short:0,under:false,weighted,newTop,hi};
 }
 
 /* Deload prescription: intentionally lighter loads for a recovery session (see the research note in
@@ -441,7 +459,8 @@ function deloadSets(last,ex,unit){
   // otherwise "recovery" prescribes a harder set than last time. ~40% MORE assist, on the grid.
   const inverted=!!ex&&isAssist(ex.id);
   return last.map(s=>{const w=+s.w||0;
-    const dw=w>0?(inverted?Math.round(w*1.4/inc)*inc:Math.max(inc,Math.round(w*0.6/inc)*inc)):w;
+    // an unassisted set (0) deloads to two steps of assist — 40% more of nothing was still unassisted (batch 3)
+    const dw=inverted?(w>0?Math.round(w*1.4/inc)*inc:2*inc):(w>0?Math.max(inc,Math.round(w*0.6/inc)*inc):w);
     return{w:dw,r:hi};});
 }
 // Progressive-overload suggestion for an exercise. kind: 'new' | 'weight' | 'match' | 'reps'
@@ -493,8 +512,11 @@ function suggestion(sessions,exId,opts){
   // an assist machine's working weight is its LEAST assist, and its progress is LESS assist (full review 4.3)
   const workW=inverted?Math.min(...lp.sets.map(s=>+s.w||0)):Math.max(...lp.sets.map(s=>+s.w||0));
   if(n.under)return{lp,kind:'match',pattern:n.pattern,text:`Fell under the range on the ${ramp?topLbl:'work sets'} — stay at ${workW}${unit}${inverted?' assist':''} and own it`,setsStr,next:n.sets};
-  const where=ramp?` on your ${topLbl}`:'';
-  return{lp,kind:'match',pattern:n.pattern,text:`${n.short} more ${unitWord(n.short)}${where} earns ${inverted?inc+unit+' less assist':'+'+inc+unit}`,setsStr,next:n.sets};
+  // Say what to reach, per set — "19 more reps earns +2.5lb" added up the gap across every set (batch 3)
+  const goal=timed?n.hi+'s':n.hi+' reps',earn=inverted?'less assist':'more weight';
+  const text=n.single?`${n.short} more ${unitWord(n.short)} on your ${ramp?topLbl:'set'} earns ${earn}`
+    :`Reach ${goal} on ${ramp?'your '+topLbl+'s':'every set'} to earn ${earn}`;
+  return{lp,kind:'match',pattern:n.pattern,text,setsStr,next:n.sets};
 }
 
 // lb <-> kg. kg keeps 0.1 resolution and lb 0.25, so any lb value on a quarter-pound grid
@@ -545,5 +567,5 @@ function calcStreak(sessions,now){
   return n;
 }
 
-IL.prog={setRecordPicks,recordPick,pickKey,ncOf,AWAY_DAYS,recordChoices,pickRecord,liftSessions,DAY,startOfDay,e1rm,isWorking,setLoad,sbw,sessionVolume,sessionSets,sessionDuration,MAX_SESSION_MIN,setTimeline,lastSetAt,staleness,STALE_AFTER_MIN,STALE_CONFIRM_MIN,END_PAD_MIN,finalizeSets,parseWeightInput,fmtVol,modeOf,real,lastPerf,lastModeFor,exerciseSeries,setScore,scoreMetric,liftKind,scoreSet,beatsScore,bestSetBefore,sessionPR,platesPerSide,sidesOf,holdsOf,sideMult,trackOf,sideDefault,lastSideFor,lastTrackFor,bestE1rmBefore,setPattern,fmtPerf,repRange,nextSets,deloadSets,suggestion,unitIncrement,setWeightSteps,convertWeight,convertSessions,calcStreak,weekIndex,weekStart};
+IL.prog={userStep,setRecordPicks,recordPick,pickKey,ncOf,AWAY_DAYS,recordChoices,pickRecord,liftSessions,DAY,startOfDay,e1rm,isWorking,setLoad,sbw,sessionVolume,sessionSets,sessionDuration,MAX_SESSION_MIN,setTimeline,lastSetAt,staleness,STALE_AFTER_MIN,STALE_CONFIRM_MIN,END_PAD_MIN,finalizeSets,parseWeightInput,fmtVol,modeOf,real,lastPerf,lastModeFor,exerciseSeries,setScore,scoreMetric,liftKind,scoreSet,beatsScore,bestSetBefore,sessionPR,platesPerSide,sidesOf,holdsOf,sideMult,trackOf,sideDefault,lastSideFor,lastTrackFor,bestE1rmBefore,setPattern,fmtPerf,repRange,nextSets,deloadSets,suggestion,unitIncrement,setWeightSteps,convertWeight,convertSessions,calcStreak,weekIndex,weekStart};
 if(typeof module!=='undefined')module.exports=IL.prog;

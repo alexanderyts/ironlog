@@ -92,7 +92,7 @@ test('suggestion: hitting the top of the rep range → add weight; otherwise bea
   const mid=[session(2,[['barbell-bench-press',[set(135,8),set(135,6)]]],{now})];
   const sm=P.suggestion(mid,'barbell-bench-press',{unit:'lb'});
   assert.equal(sm.kind,'match');
-  assert.match(sm.text,/^2 more reps earns \+5lb/);
+  assert.match(sm.text,/^Reach 8 reps on every set to earn more weight/,'batch 3: per-set target, not a sum of missing reps across sets');
   assert.deepEqual(sm.next,[{w:135,r:8},{w:135,r:6}],'not ready: last time carried forward as the target');
   assert.equal(P.suggestion([],'barbell-bench-press').kind,'new');
   assert.equal(P.suggestion(top,'barbell-bench-press',{unit:'kg'}).setsStr,'3×8/8/8 @ 135kg');
@@ -333,8 +333,9 @@ test('checkpoint: the "+Xlb" suggestion label equals the real bump on an off-gri
   // 102.1 lb (an artifact of a kg→lb conversion) snaps to 102.5 then +5 = 107.5 → real bump is +5.4, not +5
   const h=history(session(3,[['barbell-bench-press',[set(102.1,8),set(102.1,8)]]],{now:NOW}));
   const sg=P.suggestion(h,'barbell-bench-press',{unit:'lb'});
-  assert.equal(Math.max(...sg.next.map(s=>s.w)),107.5,'prescription is on-grid');
-  assert.match(sg.text,/\+5\.4lb/,'label matches the real delta, not the pre-snap increment');
+  // batch 3: a barbell snaps to the FULL 5 lb plate grid (a half step needs 1.25 lb plates): 102.1 → 100 → 105
+  assert.equal(Math.max(...sg.next.map(s=>s.w)),105,'prescription is on the plate grid');
+  assert.match(sg.text,/\+2\.9lb/,'label matches the real delta, not the pre-snap increment');
   // control: an on-grid top still reads +5
   const h2=history(session(3,[['barbell-bench-press',[set(185,8),set(185,8)]]],{now:NOW}));
   assert.match(P.suggestion(h2,'barbell-bench-press',{unit:'lb'}).text,/\+5lb/);

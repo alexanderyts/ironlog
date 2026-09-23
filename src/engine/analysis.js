@@ -21,18 +21,19 @@ function analyze(sessions,now){
   // (withStatus); for the normal call it's a no-op since there are no future-dated sessions.
   const done=completed(sessions).filter(s=>s.date>=now-winDays*DAY&&s.date<now);
   const groupSets={},effSets={},pat={hpush:0,vpush:0,hpull:0,vpull:0,hinge:0,squat:0,lunge:0,iso:0},regSeen={},patSeen={},groupDays={};
-  let totalSets=0,backHinge=0;
+  let totalSets=0,backHinge=0,chestIso=0;
   done.forEach(s=>{const day=startOfDay(s.date),dayGroups=new Set();
     s.exercises.forEach(e=>{const ex=EX[e.id];if(!ex)return;const n=e.sets.filter(isWorking).length;if(!n)return;
     totalSets+=n;groupSets[ex.group]=(groupSets[ex.group]||0)+n;pat[ex.pat]=(pat[ex.pat]||0)+n;dayGroups.add(ex.group);
-    if(ex.pat==='hinge'&&ex.muscles.indexOf('Back')>=0)backHinge+=n;   // a deadlift is a posterior-chain PULL, not "neither" (#22)
+    if(ex.pat==='hinge'&&ex.muscles.indexOf('Back')>=0)backHinge+=n;
+    if(ex.pat==='iso'&&ex.group==='Chest')chestIso+=n;   // a pec deck / fly is pressing work too — without it a machine chest day read as "add more pressing" (batch 3)   // a deadlift is a posterior-chain PULL, not "neither" (#22)
     // effective volume: a press also trains triceps/shoulders — secondary muscles get half credit
     ex.muscles.forEach((m,i)=>{effSets[m]=(effSets[m]||0)+(i===0||m===ex.group?n:n*0.5);});
     (regSeen[ex.group]=regSeen[ex.group]||new Set()).add(ex.reg);(patSeen[ex.group]=patSeen[ex.group]||new Set()).add(ex.pat);});
     // how many distinct training DAYS hit each group — for weekly frequency (≥2×/week is better per unit volume)
     dayGroups.forEach(g=>{(groupDays[g]=groupDays[g]||new Set()).add(day);});});
   const groupFreq={};Object.keys(groupDays).forEach(g=>groupFreq[g]=groupDays[g].size);
-  const push=pat.hpush+pat.vpush,pull=pat.hpull+pat.vpull+0.5*backHinge;   // half a deadlift's sets count toward pulling (#22)
+  const push=pat.hpush+pat.vpush+chestIso,pull=pat.hpull+pat.vpull+0.5*backHinge;   // half a deadlift's sets count toward pulling (#22)
   let upperSets=0,lowerSets=0;Object.entries(groupSets).forEach(([g,n])=>{LOWER_GROUPS.indexOf(g)>=0?lowerSets+=n:upperSets+=n;});
   // Sustained weekly volume = sets / calendar weeks (the landmarks 8–20 are per-CALENDAR-week: training
   // a muscle 12 sets every OTHER week is 6/week of stimulus, not 12). NOTE #14 (a layoff makes the first
@@ -460,7 +461,7 @@ function liftStatus(sessions,now,bw){
   // BEFORE that session (so "is this a PR?" needs no second scan of history).
   real(sessions).filter(s=>s.date<now).slice().reverse().forEach(s=>{const b=sbw(s,bw);
     s.exercises.forEach(e=>{if(!EX[e.id])return;let best=null,bs=null;
-      const tr0=trackOf(e);e.sets.forEach(st=>{if(!isWorking(st)||IL.prog.ncOf(e.id,tr0,st,b))return;const sc=scoreSet(e.id,st,b);if(beatsScore(sc,best)){best=sc;bs=st;}});
+      const tr0=trackOf(e);e.sets.forEach(st=>{if(!isWorking(st)||IL.prog.ncOf(e.id,tr0,st,b))return;const sc=scoreSet(e.id,st,b,{repsFallback:true});if(beatsScore(sc,best)){best=sc;bs=st;}});   // repsFallback: push-ups with no bodyweight set are judged by reps instead of vanishing (batch 3)
       if(!best)return;const tr=trackOf(e),k=e.id+'|'+tr;
       const L=keys[k]=keys[k]||{id:e.id,track:tr,mode:modeOf(e),sides:sidesOf(e),holds:holdsOf(e),perfs:[],top:null,topSet:null};
       L.perfs.push({date:s.date,sc:best,w:+bs.w||0,r:+bs.r||0,prior:L.top,priorSet:L.topSet});
