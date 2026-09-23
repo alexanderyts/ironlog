@@ -2,6 +2,16 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.70.0 — 2026-09-23 · The app suggests, you decide
+Your three decisions from the overnight review:
+- **Heavier weight is now a one-tap "Try", never filled in for you.** When you earned an increase, the rows show last time's numbers and the card says "You hit the top of the range last time — ready for more?" with a **Try 140lb** button. Tapping it moves only the sets you haven't ticked yet. **Back to last time** undoes it. On assist machines it offers less assist, in those words.
+- **Back after 10+ days:** no offer at all. The card says "Welcome back — same as last time".
+- **"Same lifts as last time" now really is the same lifts.** When a lift hasn't improved in a few weeks, it stays in your workout and its card asks "try Dumbbell Fly instead? [Swap] [Keep]". Swap replaces it in the same spot. Keep means it won't ask about that lift again for 3 weeks. An extra exercise to fill a gap is also a card ("Add Rear Delt Fly? It covers rear delts. [Add] [No thanks]"). A repeated workout no longer gets a silent extra set.
+- **Gentler strength goal:** big lifts aim for a 2-rep range (for example 5–7) instead of one fixed number, so the reps climb first and the weight goes up less often.
+- **"Just record"** in your training profile still means no suggestions at all.
+
+Not verified on-device.
+
 ## Behind the scenes — 2026-09-23 (no app change)
 - **Blank-screen trap closed.** On Windows, git can save source files with different line endings, which made the site's security check block the app's own code, so the page would load blank. The build now normalizes line endings, and a new test checks the security fingerprints the way a browser does. The published site was never affected; this was caught during a phone-size test run.
 - **A test run before every commit.** A commit is now refused if any test fails, including "the published files are out of date". Takes about 15 seconds. Turn it on in a fresh copy with `npm run hooks`.

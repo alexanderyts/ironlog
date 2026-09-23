@@ -7,7 +7,8 @@ function addExerciseToCur(id){
   if(todayScreen!=='edit'&&!state.active){S.setActive(newSession([]));}
   const t=cur();
   if(t.exercises.some(x=>x.id===id)){toast('Already added');return;}
-  const pf=state.settings.profile||{},inst=B.seedExercise(id,state.sessions,{excludeId:t.id,unit:U(),goal:pf.goal,setStyle:pf.sets,push:pf.push,gym:pf.gym});
+  const pf=state.settings.profile||{},inst=B.seedExercise(id,state.sessions,{excludeId:t.id,unit:U(),goal:pf.goal,setStyle:pf.sets,push:pushMode(),gym:pf.gym});
+  if(t.offers)t.offers=t.offers.filter(o=>o.exId!==id);   // an offered add, now added
   const pos=slotFor(t,id);t.exercises.splice(pos,0,inst);
   persistCur();if(todayScreen!=='edit')todayScreen='active';
   if(currentTab!=='today')setTab('today');else render();
@@ -123,7 +124,7 @@ function commitFinish(s,endedAt,estimated){
   closeSheet();stopRest();stopSw();stopElapsed();
   if(endedAt)s.endedAt=endedAt;else delete s.endedAt;
   if(estimated&&endedAt)s.endEstimated=true;else delete s.endEstimated;
-  cleanSets(s);
+  cleanSets(s);delete s.offers;
   if(!s.exercises.length){toast('Log at least one set first');return;}
   const sm=workoutSummary(s);
   s.completed=true;s.updatedAt=Date.now();
@@ -474,7 +475,18 @@ function bindLog(root){
     const em=e.target.closest('[data-exmenu]');if(em){openExMenu(+em.dataset.exmenu);return;}
     const es=e.target.closest('[data-exsetup]');if(es){openExSetup(+es.dataset.exsetup);return;}
     const kw=e.target.closest('[data-keepw]');if(kw){const ei=+kw.dataset.keepw;const ex=t.exercises[ei];const lp=P.lastPerf(state.sessions,ex.id,{beforeTs:t.date,excludeId:t.id,mode:P.trackOf(ex)});
-      if(lp)ex.sets=lp.sets.map(s=>({w:s.w,r:s.r,done:false}));persistCur();render();toast('Using last time’s weights');return;}
+      if(lp){const done=ex.sets.filter(s=>s.done);ex.sets=done.concat(lp.sets.slice(done.length).map(s=>({w:s.w,r:s.r,done:false})));}   // ticked sets stay as done
+      delete ex.tried;persistCur();render();toast('Back to last time’s numbers');return;}
+    // "Try 140 lb": apply the suggested increase to the sets not yet ticked (one tap; "Back to last time" undoes)
+    const tw=e.target.closest('[data-tryw]');if(tw){const ei=+tw.dataset.tryw,ex=t.exercises[ei];if(!ex)return;const pf=state.settings.profile||{};
+      const sg=P.suggestion(state.sessions,ex.id,{unit:U(),activeDate:t.date,activeId:t.id,mode:P.trackOf(ex),push:'offer',rr:pf.goal?P.repRange(EX[ex.id],pf.goal):undefined});
+      if(sg.kind!=='try'||!sg.tryNext)return;
+      ex.sets.forEach((st,i)=>{const n=sg.tryNext[Math.min(i,sg.tryNext.length-1)];if(!st.done&&!st.warm&&n){st.w=n.w;st.r=n.r;}});
+      ex.tried=true;persistCur();render();toast('Going for '+sg.tryLabel+' — tap “Back to last time” to undo');return;}
+    const osw=e.target.closest('[data-offerswap]');if(osw){const ei=+osw.dataset.offerswap,ex=t.exercises[ei];if(!ex||!ex.offer)return;const to=ex.offer.to;delete ex.offer;doReplace(ei,to);return;}
+    const okp=e.target.closest('[data-offerkeep]');if(okp){const ex=t.exercises[+okp.dataset.offerkeep];if(!ex)return;markSeen('keep:'+ex.id+':'+offerWeek());delete ex.offer;persistCur();render();toast('Keeping it — won’t suggest a swap for 3 weeks');return;}
+    const oad=e.target.closest('[data-offeradd]');if(oad){addExerciseToCur(oad.dataset.offeradd);return;}
+    const osk=e.target.closest('[data-offerskip]');if(osk){const id=osk.dataset.offerskip;markSeen('skipadd:'+id+':'+offerWeek());t.offers=(t.offers||[]).filter(o=>o.exId!==id);persistCur();render();return;}
     const mc=e.target.closest('[data-mode]');if(mc){openModePicker(+mc.dataset.mode);return;}
     // "⇆ Each side": flip one-side-at-a-time. Stored only when it differs from the lift's default, so a
     // lift on its default has no flag (and stays on its existing history track).

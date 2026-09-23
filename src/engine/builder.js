@@ -54,7 +54,10 @@ function seedExercise(id,sessions,opts){
   let sets;
   // push:'quiet' — "just record": the rows mirror last time exactly, never a bump. Must agree with
   // suggestion(), which shows neutral text under quiet; a bumped row next to "Recorded" would lie.
-  if(lp&&lp.sets.length)sets=(deload?deloadSets(lp.sets,ex,unit):push==='quiet'?lp.sets.map(s=>({w:+s.w||0,r:+s.r||0})):nextSets(lp.sets,ex,unit,goal?rr:undefined).sets).map(s=>({w:s.w,r:s.r,done:false}));
+  // push:'offer' (the app's default) — an INCREASE is never pre-filled: when last time earned a bump the
+  // rows repeat last time and the card offers a one-tap "Try" (suggestion()). No bump due → as before.
+  if(lp&&lp.sets.length){const n=deload||push==='quiet'?null:nextSets(lp.sets,ex,unit,goal?rr:undefined);
+    sets=(deload?deloadSets(lp.sets,ex,unit):push==='quiet'||(push==='offer'&&n.bumped)?lp.sets.map(s=>({w:+s.w||0,r:+s.r||0})):n.sets).map(s=>({w:s.w,r:s.r,done:false}));}
   // (a deload with no history: top of the range — except a timed hold, whose top is its HARDEST option)
   else{const n=prescribedSets(ex),timed=!!(ex&&TIME_METRIC&&TIME_METRIC.has(id)),r=ex?(deload&&!timed?rr[1]:rr[0]):'';sets=Array.from({length:n},()=>({w:'',r:r,done:false}));}
   if(!deload&&setStyle)sets=shapeStyle(sets,setStyle,ex,unit);   // never reshape a deload — recovery has its own prescription
@@ -517,6 +520,11 @@ function planWorkout(groups,sessions,seed,opts){
   const maxEx=profile&&profile.length==='long'?8:MAX_SESSION_EX;
   const protect=new Set(profile&&profile.protect||[]);
   const hints=deload?null:opts.hints,reactions=[],volumeBump=[];   // a deload never adds volume/coverage
+  // offerOnly (the app, since the night review): "same lifts" means the same lifts. A stalled lift's
+  // swap and a gap-filling extra exercise become OFFERS the user taps to accept, never silent changes;
+  // no silent extra set either. Without it (tests, the builder audit) the old behaviour still runs, so
+  // the underlying choices stay audited.
+  const offerOnly=!!opts.offerOnly,offers=[];
   const meta={};
   const plan=opts.fresh?null:findPlan(groups,sessions,opts.now,meta);
   // Muscles you picked that ended up with nothing (all filtered out, or too many groups for one session)
@@ -556,7 +564,7 @@ function planWorkout(groups,sessions,seed,opts){
     const t=exerciseTenure(sessions,aid);
     if(t.weeks>=ANCHOR_STALL_WEEKS&&isStalled(sessions,aid,{mode:modeById[aid],now:opts.now})){
       const to=anchorVariation(aid,ids,seed,profile,sessions);
-      if(to){ids=ids.map(id=>id===aid?to.id:id);rotation={from:aid,to:to.id,why:'anchor-stalled',anchor:true};structural=true;break;}
+      if(to){if(offerOnly)offers.push({type:'swap',from:aid,to:to.id,why:'anchor-stalled'});else{ids=ids.map(id=>id===aid?to.id:id);rotation={from:aid,to:to.id,why:'anchor-stalled',anchor:true};}structural=true;break;}
     }
   }
   // 2. Otherwise, rotate at most one STALLED accessory (the one in the plan longest). A progressing
@@ -565,28 +573,29 @@ function planWorkout(groups,sessions,seed,opts){
     const cands=ids.filter(id=>!anchors.has(id)).map(id=>({id,sessions:exerciseTenure(sessions,id).sessions,stalled:isStalled(sessions,id,{mode:modeById[id],now:opts.now})}))
       .filter(c=>c.stalled).sort((a,b)=>b.sessions-a.sessions);
     if(cands.length){const c=cands[0],to=replacementFor(c.id,ids,seed,hints,profile,sessions);
-      if(to){ids=ids.map(id=>id===c.id?to.id:id);rotation={from:c.id,to:to.id,why:'stalled',streak:c.sessions};structural=true;}}
+      if(to){if(offerOnly)offers.push({type:'swap',from:c.id,to:to.id,why:'stalled',streak:c.sessions});else{ids=ids.map(id=>id===c.id?to.id:id);rotation={from:c.id,to:to.id,why:'stalled',streak:c.sessions};}structural=true;}}
   }
   // 3. Gap-ADD (never a swap): one exercise for a flagged region/pattern the plan doesn't cover, only
   //    if there's room and no structural change happened yet. Self-limiting — once logged, gap clears.
   if(!structural&&hints&&hints.gaps&&ids.length<maxEx){
     const covered=gp=>ids.some(id=>EX[id]&&EX[id].group===gp.group&&(gp.reg?EX[id].reg===gp.reg:EX[id].pat===gp.pat));
     const gp=hints.gaps.filter(g=>groups.indexOf(g.group)>=0&&!protect.has(g.group)&&!covered(g)).sort((a,b)=>b.prio-a.prio)[0];
-    if(gp){const add=gapFillExercise(gp,ids,profile,sessions);if(add&&EX[add]){ids.push(add);structural=true;reactions.push({type:'gap-add',exId:add,group:gp.group,why:'covers '+(gp.reg?regLabel(gp.group,gp.reg):patLabel(gp.pat))});}}
+    if(gp){const add=gapFillExercise(gp,ids,profile,sessions);if(add&&EX[add]&&offerOnly){offers.push({type:'add',exId:add,why:'covers '+(gp.reg?regLabel(gp.group,gp.reg):patLabel(gp.pat))});structural=true;}
+      else if(add&&EX[add]){ids.push(add);structural=true;reactions.push({type:'gap-add',exId:add,group:gp.group,why:'covers '+(gp.reg?regLabel(gp.group,gp.reg):patLabel(gp.pat))});}}
   }
   // 4. Volume bump (+1 set) for the ONE most-undertrained group this session (the lowest sets/week),
   //    not every low group at once — adding five sets while the toast says "+1 set" was dishonest, and
   //    piling volume onto a returning/low-volume lifter is wrong (#23). Self-limiting: as each session
   //    lifts a group over its landmark, the next session moves to the next-lowest.
   const undByVol=hints&&(hints.undertrainedByVolume||(hints.undertrained||[]).map(g=>({group:g,perWeek:0})));   // accept the old {undertrained:[names]} shape too
-  if(undByVol&&undByVol.length){
+  if(!offerOnly&&undByVol&&undByVol.length){   // offer-only: a repeated workout gets no silent extra set (Focus already says the volume is low)
     const pick=undByVol.filter(u=>groups.indexOf(u.group)>=0&&!protect.has(u.group))[0];
     if(pick){const g=pick.group,target=ids.find(id=>EX[id]&&EX[id].group===g&&anchors.has(id))||ids.find(id=>EX[id]&&EX[id].group===g);
       if(target&&volumeBump.indexOf(target)<0){volumeBump.push(target);reactions.push({type:'volume',exId:target,group:g,why:g.toLowerCase()+' volume is low — added a set'});}}
   }
   const streak=Math.min(...ids.filter(id=>!rotation||id!==rotation.to).map(id=>exerciseStreak(sessions,id)));
   const fin=orderByFatigue(capHeavyAxial(ids,profile,sessions),groups[0]);
-  return{ids:fin,mode:"continue",plan,rotation,streak:isFinite(streak)?streak:0,reactions,volumeBump,deload:false,skipped:skippedOf(fin)};
+  return{ids:fin,mode:"continue",plan,rotation,streak:isFinite(streak)?streak:0,reactions,volumeBump,offers,deload:false,skipped:skippedOf(fin)};
 }
 
 IL.builder={isStalled,prescribedSets,seedExercise,lastSessionIds,perfPriority,orderByFatigue,isHeavyAxial,spinalUnits,capHeavyAxial,pickForGroup,buildRecommendation,complementSuggestions,fitSessionBudget,SESSION_SETS,SMITH_OK,HARD_BW,

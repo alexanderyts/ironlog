@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-4ZenZdZBv2CKJw1+aPtyGO/Pq74yIe+VPWItuTKIP+I=' 'sha256-WPBob/luB2k1aalTWXpi6zk3SrIbj8GlZV7AlFdG7oA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-srhHbQaPFys5O8E9Os2Lxp+n29xt8OyUDYQAK1m8RDw=' 'sha256-WPBob/luB2k1aalTWXpi6zk3SrIbj8GlZV7AlFdG7oA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Ironlog</title>
@@ -224,6 +224,8 @@ html.kb-open .tabbar{display:none}
 .sugg .lastp{font-family:var(--font-mono);font-weight:600}
 .sugg .apply{margin-left:auto;background:var(--accent);color:var(--accent-ink);height:30px;padding:0 12px;border-radius:9px;font-weight:600;font-size:12.5px;flex-shrink:0;position:relative}
 .sugg .apply::after{content:"";position:absolute;inset:-8px}   /* hit-slop → ≥44pt target (#27) */
+.sugg .apply.ghost{background:transparent;color:var(--ink-2);border:1px solid var(--line)}
+.sugg.offer{flex-wrap:wrap}   /* "try X instead?" + Swap/Keep: the buttons drop below the text on a narrow phone */
 .modechip{margin:0 12px 10px;padding:4px 11px;border-radius:9px;background:var(--surface-2);color:var(--ink-2);font-size:12px;font-weight:600;display:inline-flex;align-items:center;gap:4px;position:relative}
 .modechip::after{content:"";position:absolute;inset:-10px -8px}   /* hit-slop → ≥44pt target (#27) */
 .modechip:active{background:var(--accent-soft);color:var(--accent)}
@@ -454,8 +456,8 @@ html.kb-open .tabbar{display:none}
 </div>
 
 <script>
-/* Ironlog v0.69.0 · site build */
-var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.69.0",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
+/* Ironlog v0.70.0 · site build */
+var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.70.0",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
 
 /* ===== src/data/exercises.js ===== */
 (function(){'use strict';
@@ -841,6 +843,8 @@ function sessionDuration(s){const a=+s.date,b=+s.endedAt;if(!(b>a&&isFinite(a)&&
 // Checked sets with a timestamp, as {exId, group, at}, oldest first — the raw material for time-per-
 // muscle and rest-taken analytics (T3). Sets with no stamp (old data, or unchecked) are omitted.
 function setTimeline(s){const out=[];(s.exercises||[]).forEach(e=>{const g=EX[e.id]?EX[e.id].group:null;e.sets.forEach(st=>{if(isFinite(+st.at)&&+st.at>0)out.push({exId:e.id,group:g,at:+st.at});});});return out.sort((a,b)=>a.at-b.at);}
+// After this many days away, the first session back repeats last time (no "Try more" offer).
+const AWAY_DAYS=10;
 // Forgotten-Finish safeguards (T2). The app never ends a workout itself — it notices and asks.
 const STALE_AFTER_MIN=75,      // no checked set for this long while a workout is open → "still training?"
       STALE_CONFIRM_MIN=30,     // at Finish, if the last set was this long ago, offer to log THAT time
@@ -867,7 +871,7 @@ function finalizeSets(exercises){
     // entry, and would otherwise record a false "unassisted" PR). (Full review 4.2)
     const inv=isAssist(e.id),typed=st=>st.w!=null&&String(st.w).trim()!==''&&isFinite(+st.w);
     const sets=e.sets.filter(st=>st.done===true&&(+st.r||0)>0&&(allowBlank||(+st.w||0)>0||(inv&&typed(st)))).map(st=>{const o=Object.assign({},st);delete o.t;o.done=true;return o;});
-    return Object.assign({},e,{sets});
+    const o=Object.assign({},e,{sets});delete o.tried;delete o.offer;return o;   // screen-only flags (the "Try" chip, a swap offer) never reach history
   }).filter(e=>e.sets.length);
 }
 // Sanitize a weight input string: accept a comma as the decimal separator (European keyboards) and
@@ -1159,7 +1163,9 @@ function repRange(ex,goal){
   const lo=ex?ex.rr[0]:8,hi=ex?ex.rr[1]:12,cap=Math.max(15,hi);   // the cap can't shrink a naturally high-rep move (plank 30–60, carry 20–40) — #17
   // Strength narrows the COMPOUND lifts to the low end. Isolation and timed work keep their range — a
   // lateral raise at "12-12" added load every session, and a wrist roller became 1 rep (builder audit #13).
-  if(goal==='strength')return ex&&ex.type==='compound'&&!(TIME_METRIC&&TIME_METRIC.has(ex.id))?[lo,lo]:[lo,hi];
+  // A 2-rep window (5–7, not "5–5"): a single target added weight almost every session, which the owner
+  // found too aggressive (night review 2026-09-23). Reps climb first, then the weight.
+  if(goal==='strength')return ex&&ex.type==='compound'&&!(TIME_METRIC&&TIME_METRIC.has(ex.id))?[lo,Math.min(hi,lo+2)]:[lo,hi];
   if(goal==='size')return[Math.min(lo+2,cap),Math.min(hi+2,cap)];
   return[lo,hi];
 }
@@ -1236,6 +1242,16 @@ function suggestion(sessions,exId,opts){
     // the REAL bump can differ from `inc` when the last top was off-grid (after a unit conversion) and
     // got snapped before adding — so report newTop − lastTop, not inc, or the label lies (#11/#29)
     const lastTop=(inverted?Math.min:Math.max)(...lp.sets.map(s=>+s.w||0)),bump=+(n.newTop-lastTop).toFixed(2);   // assist: measured from the hardest (least-assist) set
+    // push:'offer' (the app's default since the night review): the rows keep LAST TIME's numbers and the
+    // increase is a one-tap "Try" — never pre-applied. After 10+ days away there's no offer at all: the
+    // first session back repeats last time.
+    if(opts.push==='offer'){
+      const same=lp.sets.map(s=>({w:+s.w||0,r:+s.r||0}));
+      if(opts.activeDate&&opts.activeDate-lp.date>=AWAY_DAYS*DAY)return{lp,kind:'match',pattern:n.pattern,text:'Welcome back — same as last time',setsStr,next:same,away:true};
+      const tryLabel=inverted?(n.newTop>0?n.newTop+unit+' assist':'no assist'):ramp?(topLbl+' '+n.newTop+unit):n.newTop+unit;
+      const text=inverted?'You hit the top of the range — ready for less assist?':timed?'You hit the top of the range — ready to add a little load?':'You hit the top of the range last time — ready for more?';
+      return{lp,kind:'try',pattern:n.pattern,text,tryLabel,setsStr,next:same,tryNext:n.sets};
+    }
     const text=inverted?(n.newTop>0?`Hit top reps — prefilled ${+(lastTop-n.newTop).toFixed(2)}${unit} less assist`:'Hit top reps with no assist — try an unassisted rep next')
               :ramp?`${n.pattern==='descending'?'Opener':'Top set'} hit the range — ${topLbl} prefilled at ${n.newTop}${unit}, the rest shifted up`
                    :`Hit top reps last time — prefilled +${bump}${unit}`;
@@ -1297,7 +1313,7 @@ function calcStreak(sessions,now){
   return n;
 }
 
-IL.prog={recordChoices,pickRecord,liftSessions,DAY,startOfDay,e1rm,isWorking,setLoad,sbw,sessionVolume,sessionSets,sessionDuration,MAX_SESSION_MIN,setTimeline,lastSetAt,staleness,STALE_AFTER_MIN,STALE_CONFIRM_MIN,END_PAD_MIN,finalizeSets,parseWeightInput,fmtVol,modeOf,real,lastPerf,lastModeFor,exerciseSeries,setScore,scoreMetric,liftKind,scoreSet,beatsScore,bestSetBefore,sessionPR,platesPerSide,sidesOf,holdsOf,sideMult,trackOf,sideDefault,lastSideFor,lastTrackFor,bestE1rmBefore,setPattern,fmtPerf,repRange,nextSets,deloadSets,suggestion,unitIncrement,setWeightSteps,convertWeight,convertSessions,calcStreak,weekIndex,weekStart};
+IL.prog={AWAY_DAYS,recordChoices,pickRecord,liftSessions,DAY,startOfDay,e1rm,isWorking,setLoad,sbw,sessionVolume,sessionSets,sessionDuration,MAX_SESSION_MIN,setTimeline,lastSetAt,staleness,STALE_AFTER_MIN,STALE_CONFIRM_MIN,END_PAD_MIN,finalizeSets,parseWeightInput,fmtVol,modeOf,real,lastPerf,lastModeFor,exerciseSeries,setScore,scoreMetric,liftKind,scoreSet,beatsScore,bestSetBefore,sessionPR,platesPerSide,sidesOf,holdsOf,sideMult,trackOf,sideDefault,lastSideFor,lastTrackFor,bestE1rmBefore,setPattern,fmtPerf,repRange,nextSets,deloadSets,suggestion,unitIncrement,setWeightSteps,convertWeight,convertSessions,calcStreak,weekIndex,weekStart};
 if(typeof module!=='undefined')module.exports=IL.prog;
 
 })();
@@ -1390,7 +1406,10 @@ function seedExercise(id,sessions,opts){
   let sets;
   // push:'quiet' — "just record": the rows mirror last time exactly, never a bump. Must agree with
   // suggestion(), which shows neutral text under quiet; a bumped row next to "Recorded" would lie.
-  if(lp&&lp.sets.length)sets=(deload?deloadSets(lp.sets,ex,unit):push==='quiet'?lp.sets.map(s=>({w:+s.w||0,r:+s.r||0})):nextSets(lp.sets,ex,unit,goal?rr:undefined).sets).map(s=>({w:s.w,r:s.r,done:false}));
+  // push:'offer' (the app's default) — an INCREASE is never pre-filled: when last time earned a bump the
+  // rows repeat last time and the card offers a one-tap "Try" (suggestion()). No bump due → as before.
+  if(lp&&lp.sets.length){const n=deload||push==='quiet'?null:nextSets(lp.sets,ex,unit,goal?rr:undefined);
+    sets=(deload?deloadSets(lp.sets,ex,unit):push==='quiet'||(push==='offer'&&n.bumped)?lp.sets.map(s=>({w:+s.w||0,r:+s.r||0})):n.sets).map(s=>({w:s.w,r:s.r,done:false}));}
   // (a deload with no history: top of the range — except a timed hold, whose top is its HARDEST option)
   else{const n=prescribedSets(ex),timed=!!(ex&&TIME_METRIC&&TIME_METRIC.has(id)),r=ex?(deload&&!timed?rr[1]:rr[0]):'';sets=Array.from({length:n},()=>({w:'',r:r,done:false}));}
   if(!deload&&setStyle)sets=shapeStyle(sets,setStyle,ex,unit);   // never reshape a deload — recovery has its own prescription
@@ -1853,6 +1872,11 @@ function planWorkout(groups,sessions,seed,opts){
   const maxEx=profile&&profile.length==='long'?8:MAX_SESSION_EX;
   const protect=new Set(profile&&profile.protect||[]);
   const hints=deload?null:opts.hints,reactions=[],volumeBump=[];   // a deload never adds volume/coverage
+  // offerOnly (the app, since the night review): "same lifts" means the same lifts. A stalled lift's
+  // swap and a gap-filling extra exercise become OFFERS the user taps to accept, never silent changes;
+  // no silent extra set either. Without it (tests, the builder audit) the old behaviour still runs, so
+  // the underlying choices stay audited.
+  const offerOnly=!!opts.offerOnly,offers=[];
   const meta={};
   const plan=opts.fresh?null:findPlan(groups,sessions,opts.now,meta);
   // Muscles you picked that ended up with nothing (all filtered out, or too many groups for one session)
@@ -1892,7 +1916,7 @@ function planWorkout(groups,sessions,seed,opts){
     const t=exerciseTenure(sessions,aid);
     if(t.weeks>=ANCHOR_STALL_WEEKS&&isStalled(sessions,aid,{mode:modeById[aid],now:opts.now})){
       const to=anchorVariation(aid,ids,seed,profile,sessions);
-      if(to){ids=ids.map(id=>id===aid?to.id:id);rotation={from:aid,to:to.id,why:'anchor-stalled',anchor:true};structural=true;break;}
+      if(to){if(offerOnly)offers.push({type:'swap',from:aid,to:to.id,why:'anchor-stalled'});else{ids=ids.map(id=>id===aid?to.id:id);rotation={from:aid,to:to.id,why:'anchor-stalled',anchor:true};}structural=true;break;}
     }
   }
   // 2. Otherwise, rotate at most one STALLED accessory (the one in the plan longest). A progressing
@@ -1901,28 +1925,29 @@ function planWorkout(groups,sessions,seed,opts){
     const cands=ids.filter(id=>!anchors.has(id)).map(id=>({id,sessions:exerciseTenure(sessions,id).sessions,stalled:isStalled(sessions,id,{mode:modeById[id],now:opts.now})}))
       .filter(c=>c.stalled).sort((a,b)=>b.sessions-a.sessions);
     if(cands.length){const c=cands[0],to=replacementFor(c.id,ids,seed,hints,profile,sessions);
-      if(to){ids=ids.map(id=>id===c.id?to.id:id);rotation={from:c.id,to:to.id,why:'stalled',streak:c.sessions};structural=true;}}
+      if(to){if(offerOnly)offers.push({type:'swap',from:c.id,to:to.id,why:'stalled',streak:c.sessions});else{ids=ids.map(id=>id===c.id?to.id:id);rotation={from:c.id,to:to.id,why:'stalled',streak:c.sessions};}structural=true;}}
   }
   // 3. Gap-ADD (never a swap): one exercise for a flagged region/pattern the plan doesn't cover, only
   //    if there's room and no structural change happened yet. Self-limiting — once logged, gap clears.
   if(!structural&&hints&&hints.gaps&&ids.length<maxEx){
     const covered=gp=>ids.some(id=>EX[id]&&EX[id].group===gp.group&&(gp.reg?EX[id].reg===gp.reg:EX[id].pat===gp.pat));
     const gp=hints.gaps.filter(g=>groups.indexOf(g.group)>=0&&!protect.has(g.group)&&!covered(g)).sort((a,b)=>b.prio-a.prio)[0];
-    if(gp){const add=gapFillExercise(gp,ids,profile,sessions);if(add&&EX[add]){ids.push(add);structural=true;reactions.push({type:'gap-add',exId:add,group:gp.group,why:'covers '+(gp.reg?regLabel(gp.group,gp.reg):patLabel(gp.pat))});}}
+    if(gp){const add=gapFillExercise(gp,ids,profile,sessions);if(add&&EX[add]&&offerOnly){offers.push({type:'add',exId:add,why:'covers '+(gp.reg?regLabel(gp.group,gp.reg):patLabel(gp.pat))});structural=true;}
+      else if(add&&EX[add]){ids.push(add);structural=true;reactions.push({type:'gap-add',exId:add,group:gp.group,why:'covers '+(gp.reg?regLabel(gp.group,gp.reg):patLabel(gp.pat))});}}
   }
   // 4. Volume bump (+1 set) for the ONE most-undertrained group this session (the lowest sets/week),
   //    not every low group at once — adding five sets while the toast says "+1 set" was dishonest, and
   //    piling volume onto a returning/low-volume lifter is wrong (#23). Self-limiting: as each session
   //    lifts a group over its landmark, the next session moves to the next-lowest.
   const undByVol=hints&&(hints.undertrainedByVolume||(hints.undertrained||[]).map(g=>({group:g,perWeek:0})));   // accept the old {undertrained:[names]} shape too
-  if(undByVol&&undByVol.length){
+  if(!offerOnly&&undByVol&&undByVol.length){   // offer-only: a repeated workout gets no silent extra set (Focus already says the volume is low)
     const pick=undByVol.filter(u=>groups.indexOf(u.group)>=0&&!protect.has(u.group))[0];
     if(pick){const g=pick.group,target=ids.find(id=>EX[id]&&EX[id].group===g&&anchors.has(id))||ids.find(id=>EX[id]&&EX[id].group===g);
       if(target&&volumeBump.indexOf(target)<0){volumeBump.push(target);reactions.push({type:'volume',exId:target,group:g,why:g.toLowerCase()+' volume is low — added a set'});}}
   }
   const streak=Math.min(...ids.filter(id=>!rotation||id!==rotation.to).map(id=>exerciseStreak(sessions,id)));
   const fin=orderByFatigue(capHeavyAxial(ids,profile,sessions),groups[0]);
-  return{ids:fin,mode:"continue",plan,rotation,streak:isFinite(streak)?streak:0,reactions,volumeBump,deload:false,skipped:skippedOf(fin)};
+  return{ids:fin,mode:"continue",plan,rotation,streak:isFinite(streak)?streak:0,reactions,volumeBump,offers,deload:false,skipped:skippedOf(fin)};
 }
 
 IL.builder={isStalled,prescribedSets,seedExercise,lastSessionIds,perfPriority,orderByFatigue,isHeavyAxial,spinalUnits,capHeavyAxial,pickForGroup,buildRecommendation,complementSuggestions,fitSessionBudget,SESSION_SETS,SMITH_OK,HARD_BW,
@@ -3082,6 +3107,9 @@ const setsOf=s=>P.sessionSets(s);
 // A "Volume" stat label, tappable for a one-line explainer (the number itself, e.g. "12,480 lb", has
 // no context otherwise — see ROADMAP-v2 #1).
 function volLabel(label){return `<span data-vol-info style="cursor:pointer">${label||'Volume'} <span class="dim" style="font-weight:400">ⓘ</span></span>`;}
+// How the app suggests increases (night review): 'offer' = rows repeat last time + a one-tap "Try";
+// 'quiet' (profile "Just record") = no nudges at all. An increase is never pre-filled any more.
+const pushMode=()=>(state.settings.profile||{}).push==='quiet'?'quiet':'offer';
 const completedSessions=()=>state.sessions.filter(s=>s.completed!==false&&s.exercises.length&&s.kind!=='cardio');   // strength only — feeds every lifting stat
 const completedAny=()=>state.sessions.filter(s=>s.completed!==false&&(s.exercises.length||s.kind==='cardio'));   // strength ∪ cardio — for History, "this week" count, streak
 const ICON_BACK='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>';
@@ -3499,7 +3527,7 @@ function recentTemplates(){
 const SCHEMA=1;
 // opts.budget: a FRESHLY built workout is trimmed to the session-length budget (~60 / 45 / 75 min). A
 // continued plan, a repeat or a routine keeps the user's own set counts.
-function newSession(exIds,deload,volumeBump,opts){const pf=state.settings.profile||{},goal=pf.goal,setStyle=pf.sets,push=pf.push,gym=pf.gym;
+function newSession(exIds,deload,volumeBump,opts){const pf=state.settings.profile||{},goal=pf.goal,setStyle=pf.sets,push=pushMode(),gym=pf.gym;
   const s={id:S.uid(),schema:SCHEMA,date:Date.now(),updatedAt:Date.now(),completed:false,exercises:(exIds||[]).map(id=>B.seedExercise(id,state.sessions,{unit:U(),deload,extraSet:volumeBump&&volumeBump.indexOf(id)>=0,goal,setStyle,push,gym}))};
   if(opts&&opts.budget)B.fitSessionBudget(s.exercises,pf);
   if(deload)s.deload=true;return s;}
@@ -3509,7 +3537,7 @@ function newSession(exIds,deload,volumeBump,opts){const pf=state.settings.profil
 function startSession(spec){
   spec=spec||{};
   const begin=()=>{
-    S.setActive(newSession(spec.ids||[],!!spec.deload,spec.volumeBump,{budget:!!spec.budget}));
+    S.setActive(attachOffers(newSession(spec.ids||[],!!spec.deload,spec.volumeBump,{budget:!!spec.budget}),spec.offers));
     resetDraft();
     todayScreen='active';render();
     if(spec.msg)toast(spec.msg);
@@ -3652,7 +3680,7 @@ function openReplace(ei){
 function doReplace(ei,id){
   const t=cur(),old=t&&t.exercises[ei];if(!old||!EX[id])return;const logged=old.sets.filter(s=>s.done).length;
   const go=()=>{const pf=state.settings.profile||{},c=liveSession(t),o=liveExercise(t,old,ei);if(!c||!o){closeSheet();staleToast();return;}
-    const inst=B.seedExercise(id,state.sessions,{excludeId:c.id,unit:U(),goal:pf.goal,setStyle:pf.sets,push:pf.push,gym:pf.gym});
+    const inst=B.seedExercise(id,state.sessions,{excludeId:c.id,unit:U(),goal:pf.goal,setStyle:pf.sets,push:pushMode(),gym:pf.gym});
     ei=c.exercises.indexOf(o);c.exercises.splice(ei,1,inst);persistCur();closeSheet();render();
     toast((old.name||EX[old.id].name)+' → '+EX[id].name,{label:'Undo',fn:()=>{const c=cur();if(c&&c.exercises[ei]===inst){c.exercises.splice(ei,1,old);persistCur();render();}}});};
   if(logged)showConfirm('Replace '+(old.name||EX[old.id].name)+'?','You’ve logged '+logged+' set'+(logged!==1?'s':'')+' on it — they’ll be removed from this workout.','Replace',go);else go();
@@ -3680,22 +3708,31 @@ function openExSetup(ei){
     if(pick)o[u]=pick;else delete o[u];if(Object.keys(o).length)steps[e.id]=o;else delete steps[e.id];state.settings.steps=steps;
     S.saveSettingsCloud();closeSheet();render();toast(pick?'Saved — suggestions now step by '+pick+' '+u:'Saved');});
 }
+/* Offers from the builder (night review): a stalled lift's swap sits on that lift's card; a gap-filling
+   exercise is a card above "Add exercise". Tapping "Keep" / "No thanks" is remembered for 3 weeks. */
+const offerWeek=()=>P.weekIndex(Date.now());
+function offerDeclined(kind,id){const w=offerWeek();return [0,1,2].some(d=>seenFlag(kind+':'+id+':'+(w-d)));}
+function attachOffers(s,offers){
+  (offers||[]).forEach(o=>{
+    if(o.type==='swap'){if(offerDeclined('keep',o.from))return;const e=s.exercises.find(x=>x.id===o.from);if(e)e.offer={to:o.to,why:o.why};}
+    else if(o.type==='add'&&!offerDeclined('skipadd',o.exId)&&!s.exercises.some(x=>x.id===o.exId))(s.offers=s.offers||[]).push({exId:o.exId,why:o.why});
+  });
+  return s;
+}
+function offerAddsHTML(s){
+  return (s.offers||[]).filter(o=>EX[o.exId]&&!s.exercises.some(x=>x.id===o.exId)).map(o=>`<div class="sugg match offer" style="margin:0 0 10px"><span>Add <b>${esc(EX[o.exId].name)}</b>? It ${esc(o.why)}.</span><span style="display:flex;gap:6px;flex-shrink:0"><button class="apply" data-offeradd="${o.exId}">Add</button><button class="apply ghost" data-offerskip="${o.exId}">No thanks</button></span></div>`).join('');
+}
 function buildAndStart(fresh){
   const dl=draft.deload;
   // Coach's findings feed the builder (Phase C). The engine ignores them on a deload (recovery isn't
   // the time to add volume/coverage), so we always pass them and let planWorkout decide.
   const hints=A.buildHints(state.sessions,Date.now(),bw(),state.settings.profile);
-  const p=B.planWorkout([...draft.groups],state.sessions,null,{fresh,hints,deload:dl,profile:state.settings.profile});
+  const p=B.planWorkout([...draft.groups],state.sessions,null,{fresh,hints,deload:dl,profile:state.settings.profile,offerOnly:true});   // same lifts = same lifts; changes are offers
   let msg='Workout built — adjust anything';
   if(p.deload)msg=p.mode==='continue'?'Deload — same lifts as last time, lighter loads, focus on the stretch':'Deload built — lighter loads, focus on the stretch';
   else if(p.mode==='continue'){
-    const gapAdd=(p.reactions||[]).find(r=>r.type==='gap-add');
     if(p.lapsed)msg=`Welcome back — weights carried from your session ${relDay(p.plan.date).toLowerCase()}`;
-    else if(p.rotation&&p.rotation.anchor)msg=`Suggested swap: ${EX[p.rotation.from].name} → ${EX[p.rotation.to].name} — it stalled through a deload`;
-    else if(p.rotation)msg=`Suggested swap: ${EX[p.rotation.from].name} → ${EX[p.rotation.to].name} (it stalled) — the rest carried from last time`;
-    else if(gapAdd)msg=`Weights from last time · added ${EX[gapAdd.exId].name} to round it out`;
-    else if(p.volumeBump&&p.volumeBump.length){const vr=(p.reactions||[]).find(r=>r.type==='volume');msg='Weights from last time · +1 set on '+((vr&&EX[vr.exId]&&EX[vr.exId].name)||(vr&&vr.group)||'a lift where volume was low');}
-    else msg='Weights carried from your last session — adjust anything';
+    else msg='Same lifts as last time — adjust anything'+((p.offers||[]).length?' · one suggestion inside':'');
   }
   // Settings win on a continued plan: say what was swapped/left out and why (it outranks the messages above)
   const prof=(p.reactions||[]).filter(r=>r.type==='profile-swap'||r.type==='avoid-swap'||r.type==='profile-drop');
@@ -3704,7 +3741,7 @@ function buildAndStart(fresh){
   if(p.skipped&&p.skipped.length){const pf=state.settings.profile;
     const noFit=p.skipped.filter(g=>!IL.data.EXERCISES.some(e=>e.group===g&&B.profileAllows(e,g,pf,state.sessions)));
     msg+=noFit.length?' · nothing fits your settings for '+noFit.join(' & '):' · no room for '+p.skipped.join(' & ')+' — pick fewer muscles';}
-  startSession({ids:p.ids,msg,deload:p.deload,volumeBump:p.volumeBump,source:'build',budget:p.mode==='fresh'});
+  startSession({ids:p.ids,msg,deload:p.deload,volumeBump:p.volumeBump,offers:p.offers,source:'build',budget:p.mode==='fresh'});
 }
 // Reaction 1: a one-tap nudge toward the muscles the coach says are light or unbalanced this week.
 function coachNudge(){
@@ -3749,7 +3786,7 @@ function editorView(s,mode){
       ${s.exercises.length>=3?`<button class="linkbtn" id="btnReorder">↕ Auto-order</button>`:''}
       ${s.exercises.length?`<button class="linkbtn" id="btnSaveRoutine">★ Save as routine</button>`:''}
     </div>
-    ${edit?'':topSuggestionHTML()}
+    ${edit?'':offerAddsHTML(s)}${edit?'':topSuggestionHTML()}
     <button class="btn ghost block" id="btnAddEx" style="margin-top:4px">＋ Add exercise</button>
     <div style="height:14px"></div>
     ${edit?`<button class="btn primary block" id="btnSaveEdit">Save changes</button>`
@@ -3792,8 +3829,13 @@ function logExercise(s,e,ei,mode){
     sugg=`<div class="sugg match" style="color:var(--good);background:var(--good-soft)"><span>🌿 Recovery set — easy load, full range</span></div>`;
   }else if(mode==='active'){
     const pf=state.settings.profile||{},sgRr=pf.goal?P.repRange(EX[e.id],pf.goal):undefined;
-    const sg=P.suggestion(state.sessions,e.id,{unit:U(),activeDate:s.date,activeId:s.id,mode:etrack,push:pf.push,rr:sgRr});
-    if(sg.lp){const w=sg.kind==='weight';
+    const sg=P.suggestion(state.sessions,e.id,{unit:U(),activeDate:s.date,activeId:s.id,mode:etrack,push:pushMode(),rr:sgRr});
+    const open=e.sets.some(st=>!st.done);
+    if(sg.kind==='try'){
+      // One-tap "Try": the rows hold last time's numbers; the increase is offered, never pre-applied.
+      sugg=e.tried?`<div class="sugg"><span>💪 Going for ${esc(sg.tryLabel)} · <span class="lastp">last: ${esc(sg.setsStr)}</span></span>${open?`<button class="apply" data-keepw="${ei}">Back to last time</button>`:''}</div>`
+        :`<div class="sugg match"><span>${esc(sg.text)} · <span class="lastp">last: ${esc(sg.setsStr)}</span></span>${open?`<button class="apply" data-tryw="${ei}">Try ${esc(sg.tryLabel)}</button>`:''}</div>`;}
+    else if(sg.lp){const w=sg.kind==='weight';
       // The prescription is already in the set rows; offer a one-tap revert until a set is done
       const canRevert=w&&!e.sets.some(st=>st.done);
       sugg=`<div class="sugg ${w?'':'match'}"><span>${w?'💪 ':''}${esc(sg.text)} · <span class="lastp">last: ${esc(sg.setsStr)}</span></span>${canRevert?`<button class="apply" data-keepw="${ei}">Keep last</button>`:''}</div>`;}
@@ -3801,6 +3843,8 @@ function logExercise(s,e,ei,mode){
     // A note you left last time on this lift — shown so a lower-than-expected weight has its reason next to it
     if(sg.lp&&sg.lp.note)sugg+=`<div class="sugg match" style="color:var(--ink-2)"><span>📝 <span class="dim">${relDay(sg.lp.date)}:</span> ${esc(sg.lp.note)}</span></div>`;
   }
+  // A suggested swap for a lift that has stopped improving — offered, never done for you (night review)
+  if(mode==='active'&&e.offer&&EX[e.offer.to])sugg+=`<div class="sugg match offer"><span>Hasn’t improved in a few weeks — try <b>${esc(EX[e.offer.to].name)}</b> instead?</span><span style="display:flex;gap:6px;flex-shrink:0"><button class="apply" data-offerswap="${ei}">Swap</button><button class="apply ghost" data-offerkeep="${ei}">Keep</button></span></div>`;
   const noteLine=e.note?`<button class="sugg match" data-note="${ei}" style="width:calc(100% - 24px);text-align:left;color:var(--ink-2)"><span>📝 ${esc(e.note)}</span></button>`:'';
   // Headers say exactly what to type: "Lb ea" = weight of ONE dumbbell / one stack; "/ side" = one side's reps
   const whdr=(U()==='kg'?'Kg':'Lb')+(holds===2?' ea':''),rhdr=(D.TIME_METRIC.has(e.id)?'Sec':'Reps')+(sides===2?' / side':'');
@@ -4611,7 +4655,8 @@ function addExerciseToCur(id){
   if(todayScreen!=='edit'&&!state.active){S.setActive(newSession([]));}
   const t=cur();
   if(t.exercises.some(x=>x.id===id)){toast('Already added');return;}
-  const pf=state.settings.profile||{},inst=B.seedExercise(id,state.sessions,{excludeId:t.id,unit:U(),goal:pf.goal,setStyle:pf.sets,push:pf.push,gym:pf.gym});
+  const pf=state.settings.profile||{},inst=B.seedExercise(id,state.sessions,{excludeId:t.id,unit:U(),goal:pf.goal,setStyle:pf.sets,push:pushMode(),gym:pf.gym});
+  if(t.offers)t.offers=t.offers.filter(o=>o.exId!==id);   // an offered add, now added
   const pos=slotFor(t,id);t.exercises.splice(pos,0,inst);
   persistCur();if(todayScreen!=='edit')todayScreen='active';
   if(currentTab!=='today')setTab('today');else render();
@@ -4727,7 +4772,7 @@ function commitFinish(s,endedAt,estimated){
   closeSheet();stopRest();stopSw();stopElapsed();
   if(endedAt)s.endedAt=endedAt;else delete s.endedAt;
   if(estimated&&endedAt)s.endEstimated=true;else delete s.endEstimated;
-  cleanSets(s);
+  cleanSets(s);delete s.offers;
   if(!s.exercises.length){toast('Log at least one set first');return;}
   const sm=workoutSummary(s);
   s.completed=true;s.updatedAt=Date.now();
@@ -5078,7 +5123,18 @@ function bindLog(root){
     const em=e.target.closest('[data-exmenu]');if(em){openExMenu(+em.dataset.exmenu);return;}
     const es=e.target.closest('[data-exsetup]');if(es){openExSetup(+es.dataset.exsetup);return;}
     const kw=e.target.closest('[data-keepw]');if(kw){const ei=+kw.dataset.keepw;const ex=t.exercises[ei];const lp=P.lastPerf(state.sessions,ex.id,{beforeTs:t.date,excludeId:t.id,mode:P.trackOf(ex)});
-      if(lp)ex.sets=lp.sets.map(s=>({w:s.w,r:s.r,done:false}));persistCur();render();toast('Using last time’s weights');return;}
+      if(lp){const done=ex.sets.filter(s=>s.done);ex.sets=done.concat(lp.sets.slice(done.length).map(s=>({w:s.w,r:s.r,done:false})));}   // ticked sets stay as done
+      delete ex.tried;persistCur();render();toast('Back to last time’s numbers');return;}
+    // "Try 140 lb": apply the suggested increase to the sets not yet ticked (one tap; "Back to last time" undoes)
+    const tw=e.target.closest('[data-tryw]');if(tw){const ei=+tw.dataset.tryw,ex=t.exercises[ei];if(!ex)return;const pf=state.settings.profile||{};
+      const sg=P.suggestion(state.sessions,ex.id,{unit:U(),activeDate:t.date,activeId:t.id,mode:P.trackOf(ex),push:'offer',rr:pf.goal?P.repRange(EX[ex.id],pf.goal):undefined});
+      if(sg.kind!=='try'||!sg.tryNext)return;
+      ex.sets.forEach((st,i)=>{const n=sg.tryNext[Math.min(i,sg.tryNext.length-1)];if(!st.done&&!st.warm&&n){st.w=n.w;st.r=n.r;}});
+      ex.tried=true;persistCur();render();toast('Going for '+sg.tryLabel+' — tap “Back to last time” to undo');return;}
+    const osw=e.target.closest('[data-offerswap]');if(osw){const ei=+osw.dataset.offerswap,ex=t.exercises[ei];if(!ex||!ex.offer)return;const to=ex.offer.to;delete ex.offer;doReplace(ei,to);return;}
+    const okp=e.target.closest('[data-offerkeep]');if(okp){const ex=t.exercises[+okp.dataset.offerkeep];if(!ex)return;markSeen('keep:'+ex.id+':'+offerWeek());delete ex.offer;persistCur();render();toast('Keeping it — won’t suggest a swap for 3 weeks');return;}
+    const oad=e.target.closest('[data-offeradd]');if(oad){addExerciseToCur(oad.dataset.offeradd);return;}
+    const osk=e.target.closest('[data-offerskip]');if(osk){const id=osk.dataset.offerskip;markSeen('skipadd:'+id+':'+offerWeek());t.offers=(t.offers||[]).filter(o=>o.exId!==id);persistCur();render();return;}
     const mc=e.target.closest('[data-mode]');if(mc){openModePicker(+mc.dataset.mode);return;}
     // "⇆ Each side": flip one-side-at-a-time. Stored only when it differs from the lift's default, so a
     // lift on its default has no flag (and stays on its existing history track).

@@ -32,6 +32,9 @@ const setsOf=s=>P.sessionSets(s);
 // A "Volume" stat label, tappable for a one-line explainer (the number itself, e.g. "12,480 lb", has
 // no context otherwise — see ROADMAP-v2 #1).
 function volLabel(label){return `<span data-vol-info style="cursor:pointer">${label||'Volume'} <span class="dim" style="font-weight:400">ⓘ</span></span>`;}
+// How the app suggests increases (night review): 'offer' = rows repeat last time + a one-tap "Try";
+// 'quiet' (profile "Just record") = no nudges at all. An increase is never pre-filled any more.
+const pushMode=()=>(state.settings.profile||{}).push==='quiet'?'quiet':'offer';
 const completedSessions=()=>state.sessions.filter(s=>s.completed!==false&&s.exercises.length&&s.kind!=='cardio');   // strength only — feeds every lifting stat
 const completedAny=()=>state.sessions.filter(s=>s.completed!==false&&(s.exercises.length||s.kind==='cardio'));   // strength ∪ cardio — for History, "this week" count, streak
 const ICON_BACK='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>';

@@ -93,7 +93,8 @@ test('picking more muscles than fit reports the ones left out',()=>{
 
 /* ---- strength goal (audit #13) ---- */
 test('the strength goal narrows compounds only — isolation and timed work keep their range',()=>{
-  assert.deepEqual(P.repRange(EX['barbell-bench-press'],'strength'),[5,5]);
+  // v0.70: a 2-rep window (5-7), not a single number: the owner found a weight bump almost every session too aggressive
+  assert.deepEqual(P.repRange(EX['barbell-bench-press'],'strength'),[5,7]);
   const lr=EX['lateral-raise'];assert.deepEqual(P.repRange(lr,'strength'),lr.rr,'a lateral raise keeps its range');
   const pk=EX['plank'];assert.deepEqual(P.repRange(pk,'strength'),pk.rr,'a plank keeps its hold range');
 });

@@ -64,6 +64,8 @@ function sessionDuration(s){const a=+s.date,b=+s.endedAt;if(!(b>a&&isFinite(a)&&
 // Checked sets with a timestamp, as {exId, group, at}, oldest first — the raw material for time-per-
 // muscle and rest-taken analytics (T3). Sets with no stamp (old data, or unchecked) are omitted.
 function setTimeline(s){const out=[];(s.exercises||[]).forEach(e=>{const g=EX[e.id]?EX[e.id].group:null;e.sets.forEach(st=>{if(isFinite(+st.at)&&+st.at>0)out.push({exId:e.id,group:g,at:+st.at});});});return out.sort((a,b)=>a.at-b.at);}
+// After this many days away, the first session back repeats last time (no "Try more" offer).
+const AWAY_DAYS=10;
 // Forgotten-Finish safeguards (T2). The app never ends a workout itself — it notices and asks.
 const STALE_AFTER_MIN=75,      // no checked set for this long while a workout is open → "still training?"
       STALE_CONFIRM_MIN=30,     // at Finish, if the last set was this long ago, offer to log THAT time
@@ -90,7 +92,7 @@ function finalizeSets(exercises){
     // entry, and would otherwise record a false "unassisted" PR). (Full review 4.2)
     const inv=isAssist(e.id),typed=st=>st.w!=null&&String(st.w).trim()!==''&&isFinite(+st.w);
     const sets=e.sets.filter(st=>st.done===true&&(+st.r||0)>0&&(allowBlank||(+st.w||0)>0||(inv&&typed(st)))).map(st=>{const o=Object.assign({},st);delete o.t;o.done=true;return o;});
-    return Object.assign({},e,{sets});
+    const o=Object.assign({},e,{sets});delete o.tried;delete o.offer;return o;   // screen-only flags (the "Try" chip, a swap offer) never reach history
   }).filter(e=>e.sets.length);
 }
 // Sanitize a weight input string: accept a comma as the decimal separator (European keyboards) and
@@ -382,7 +384,9 @@ function repRange(ex,goal){
   const lo=ex?ex.rr[0]:8,hi=ex?ex.rr[1]:12,cap=Math.max(15,hi);   // the cap can't shrink a naturally high-rep move (plank 30–60, carry 20–40) — #17
   // Strength narrows the COMPOUND lifts to the low end. Isolation and timed work keep their range — a
   // lateral raise at "12-12" added load every session, and a wrist roller became 1 rep (builder audit #13).
-  if(goal==='strength')return ex&&ex.type==='compound'&&!(TIME_METRIC&&TIME_METRIC.has(ex.id))?[lo,lo]:[lo,hi];
+  // A 2-rep window (5–7, not "5–5"): a single target added weight almost every session, which the owner
+  // found too aggressive (night review 2026-09-23). Reps climb first, then the weight.
+  if(goal==='strength')return ex&&ex.type==='compound'&&!(TIME_METRIC&&TIME_METRIC.has(ex.id))?[lo,Math.min(hi,lo+2)]:[lo,hi];
   if(goal==='size')return[Math.min(lo+2,cap),Math.min(hi+2,cap)];
   return[lo,hi];
 }
@@ -459,6 +463,16 @@ function suggestion(sessions,exId,opts){
     // the REAL bump can differ from `inc` when the last top was off-grid (after a unit conversion) and
     // got snapped before adding — so report newTop − lastTop, not inc, or the label lies (#11/#29)
     const lastTop=(inverted?Math.min:Math.max)(...lp.sets.map(s=>+s.w||0)),bump=+(n.newTop-lastTop).toFixed(2);   // assist: measured from the hardest (least-assist) set
+    // push:'offer' (the app's default since the night review): the rows keep LAST TIME's numbers and the
+    // increase is a one-tap "Try" — never pre-applied. After 10+ days away there's no offer at all: the
+    // first session back repeats last time.
+    if(opts.push==='offer'){
+      const same=lp.sets.map(s=>({w:+s.w||0,r:+s.r||0}));
+      if(opts.activeDate&&opts.activeDate-lp.date>=AWAY_DAYS*DAY)return{lp,kind:'match',pattern:n.pattern,text:'Welcome back — same as last time',setsStr,next:same,away:true};
+      const tryLabel=inverted?(n.newTop>0?n.newTop+unit+' assist':'no assist'):ramp?(topLbl+' '+n.newTop+unit):n.newTop+unit;
+      const text=inverted?'You hit the top of the range — ready for less assist?':timed?'You hit the top of the range — ready to add a little load?':'You hit the top of the range last time — ready for more?';
+      return{lp,kind:'try',pattern:n.pattern,text,tryLabel,setsStr,next:same,tryNext:n.sets};
+    }
     const text=inverted?(n.newTop>0?`Hit top reps — prefilled ${+(lastTop-n.newTop).toFixed(2)}${unit} less assist`:'Hit top reps with no assist — try an unassisted rep next')
               :ramp?`${n.pattern==='descending'?'Opener':'Top set'} hit the range — ${topLbl} prefilled at ${n.newTop}${unit}, the rest shifted up`
                    :`Hit top reps last time — prefilled +${bump}${unit}`;
@@ -520,5 +534,5 @@ function calcStreak(sessions,now){
   return n;
 }
 
-IL.prog={recordChoices,pickRecord,liftSessions,DAY,startOfDay,e1rm,isWorking,setLoad,sbw,sessionVolume,sessionSets,sessionDuration,MAX_SESSION_MIN,setTimeline,lastSetAt,staleness,STALE_AFTER_MIN,STALE_CONFIRM_MIN,END_PAD_MIN,finalizeSets,parseWeightInput,fmtVol,modeOf,real,lastPerf,lastModeFor,exerciseSeries,setScore,scoreMetric,liftKind,scoreSet,beatsScore,bestSetBefore,sessionPR,platesPerSide,sidesOf,holdsOf,sideMult,trackOf,sideDefault,lastSideFor,lastTrackFor,bestE1rmBefore,setPattern,fmtPerf,repRange,nextSets,deloadSets,suggestion,unitIncrement,setWeightSteps,convertWeight,convertSessions,calcStreak,weekIndex,weekStart};
+IL.prog={AWAY_DAYS,recordChoices,pickRecord,liftSessions,DAY,startOfDay,e1rm,isWorking,setLoad,sbw,sessionVolume,sessionSets,sessionDuration,MAX_SESSION_MIN,setTimeline,lastSetAt,staleness,STALE_AFTER_MIN,STALE_CONFIRM_MIN,END_PAD_MIN,finalizeSets,parseWeightInput,fmtVol,modeOf,real,lastPerf,lastModeFor,exerciseSeries,setScore,scoreMetric,liftKind,scoreSet,beatsScore,bestSetBefore,sessionPR,platesPerSide,sidesOf,holdsOf,sideMult,trackOf,sideDefault,lastSideFor,lastTrackFor,bestE1rmBefore,setPattern,fmtPerf,repRange,nextSets,deloadSets,suggestion,unitIncrement,setWeightSteps,convertWeight,convertSessions,calcStreak,weekIndex,weekStart};
 if(typeof module!=='undefined')module.exports=IL.prog;

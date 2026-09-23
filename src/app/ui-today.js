@@ -215,7 +215,7 @@ function recentTemplates(){
 const SCHEMA=1;
 // opts.budget: a FRESHLY built workout is trimmed to the session-length budget (~60 / 45 / 75 min). A
 // continued plan, a repeat or a routine keeps the user's own set counts.
-function newSession(exIds,deload,volumeBump,opts){const pf=state.settings.profile||{},goal=pf.goal,setStyle=pf.sets,push=pf.push,gym=pf.gym;
+function newSession(exIds,deload,volumeBump,opts){const pf=state.settings.profile||{},goal=pf.goal,setStyle=pf.sets,push=pushMode(),gym=pf.gym;
   const s={id:S.uid(),schema:SCHEMA,date:Date.now(),updatedAt:Date.now(),completed:false,exercises:(exIds||[]).map(id=>B.seedExercise(id,state.sessions,{unit:U(),deload,extraSet:volumeBump&&volumeBump.indexOf(id)>=0,goal,setStyle,push,gym}))};
   if(opts&&opts.budget)B.fitSessionBudget(s.exercises,pf);
   if(deload)s.deload=true;return s;}
@@ -225,7 +225,7 @@ function newSession(exIds,deload,volumeBump,opts){const pf=state.settings.profil
 function startSession(spec){
   spec=spec||{};
   const begin=()=>{
-    S.setActive(newSession(spec.ids||[],!!spec.deload,spec.volumeBump,{budget:!!spec.budget}));
+    S.setActive(attachOffers(newSession(spec.ids||[],!!spec.deload,spec.volumeBump,{budget:!!spec.budget}),spec.offers));
     resetDraft();
     todayScreen='active';render();
     if(spec.msg)toast(spec.msg);
@@ -368,7 +368,7 @@ function openReplace(ei){
 function doReplace(ei,id){
   const t=cur(),old=t&&t.exercises[ei];if(!old||!EX[id])return;const logged=old.sets.filter(s=>s.done).length;
   const go=()=>{const pf=state.settings.profile||{},c=liveSession(t),o=liveExercise(t,old,ei);if(!c||!o){closeSheet();staleToast();return;}
-    const inst=B.seedExercise(id,state.sessions,{excludeId:c.id,unit:U(),goal:pf.goal,setStyle:pf.sets,push:pf.push,gym:pf.gym});
+    const inst=B.seedExercise(id,state.sessions,{excludeId:c.id,unit:U(),goal:pf.goal,setStyle:pf.sets,push:pushMode(),gym:pf.gym});
     ei=c.exercises.indexOf(o);c.exercises.splice(ei,1,inst);persistCur();closeSheet();render();
     toast((old.name||EX[old.id].name)+' → '+EX[id].name,{label:'Undo',fn:()=>{const c=cur();if(c&&c.exercises[ei]===inst){c.exercises.splice(ei,1,old);persistCur();render();}}});};
   if(logged)showConfirm('Replace '+(old.name||EX[old.id].name)+'?','You’ve logged '+logged+' set'+(logged!==1?'s':'')+' on it — they’ll be removed from this workout.','Replace',go);else go();
@@ -396,22 +396,31 @@ function openExSetup(ei){
     if(pick)o[u]=pick;else delete o[u];if(Object.keys(o).length)steps[e.id]=o;else delete steps[e.id];state.settings.steps=steps;
     S.saveSettingsCloud();closeSheet();render();toast(pick?'Saved — suggestions now step by '+pick+' '+u:'Saved');});
 }
+/* Offers from the builder (night review): a stalled lift's swap sits on that lift's card; a gap-filling
+   exercise is a card above "Add exercise". Tapping "Keep" / "No thanks" is remembered for 3 weeks. */
+const offerWeek=()=>P.weekIndex(Date.now());
+function offerDeclined(kind,id){const w=offerWeek();return [0,1,2].some(d=>seenFlag(kind+':'+id+':'+(w-d)));}
+function attachOffers(s,offers){
+  (offers||[]).forEach(o=>{
+    if(o.type==='swap'){if(offerDeclined('keep',o.from))return;const e=s.exercises.find(x=>x.id===o.from);if(e)e.offer={to:o.to,why:o.why};}
+    else if(o.type==='add'&&!offerDeclined('skipadd',o.exId)&&!s.exercises.some(x=>x.id===o.exId))(s.offers=s.offers||[]).push({exId:o.exId,why:o.why});
+  });
+  return s;
+}
+function offerAddsHTML(s){
+  return (s.offers||[]).filter(o=>EX[o.exId]&&!s.exercises.some(x=>x.id===o.exId)).map(o=>`<div class="sugg match offer" style="margin:0 0 10px"><span>Add <b>${esc(EX[o.exId].name)}</b>? It ${esc(o.why)}.</span><span style="display:flex;gap:6px;flex-shrink:0"><button class="apply" data-offeradd="${o.exId}">Add</button><button class="apply ghost" data-offerskip="${o.exId}">No thanks</button></span></div>`).join('');
+}
 function buildAndStart(fresh){
   const dl=draft.deload;
   // Coach's findings feed the builder (Phase C). The engine ignores them on a deload (recovery isn't
   // the time to add volume/coverage), so we always pass them and let planWorkout decide.
   const hints=A.buildHints(state.sessions,Date.now(),bw(),state.settings.profile);
-  const p=B.planWorkout([...draft.groups],state.sessions,null,{fresh,hints,deload:dl,profile:state.settings.profile});
+  const p=B.planWorkout([...draft.groups],state.sessions,null,{fresh,hints,deload:dl,profile:state.settings.profile,offerOnly:true});   // same lifts = same lifts; changes are offers
   let msg='Workout built — adjust anything';
   if(p.deload)msg=p.mode==='continue'?'Deload — same lifts as last time, lighter loads, focus on the stretch':'Deload built — lighter loads, focus on the stretch';
   else if(p.mode==='continue'){
-    const gapAdd=(p.reactions||[]).find(r=>r.type==='gap-add');
     if(p.lapsed)msg=`Welcome back — weights carried from your session ${relDay(p.plan.date).toLowerCase()}`;
-    else if(p.rotation&&p.rotation.anchor)msg=`Suggested swap: ${EX[p.rotation.from].name} → ${EX[p.rotation.to].name} — it stalled through a deload`;
-    else if(p.rotation)msg=`Suggested swap: ${EX[p.rotation.from].name} → ${EX[p.rotation.to].name} (it stalled) — the rest carried from last time`;
-    else if(gapAdd)msg=`Weights from last time · added ${EX[gapAdd.exId].name} to round it out`;
-    else if(p.volumeBump&&p.volumeBump.length){const vr=(p.reactions||[]).find(r=>r.type==='volume');msg='Weights from last time · +1 set on '+((vr&&EX[vr.exId]&&EX[vr.exId].name)||(vr&&vr.group)||'a lift where volume was low');}
-    else msg='Weights carried from your last session — adjust anything';
+    else msg='Same lifts as last time — adjust anything'+((p.offers||[]).length?' · one suggestion inside':'');
   }
   // Settings win on a continued plan: say what was swapped/left out and why (it outranks the messages above)
   const prof=(p.reactions||[]).filter(r=>r.type==='profile-swap'||r.type==='avoid-swap'||r.type==='profile-drop');
@@ -420,7 +429,7 @@ function buildAndStart(fresh){
   if(p.skipped&&p.skipped.length){const pf=state.settings.profile;
     const noFit=p.skipped.filter(g=>!IL.data.EXERCISES.some(e=>e.group===g&&B.profileAllows(e,g,pf,state.sessions)));
     msg+=noFit.length?' · nothing fits your settings for '+noFit.join(' & '):' · no room for '+p.skipped.join(' & ')+' — pick fewer muscles';}
-  startSession({ids:p.ids,msg,deload:p.deload,volumeBump:p.volumeBump,source:'build',budget:p.mode==='fresh'});
+  startSession({ids:p.ids,msg,deload:p.deload,volumeBump:p.volumeBump,offers:p.offers,source:'build',budget:p.mode==='fresh'});
 }
 // Reaction 1: a one-tap nudge toward the muscles the coach says are light or unbalanced this week.
 function coachNudge(){
@@ -465,7 +474,7 @@ function editorView(s,mode){
       ${s.exercises.length>=3?`<button class="linkbtn" id="btnReorder">↕ Auto-order</button>`:''}
       ${s.exercises.length?`<button class="linkbtn" id="btnSaveRoutine">★ Save as routine</button>`:''}
     </div>
-    ${edit?'':topSuggestionHTML()}
+    ${edit?'':offerAddsHTML(s)}${edit?'':topSuggestionHTML()}
     <button class="btn ghost block" id="btnAddEx" style="margin-top:4px">＋ Add exercise</button>
     <div style="height:14px"></div>
     ${edit?`<button class="btn primary block" id="btnSaveEdit">Save changes</button>`
@@ -508,8 +517,13 @@ function logExercise(s,e,ei,mode){
     sugg=`<div class="sugg match" style="color:var(--good);background:var(--good-soft)"><span>🌿 Recovery set — easy load, full range</span></div>`;
   }else if(mode==='active'){
     const pf=state.settings.profile||{},sgRr=pf.goal?P.repRange(EX[e.id],pf.goal):undefined;
-    const sg=P.suggestion(state.sessions,e.id,{unit:U(),activeDate:s.date,activeId:s.id,mode:etrack,push:pf.push,rr:sgRr});
-    if(sg.lp){const w=sg.kind==='weight';
+    const sg=P.suggestion(state.sessions,e.id,{unit:U(),activeDate:s.date,activeId:s.id,mode:etrack,push:pushMode(),rr:sgRr});
+    const open=e.sets.some(st=>!st.done);
+    if(sg.kind==='try'){
+      // One-tap "Try": the rows hold last time's numbers; the increase is offered, never pre-applied.
+      sugg=e.tried?`<div class="sugg"><span>💪 Going for ${esc(sg.tryLabel)} · <span class="lastp">last: ${esc(sg.setsStr)}</span></span>${open?`<button class="apply" data-keepw="${ei}">Back to last time</button>`:''}</div>`
+        :`<div class="sugg match"><span>${esc(sg.text)} · <span class="lastp">last: ${esc(sg.setsStr)}</span></span>${open?`<button class="apply" data-tryw="${ei}">Try ${esc(sg.tryLabel)}</button>`:''}</div>`;}
+    else if(sg.lp){const w=sg.kind==='weight';
       // The prescription is already in the set rows; offer a one-tap revert until a set is done
       const canRevert=w&&!e.sets.some(st=>st.done);
       sugg=`<div class="sugg ${w?'':'match'}"><span>${w?'💪 ':''}${esc(sg.text)} · <span class="lastp">last: ${esc(sg.setsStr)}</span></span>${canRevert?`<button class="apply" data-keepw="${ei}">Keep last</button>`:''}</div>`;}
@@ -517,6 +531,8 @@ function logExercise(s,e,ei,mode){
     // A note you left last time on this lift — shown so a lower-than-expected weight has its reason next to it
     if(sg.lp&&sg.lp.note)sugg+=`<div class="sugg match" style="color:var(--ink-2)"><span>📝 <span class="dim">${relDay(sg.lp.date)}:</span> ${esc(sg.lp.note)}</span></div>`;
   }
+  // A suggested swap for a lift that has stopped improving — offered, never done for you (night review)
+  if(mode==='active'&&e.offer&&EX[e.offer.to])sugg+=`<div class="sugg match offer"><span>Hasn’t improved in a few weeks — try <b>${esc(EX[e.offer.to].name)}</b> instead?</span><span style="display:flex;gap:6px;flex-shrink:0"><button class="apply" data-offerswap="${ei}">Swap</button><button class="apply ghost" data-offerkeep="${ei}">Keep</button></span></div>`;
   const noteLine=e.note?`<button class="sugg match" data-note="${ei}" style="width:calc(100% - 24px);text-align:left;color:var(--ink-2)"><span>📝 ${esc(e.note)}</span></button>`:'';
   // Headers say exactly what to type: "Lb ea" = weight of ONE dumbbell / one stack; "/ side" = one side's reps
   const whdr=(U()==='kg'?'Kg':'Lb')+(holds===2?' ea':''),rhdr=(D.TIME_METRIC.has(e.id)?'Sec':'Reps')+(sides===2?' / side':'');
