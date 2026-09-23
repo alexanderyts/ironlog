@@ -1,0 +1,2 @@
+# Shell hooks must keep LF line endings (a CRLF "#!/bin/sh" breaks the pre-commit check on Windows)
+.githooks/* text eol=lf
