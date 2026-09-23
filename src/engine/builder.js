@@ -526,6 +526,15 @@ function fitSessionBudget(exs,profile){
     if(i<0)break;const d=exs.splice(i,1)[0];total-=d.sets.length*setCost(d);}
   return exs;
 }
+// A brand-new lifter's first build (v0.75): 3 working sets each and at most 4 exercises — enough to
+// learn the flow and find starting weights without a 60-minute first day. Drops from the end, never a
+// muscle's only exercise (you picked that muscle).
+function fitFirstSession(exs){
+  exs.forEach(e=>{let n=0;e.sets=e.sets.filter(s=>s.warm||++n<=3);});
+  const grp=e=>EX[e.id]?EX[e.id].group:e.id;
+  while(exs.length>4){let i=exs.length-1;while(i>=0&&exs.filter(x=>grp(x)===grp(exs[i])).length<2)i--;if(i<0)break;exs.splice(i,1);}
+  return exs;
+}
 // What to train for these groups today. Returns {ids, mode:'continue'|'fresh', plan, rotation, streak,
 // reactions, volumeBump}. opts.fresh forces a fresh build; opts.hints (from analysis.buildHints) lets
 // the builder REACT to Coach's findings — always additively/by scoring, never overriding continuity.
@@ -615,6 +624,6 @@ function planWorkout(groups,sessions,seed,opts){
   return{ids:fin,mode:"continue",plan,rotation,streak:isFinite(streak)?streak:0,reactions,volumeBump,offers,deload:false,skipped:skippedOf(fin)};
 }
 
-IL.builder={isStalled,prescribedSets,seedExercise,lastSessionIds,perfPriority,orderByFatigue,isHeavyAxial,spinalUnits,capHeavyAxial,pickForGroup,buildRecommendation,complementSuggestions,fitSessionBudget,SESSION_SETS,SMITH_OK,HARD_BW,
+IL.builder={fitFirstSession,isStalled,prescribedSets,seedExercise,lastSessionIds,perfPriority,orderByFatigue,isHeavyAxial,spinalUnits,capHeavyAxial,pickForGroup,buildRecommendation,complementSuggestions,fitSessionBudget,SESSION_SETS,SMITH_OK,HARD_BW,
   CONTINUE_DAYS,STALL_MIN_DAYS,ANCHOR_STALL_WEEKS,ANCHOR_DELOAD_DAYS,MAX_SESSION_EX,MAX_SETS_PER_EX,findPlan,exerciseTenure,exerciseStreak,isStalled,recentDeload,planAnchor,replacementFor,anchorVariation,fillsGap,gapFillExercise,profileAllows,planWorkout};
 if(typeof module!=='undefined')module.exports=IL.builder;

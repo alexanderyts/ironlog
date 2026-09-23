@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-jAlqcrJf8pbthXsrjNzC+1UTt0SC25ueBbMdi5Vx3jo=' 'sha256-WPBob/luB2k1aalTWXpi6zk3SrIbj8GlZV7AlFdG7oA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-um7sHgMJS00iRYQ63wREi70KRnOgIlqfkGttHtORaGM=' 'sha256-WPBob/luB2k1aalTWXpi6zk3SrIbj8GlZV7AlFdG7oA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Ironlog</title>
@@ -456,8 +456,8 @@ html.kb-open .tabbar{display:none}
 </div>
 
 <script>
-/* Ironlog v0.74.0 · site build */
-var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.74.0",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
+/* Ironlog v0.75.0 · site build */
+var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.75.0",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
 
 /* ===== src/data/exercises.js ===== */
 (function(){'use strict';
@@ -1911,6 +1911,15 @@ function fitSessionBudget(exs,profile){
     if(i<0)break;const d=exs.splice(i,1)[0];total-=d.sets.length*setCost(d);}
   return exs;
 }
+// A brand-new lifter's first build (v0.75): 3 working sets each and at most 4 exercises — enough to
+// learn the flow and find starting weights without a 60-minute first day. Drops from the end, never a
+// muscle's only exercise (you picked that muscle).
+function fitFirstSession(exs){
+  exs.forEach(e=>{let n=0;e.sets=e.sets.filter(s=>s.warm||++n<=3);});
+  const grp=e=>EX[e.id]?EX[e.id].group:e.id;
+  while(exs.length>4){let i=exs.length-1;while(i>=0&&exs.filter(x=>grp(x)===grp(exs[i])).length<2)i--;if(i<0)break;exs.splice(i,1);}
+  return exs;
+}
 // What to train for these groups today. Returns {ids, mode:'continue'|'fresh', plan, rotation, streak,
 // reactions, volumeBump}. opts.fresh forces a fresh build; opts.hints (from analysis.buildHints) lets
 // the builder REACT to Coach's findings — always additively/by scoring, never overriding continuity.
@@ -2000,7 +2009,7 @@ function planWorkout(groups,sessions,seed,opts){
   return{ids:fin,mode:"continue",plan,rotation,streak:isFinite(streak)?streak:0,reactions,volumeBump,offers,deload:false,skipped:skippedOf(fin)};
 }
 
-IL.builder={isStalled,prescribedSets,seedExercise,lastSessionIds,perfPriority,orderByFatigue,isHeavyAxial,spinalUnits,capHeavyAxial,pickForGroup,buildRecommendation,complementSuggestions,fitSessionBudget,SESSION_SETS,SMITH_OK,HARD_BW,
+IL.builder={fitFirstSession,isStalled,prescribedSets,seedExercise,lastSessionIds,perfPriority,orderByFatigue,isHeavyAxial,spinalUnits,capHeavyAxial,pickForGroup,buildRecommendation,complementSuggestions,fitSessionBudget,SESSION_SETS,SMITH_OK,HARD_BW,
   CONTINUE_DAYS,STALL_MIN_DAYS,ANCHOR_STALL_WEEKS,ANCHOR_DELOAD_DAYS,MAX_SESSION_EX,MAX_SETS_PER_EX,findPlan,exerciseTenure,exerciseStreak,isStalled,recentDeload,planAnchor,replacementFor,anchorVariation,fillsGap,gapFillExercise,profileAllows,planWorkout};
 if(typeof module!=='undefined')module.exports=IL.builder;
 
@@ -2605,7 +2614,8 @@ if(typeof require==='function'&&!IL.data)require('../data/exercises.js');
 const MODES=(IL.data&&IL.data.MODES)||{},EX=(IL.data&&IL.data.EX)||{},GROUPS=(IL.data&&IL.data.GROUPS)||[];   // to validate imported modality / profile ids
 // Training profile (v6 P2 reads it; P1 only stores it). Each field is optional; a valid non-'auto'
 // value is kept, anything else is dropped (so absent = auto = Balanced = today's behaviour).
-const PROFILE_ENUM={goal:['size','strength','general'],gym:['full','machine','home'],length:['short','standard','long'],sets:['straight','ramp'],push:['guide','quiet']};
+const PROFILE_ENUM={goal:['size','strength','general'],gym:['full','machine','home'],length:['short','standard','long'],sets:['straight','ramp'],push:['guide','quiet'],
+  place:['pf','la','anytime','crunch','ymca','24hr','big','machines','apt','home']};   // where you train (v0.75 gym picker) — a label; `gym` is what the builder reads
 // Cardio is its own session KIND (kind:'cardio', exercises:[]). These enums bound the two picked fields;
 // distance is optional and carries the unit it was logged in (so a later lb↔kg switch can't reinterpret it).
 const CARDIO_ENUM={type:['treadmill','elliptical','stairmaster','outdoor','indoor'],intensity:['easy','moderate','hard']};
@@ -2719,6 +2729,7 @@ function cleanSettings(o){if(!o||typeof o!=='object')return null;
   s.rest={auto:r.auto!==false,sound:r.sound!==false,notify:!!r.notify,
     compound:Math.max(0,Math.min(3600,sNum(r.compound)||120)),isolation:Math.max(0,Math.min(3600,sNum(r.isolation)||75))};
   const prof=cleanProfile(o.profile);if(prof)s.profile=prof;
+  if(typeof o.name==='string'&&o.name.trim())s.name=sStr(o.name.trim(),24);   // optional first name for the greeting (v0.75)
   const seen=cleanSeen(o.seen);if(seen)s.seen=seen;
   // remembered empty-bar weight per unit for the plate calculator (D-4): `bar` = barbell, `smithBar` = Smith
   const cleanBar=v=>{if(!v||typeof v!=='object')return null;const o={};if('lb'in v){const n=sNum(v.lb);if(n>=0)o.lb=Math.min(200,n);}if('kg'in v){const n=sNum(v.kg);if(n>=0)o.kg=Math.min(100,n);}return Object.keys(o).length?o:null;};   // preserve an explicit 0 (counterbalanced Smith)
@@ -2793,7 +2804,20 @@ function sessionSummaryCsv(sessions,unit,bw){
   return rows.map(r=>r.join(',')).join('\r\n')+'\r\n';
 }
 
-IL.sync={unionSets,hasTicked,MAX_SESSIONS,mergeSessions,applyTombstones,pruneTombstones,cleanDeleted,exportPayload,parseImport,resolveActive,cleanSession,cleanRoutine,cleanSettings,cleanProfile,cleanCardio,sessionSummaryCsv,PROFILE_ENUM,CARDIO_ENUM,TOMB_KEEP};
+// A weekly calendar reminder (v0.75): one repeating event on the chosen weekdays (0=Sun..6=Sat) at a
+// local time, as an .ics file the phone's Calendar imports. Floating local time (no time zone), so
+// "6 pm" stays 6 pm wherever you are. Starts on the next matching day that hasn't passed yet.
+function reminderIcs(days,hh,mm,now){
+  const BY=['SU','MO','TU','WE','TH','FR','SA'];days=[...new Set(days)].filter(d=>d>=0&&d<=6).sort();if(!days.length)return '';
+  const p2=n=>String(n).padStart(2,'0'),stamp=d=>d.getFullYear()+p2(d.getMonth()+1)+p2(d.getDate());
+  let d=new Date(now);d.setHours(hh,mm,0,0);while(days.indexOf(d.getDay())<0||d.getTime()<=now){d.setDate(d.getDate()+1);d.setHours(hh,mm,0,0);}
+  const u=new Date(now),utc=u.getUTCFullYear()+p2(u.getUTCMonth()+1)+p2(u.getUTCDate())+'T'+p2(u.getUTCHours())+p2(u.getUTCMinutes())+p2(u.getUTCSeconds())+'Z';
+  return ['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Ironlog//Reminder//EN','CALSCALE:GREGORIAN','BEGIN:VEVENT',
+    'UID:ironlog-reminder-'+now+'@ironlog','DTSTAMP:'+utc,'DTSTART:'+stamp(d)+'T'+p2(hh)+p2(mm)+'00','DURATION:PT1H',
+    'RRULE:FREQ=WEEKLY;BYDAY='+days.map(x=>BY[x]).join(','),'SUMMARY:Workout','DESCRIPTION:Open Ironlog and tap Start a workout.',
+    'BEGIN:VALARM','TRIGGER:PT0M','ACTION:DISPLAY','DESCRIPTION:Workout time','END:VALARM','END:VEVENT','END:VCALENDAR',''].join('\r\n');
+}
+IL.sync={reminderIcs,unionSets,hasTicked,MAX_SESSIONS,mergeSessions,applyTombstones,pruneTombstones,cleanDeleted,exportPayload,parseImport,resolveActive,cleanSession,cleanRoutine,cleanSettings,cleanProfile,cleanCardio,sessionSummaryCsv,PROFILE_ENUM,CARDIO_ENUM,TOMB_KEEP};
 if(typeof module!=='undefined')module.exports=IL.sync;
 
 })();
@@ -3510,12 +3534,12 @@ function homeView(){
   <div class="section">
     <div style="padding:6px 2px 0">
       <div class="eyebrow">${new Date().toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric'})}</div>
-      <h2 style="font-size:27px;margin-top:5px">${greet}.</h2>
+      <h2 style="font-size:27px;margin-top:5px">${greet}${state.settings.name?', '+esc(state.settings.name):''}.</h2>
     </div>
-    ${profileIntroCard()}
+    ${gymPickCard()}
     ${state.active?resumeCard():''}
     ${backupNudge()}
-    <div class="dim" id="homeSummary" style="font-size:13.5px;margin:10px 2px 16px">${wkAny} workout${wkAny!==1?'s':''} this week${streak?` · ${streak}-week streak`:''}</div>   <!-- one line: the full tiles live on Progress (review 5.6) -->
+    <div class="dim" id="homeSummary" style="font-size:13.5px;margin:10px 2px 16px">${homeSummary(now,wkAny,streak,last)}</div>   <!-- one line: the full tiles live on Progress (review 5.6) -->
     ${state.active?'':startBlock()}
     ${state.active?'':cardioBlock()}
     ${last?`<div class="eyebrow" style="margin:26px 2px 10px">Last session</div>${sessCard(last)}`:emptyHome()}
@@ -3523,6 +3547,17 @@ function homeView(){
     <button class="btn ghost block" data-action="goLibrary" style="justify-content:space-between">
       <span>Browse exercise library</span><span class="dim mono">${EXERCISES.length} exercises ›</span></button>
   </div>`;
+}
+// One line under the greeting (v0.75). Trained this week → the count. Not yet → last week's recap (a
+// fresh week shouldn't open on "0 workouts"). Nothing last week either → how long since the last one.
+function homeSummary(now,wkAny,streak,last){
+  const sk=streak?` · ${streak}-week streak`:'';
+  if(wkAny||!last)return `${wkAny} workout${wkAny!==1?'s':''} this week${sk}`;
+  const ws=P.weekStart(now),prev=completedAny().filter(s=>s.date>=ws-7*86400000&&s.date<ws);
+  if(prev.length){const sets=prev.reduce((a,s)=>a+(s.kind==='cardio'?0:setsOf(s)),0);
+    return `Last week: ${prev.length} workout${prev.length!==1?'s':''}${sets?` · ${sets} sets`:''}${sk}`;}
+  const d=Math.round((startOfDay(now)-startOfDay(last.date))/DAY);
+  return `Last workout ${d<=1?'yesterday':d+' days ago'} — new week, fresh start`;
 }
 // "Your lifts live only on this phone" (batch 1): after 3 workouts with no cloud backup, once per 20
 // workouts. Export always works; Dropbox is offered where this build has it.
@@ -3635,13 +3670,45 @@ function startCardio(){
   const s={id:S.uid(),schema:SCHEMA,date:Date.now(),updatedAt:Date.now(),completed:false,kind:'cardio',exercises:[],cardio};
   closeSheet();S.setActive(s);todayScreen='active';render();
 }
-// One-time card introducing the optional training profile (P1). Dismissed by either button (synced).
-function profileIntroCard(){
-  if(seenFlag('profileIntro'))return '';
-  return `<div class="card" id="profileIntro" style="margin:16px 0 0;padding:16px;border:1px solid color-mix(in srgb,var(--accent) 45%,transparent)">
-    <div style="font-weight:700;font-size:15px">New: a training profile</div>
-    <div class="dim" style="font-size:13px;line-height:1.5;margin-top:5px">Tell Ironlog your goal, the kind of gym you use, days per week and anything you're protecting, and it builds around that. Skip it and you get the balanced default — the same as today.</div>
-    <div style="display:flex;gap:9px;margin-top:13px"><button class="btn primary sm" data-action="profileGo">Take me there</button><button class="btn ghost sm" data-action="profileSkip">I'm good</button></div></div>`;
+// "Where do you train?" (v0.75) — one tap on Home instead of a settings form. A gym's name is a
+// shortcut onto the builder's three gym types; chains vary by branch, so it's a starting guess the
+// app corrects from what you skip (see barbellAskCard), never a promise about your branch.
+const GYM_PLACES=[
+  {id:'pf',label:'Planet Fitness',gym:'machine'},{id:'la',label:'LA Fitness',gym:'full'},
+  {id:'anytime',label:'Anytime Fitness',gym:'full'},{id:'crunch',label:'Crunch',gym:'full'},
+  {id:'ymca',label:'YMCA',gym:'full'},{id:'24hr',label:'24 Hour Fitness',gym:'full'},
+  {id:'big',label:'Big gym',gym:'full',other:true},{id:'machines',label:'Mostly machines',gym:'machine',other:true},
+  {id:'apt',label:'Apartment / hotel gym',gym:'home',other:true},{id:'home',label:'Home',gym:'home',other:true}];
+const GYM_NOTE={full:'barbells, racks, machines and dumbbells',machine:'machines, Smith machine and dumbbells — no barbell rack',home:'dumbbells and bodyweight'};
+let gymOther=false;   // "Somewhere else" opens the generic choices
+function gymPickCard(){
+  const pf=state.settings.profile||{};
+  if(pf.gym||seenFlag('gymAsk')||state.active)return '';
+  const chip=g=>`<button class="chip" data-place="${g.id}">${esc(g.label)}</button>`;
+  return `<div class="card" id="gymPick" style="margin:16px 0 0;padding:16px;border:1px solid color-mix(in srgb,var(--accent) 45%,transparent)">
+    <div style="font-weight:700;font-size:15px">Where do you train?</div>
+    <div class="dim" style="font-size:13px;line-height:1.5;margin-top:4px">So workouts only use equipment you have. One tap — change it any time in Settings.</div>
+    <div class="chips" style="margin-top:12px">${GYM_PLACES.filter(g=>!g.other).map(chip).join('')}${gymOther?'':'<button class="chip" data-action="gymOther">Somewhere else…</button>'}</div>
+    ${gymOther?`<div class="chips" style="margin-top:8px">${GYM_PLACES.filter(g=>g.other).map(chip).join('')}</div>`:''}
+    <button class="linkbtn dim" data-seentip="gymAsk" style="font-size:12.5px;margin-top:8px;padding:2px 0">Skip</button></div>`;
+}
+function setPlace(id){const g=GYM_PLACES.find(x=>x.id===id);if(!g)return;
+  state.settings.profile=Object.assign({},state.settings.profile,{gym:g.gym,place:g.id});markSeen('gymAsk');render();
+  toast(g.label+': '+GYM_NOTE[g.gym]+'. Change it in Settings.');}
+// Learning from what you skip (v0.75): replace barbell lifts in two different workouts and the app
+// ASKS whether your gym has a barbell rack — an offer, never a silent change.
+function noteBarbellSkip(t,old,toId){
+  const x=old&&EX[old.id],to=EX[toId],pf=state.settings.profile||{};
+  if(!t||!x||!to||x.equip!=='Barbell'||to.equip==='Barbell'||modeOf(old)==='smith'||pf.gym==='machine'||pf.gym==='home'||seenFlag('bbAsk'))return;
+  const k='bbswap:'+String(t.id).slice(0,40);if(!seenFlag(k))markSeen(k);}
+function barbellAskCard(){
+  const pf=state.settings.profile||{};
+  if(seenFlag('bbAsk')||pf.gym==='machine'||pf.gym==='home')return '';
+  if(Object.keys(state.settings.seen||{}).filter(k=>k.indexOf('bbswap:')===0).length<2)return '';
+  return `<div class="card" id="bbAsk" style="margin:0 0 12px;padding:14px 15px">
+    <div style="font-weight:700;font-size:14px">No barbell rack at your gym?</div>
+    <div class="dim" style="font-size:12.5px;margin-top:3px;line-height:1.45">You’ve swapped out barbell lifts a couple of times. Ironlog can stick to machines, the Smith machine and dumbbells instead.</div>
+    <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap"><button class="btn primary sm" data-action="bbNoRack">No rack — skip barbells</button><button class="btn ghost sm" data-action="bbHasRack">I have one</button></div></div>`;
 }
 function resumeCard(){
   const s=state.active;
@@ -3665,12 +3732,12 @@ function startWorkoutView(){
       <h2 style="font-size:24px;margin-top:6px">What are you training?</h2>
       <p class="muted" style="margin:7px 0 0">Pick your muscle groups (first pick leads the session) and I'll fill in a balanced set of exercises with your weights from last time — or start from scratch.</p>
     </div>
-    <div style="height:18px"></div>${coachNudge()}
+    <div style="height:18px"></div>${barbellAskCard()}${coachNudge()}
     <div class="eyebrow" style="margin:16px 2px 10px">Quick picks</div>
     <div class="chips hscroll">${PRESETS.map(p=>`<button class="chip ${presetOn(p)?'on':''}" data-action="preset" data-preset="${p.label}">${p.label}</button>`).join('')}</div>
     <div class="eyebrow" style="margin:16px 2px 10px">Target muscle groups</div>
     <div class="chips" id="groupPick">${GROUPS.map(g=>`<button class="chip ${draft.groups.has(g)?'on':''}" data-g="${g}">${g}</button>`).join('')}</div>
-    <div class="card settingrow" style="margin:18px 0 0;padding:14px 15px"><div><div style="font-weight:600">Deload / recovery session</div><div class="dim" style="font-size:12.5px">Sore or beat up? Build it ~60% lighter — full range, focus on the stretch. Won't count against your progress or PRs.</div></div><button class="sw ${draft.deload?'on':''}" data-action="deloadToggle" aria-label="Deload session"></button></div>
+    ${completedSessions().length>=5||draft.deload?`<div class="card settingrow" style="margin:18px 0 0;padding:14px 15px"><div><div style="font-weight:600">Deload / recovery session</div><div class="dim" style="font-size:12.5px">Sore or beat up? Build it ~60% lighter — full range, focus on the stretch. Won't count against your progress or PRs.</div></div><button class="sw ${draft.deload?'on':''}" data-action="deloadToggle" aria-label="Deload session"></button></div>`:''}   <!-- a recovery week means nothing before ~5 workouts (v0.75) -->
     <div class="spacer"></div><div class="spacer"></div>
     <div id="buildBtns">${buildButtons()}</div>
     <div class="dim" data-action="profileOpen" style="text-align:center;font-size:12px;margin:10px 0 2px;cursor:pointer">Profile: ${profileSummary()} · <span style="color:var(--accent)">change</span></div>
@@ -3726,6 +3793,7 @@ const SCHEMA=1;
 function newSession(exIds,deload,volumeBump,opts){const pf=state.settings.profile||{},goal=pf.goal,setStyle=pf.sets,push=pushMode(),gym=pf.gym;
   const s={id:S.uid(),schema:SCHEMA,date:Date.now(),updatedAt:Date.now(),completed:false,exercises:(exIds||[]).map(id=>B.seedExercise(id,state.sessions,{unit:U(),deload,extraSet:volumeBump&&volumeBump.indexOf(id)>=0,goal,setStyle,push,gym}))};
   if(opts&&opts.budget)B.fitSessionBudget(s.exercises,pf);
+  if(opts&&opts.first)B.fitFirstSession(s.exercises);
   if(deload)s.deload=true;return s;}
 // The ONLY way a workout begins. spec: {ids, deload, msg, volumeBump, source}. Every start path —
 // build / blank / repeat / routine / history-repeat — routes through here, so the draft reset (and,
@@ -3733,7 +3801,7 @@ function newSession(exIds,deload,volumeBump,opts){const pf=state.settings.profil
 function startSession(spec){
   spec=spec||{};
   const begin=()=>{
-    S.setActive(attachOffers(newSession(spec.ids||[],!!spec.deload,spec.volumeBump,{budget:!!spec.budget}),spec.offers));
+    S.setActive(attachOffers(newSession(spec.ids||[],!!spec.deload,spec.volumeBump,{budget:!!spec.budget,first:!!spec.first}),spec.offers));
     resetDraft();
     todayScreen='active';render();
     if(spec.msg)toast(spec.msg);
@@ -3871,7 +3939,7 @@ function openReplace(ei){
   openSheet('Replace '+ex.name,`<div class="dim" style="font-size:13px;margin:-4px 2px 14px">Pick a swap — it takes ${esc(ex.name)}’s spot in your workout.</div>
     ${best.length?`<div class="eyebrow" style="margin:0 2px 8px">Best swaps</div><div class="card list">${best.map(id=>row(EX[id])).join('')}</div>`:''}
     ${others.length?`<div class="eyebrow" style="margin:16px 2px 8px">Other ${ex.group.toLowerCase()} exercises</div><div class="card list">${others.map(row).join('')}</div>`:''}`);
-  $('#sheetBody').querySelectorAll('[data-replacewith]').forEach(b=>b.addEventListener('click',()=>doReplace(ei,b.dataset.replacewith)));
+  $('#sheetBody').querySelectorAll('[data-replacewith]').forEach(b=>b.addEventListener('click',()=>{const t=cur();noteBarbellSkip(t,t&&t.exercises[ei],b.dataset.replacewith);doReplace(ei,b.dataset.replacewith);}));
 }
 // Replace keeps what you already did (batch 4): with sets ticked, the old exercise stays with ONLY those
 // sets and the new one goes right below it — machine taken after set 2 no longer deletes sets 1–2.
@@ -3944,7 +4012,9 @@ function buildAndStart(fresh){
   if(p.skipped&&p.skipped.length){const pf=state.settings.profile;
     const noFit=p.skipped.filter(g=>!IL.data.EXERCISES.some(e=>e.group===g&&B.profileAllows(e,g,pf,state.sessions)));
     msg+=noFit.length?' · nothing fits your settings for '+noFit.join(' & '):' · no room for '+p.skipped.join(' & ')+' — pick fewer muscles';}
-  startSession({ids:p.ids,msg,deload:p.deload,volumeBump:p.volumeBump,offers:p.offers,source:'build',budget:p.mode==='fresh'});
+  const first=p.mode==='fresh'&&!p.deload&&!completedSessions().length;   // brand new: a short first day (v0.75)
+  if(first)msg='Your first workout — kept short so you can learn the ropes';
+  startSession({ids:p.ids,msg,deload:p.deload,volumeBump:p.volumeBump,offers:p.offers,source:'build',budget:p.mode==='fresh',first});
 }
 // Reaction 1: a one-tap nudge toward the muscles the coach says are light or unbalanced this week.
 function coachNudge(){
@@ -3976,7 +4046,7 @@ function editorView(s,mode){
       <h2 style="font-size:23px;margin-top:4px">${new Date(s.date).toLocaleDateString(undefined,{weekday:'long'})}'s session${s.deload?' <span class="deload-badge">Deload</span>':''}</h2></div>
     ${edit?`<div class="settingrow" style="border:none;padding:8px 2px;margin:2px 0 0"><div><div style="font-weight:600;font-size:13.5px">Date</div><div class="dim" style="font-size:12px">Move this workout to another day</div></div>
       <input type="date" id="editDate" value="${dateISO(s.date)}" max="${todayISO()}" class="field" style="width:auto;height:38px;padding:0 12px"></div>`:''}
-    ${edit?'':staleBanner(s)}
+    ${edit?'':staleBanner(s)}${edit?'':firstTip()}
     ${s.deload?`<div class="card" style="margin:0 0 14px;padding:12px 14px;background:var(--good-soft);border:1px solid color-mix(in srgb,var(--good) 30%,transparent)"><div style="font-weight:600;color:var(--good);font-size:13.5px">🌿 Recovery session</div><div class="dim" style="font-size:12.5px;margin-top:3px">Lighter loads on purpose — take each rep through a full range, feel the stretch, and stop 3–4 reps shy of failure. This won't affect your progression or PRs.</div></div>`:''}
     <div class="statgrid" style="margin:14px 0 18px">
       <div class="card stat"><div class="k">Working sets</div><div class="v mono" id="stSets">${sets}</div></div>
@@ -3995,6 +4065,18 @@ function editorView(s,mode){
     ${edit?`<button class="btn primary block" id="btnSaveEdit">Save changes</button>`
           :`<button class="btn good block" id="btnFinish">Finish &amp; save workout</button>`}
   </div>`;
+}
+// The first workout ever (v0.75): how logging works, in four lines, until you tap Got it.
+function firstTip(){
+  if(completedSessions().length||seenFlag('firstTip'))return '';
+  return `<div class="card" id="firstTip" style="margin:0 0 14px;padding:14px 15px;border:1px solid color-mix(in srgb,var(--accent) 40%,transparent)">
+    <div style="font-weight:700;font-size:14px">How to log</div>
+    <ul class="dim" style="font-size:12.5px;line-height:1.55;margin:5px 0 0;padding-left:18px">
+      <li>Enter the weight and reps you did, then tap <b>✓</b>.</li>
+      <li>Only ticked sets are saved.</li>
+      <li>Not sure of a weight? Start light — next time the app remembers it.</li>
+      <li>Tap <b>Finish</b> when you’re done.</li></ul>
+    <button class="linkbtn dim" data-seentip="firstTip" style="font-size:12.5px;margin-top:6px;padding:2px 0">Got it</button></div>`;
 }
 function emptyLog(){return `<div class="card" style="padding:26px 18px;text-align:center;margin-bottom:14px"><div class="dim">No exercises yet.<br>Add one to start logging sets.</div></div>`;}
 function topSuggestionHTML(){
@@ -4692,10 +4774,12 @@ function toggleCollapse(key,closedByDefault){const k=(closedByDefault?'expand:':
 // A short label for the "Profile: …" lines; "Balanced" when nothing is set.
 function profileSummary(){const p=state.settings.profile||{};const parts=[];
   const g={size:'Size',strength:'Strength',general:'General'},gy={full:'Full gym',machine:'Machine gym',home:'Home'};
-  if(p.goal)parts.push(g[p.goal]);if(p.gym)parts.push(gy[p.gym]);if(p.days)parts.push(p.days+'d/wk');
+  const pl=p.place&&GYM_PLACES.find(x=>x.id===p.place);
+  if(p.goal)parts.push(g[p.goal]);if(p.gym)parts.push(pl?pl.label:gy[p.gym]);if(p.days)parts.push(p.days+'d/wk');
   return parts.length?parts.join(' · '):'Balanced';}
 function setProfile(field,val){const p=Object.assign({},state.settings.profile);
   if(!val||val==='auto')delete p[field];else p[field]=field==='days'?+val:val;
+  if(field==='gym')delete p.place;   // picking a gym type by hand replaces the "Planet Fitness"-style label
   state.settings.profile=Object.keys(p).length?p:undefined;S.saveSettingsCloud();render();}   // Progress targets follow at once (batch 5)
 function toggleProtect(gp){const p=Object.assign({},state.settings.profile),set=new Set(p.protect||[]);
   set.has(gp)?set.delete(gp):set.add(gp);if(set.size)p.protect=[...set];else delete p.protect;
@@ -4710,7 +4794,7 @@ function prow(label,inner){return `<div style="margin-bottom:18px"><div class="e
 function profileBody(){const p=state.settings.profile||{},avoid=p.avoid||[],protect=new Set(p.protect||[]);
   return `<div class="dim" style="font-size:13px;margin:-4px 2px 16px;line-height:1.5">All optional — anything left on <b>Balanced</b> works exactly like today. Changes save automatically; the workout builder and coach adapt to whatever you set here.</div>
     ${prow('Main goal',pchips('goal',[['auto','Balanced'],['size','Size'],['strength','Strength'],['general','General']]))}
-    ${prow('Your gym',pchips('gym',[['auto','Balanced'],['full','Full gym'],['machine','Machine-focused'],['home','Home / minimal']]))}
+    ${prow('Your gym',pchips('gym',[['auto','Balanced'],['full','Full gym'],['machine','Machine-focused'],['home','Home / minimal']])+(p.place&&GYM_PLACES.find(x=>x.id===p.place)?`<div class="dim" style="font-size:12px;margin:7px 2px 0">Set from “${esc(GYM_PLACES.find(x=>x.id===p.place).label)}” — ${GYM_NOTE[p.gym]}</div>`:''))}
     ${prow('Days per week',pchips('days',[['auto','Any'],['2','2'],['3','3'],['4','4'],['5','5'],['6','6']]))}
     ${prow('Session length',pchips('length',[['auto','Balanced'],['short','Short'],['standard','Standard'],['long','Long']]))}
     ${prow('Set style',pchips('sets',[['auto','Balanced'],['straight','Straight'],['ramp','Ramping']]))}
@@ -4740,6 +4824,8 @@ function openAvoidPicker(){
 function openSettings(){
   const R=state.settings.rest,st=state.settings;
   openSheet('Settings',`
+    <div class="settingrow"><div><div style="font-weight:600">Your name</div><div class="dim" style="font-size:13px">Optional — shown in the greeting</div></div>
+      <input id="nameIn" class="field" maxlength="24" autocomplete="given-name" placeholder="Optional" value="${esc(st.name||'')}" style="width:130px;height:38px;padding:0 12px"></div>
     <div class="settingrow"><div><div style="font-weight:600">Units</div><div class="dim" style="font-size:13px">Weight display</div></div>
       <div class="seg" id="segUnit"><button data-u="lb" class="${U()==='lb'?'on':''}">lb</button><button data-u="kg" class="${U()==='kg'?'on':''}">kg</button></div></div>
     <div class="settingrow"><div><div style="font-weight:600">Bodyweight</div><div class="dim" style="font-size:13px">Counts pull-ups, dips &amp; push-ups toward volume and PRs</div></div>
@@ -4747,6 +4833,7 @@ function openSettings(){
     <div class="settingrow"><div><div style="font-weight:600">Theme</div><div class="dim" style="font-size:13px">Appearance</div></div>
       <div class="seg" id="segTheme"><button data-t="system" class="${st.theme==='system'?'on':''}">Auto</button><button data-t="light" class="${st.theme==='light'?'on':''}">Light</button><button data-t="dark" class="${st.theme==='dark'?'on':''}">Dark</button></div></div>
     <button class="settingrow" id="btnProfile" style="width:100%;text-align:left;background:none;border:none;border-bottom:1px solid var(--line)"><div><div style="font-weight:600">Training profile</div><div class="dim" style="font-size:13px">How the builder tailors your workouts</div></div><span class="mono dim" style="font-size:13px">${profileSummary()} ›</span></button>
+    <button class="settingrow" id="btnReminder" style="width:100%;text-align:left;background:none;border:none;border-bottom:1px solid var(--line)"><div><div style="font-weight:600">Workout reminder</div><div class="dim" style="font-size:13px">Add your gym days to your phone’s calendar</div></div><span class="dim" style="font-size:13px">›</span></button>
     <div style="height:18px"></div>
     <div class="eyebrow" style="margin-bottom:10px">Cloud backup</div>
     ${cloudSection()}
@@ -4780,6 +4867,8 @@ function openSettings(){
   $('#bwVal').addEventListener('click',()=>openNumberSheet('Your bodyweight ('+U()+')',bw()||'',v=>{state.settings.bodyweight=Math.max(0,v);S.saveSettingsCloud();openSettings();}));
   const on=(sel,fn)=>{const el=$(sel);if(el)el.addEventListener('click',fn);};
   on('#btnProfile',openProfile);
+  on('#btnReminder',openReminder);
+  const ni=$('#nameIn');if(ni)ni.addEventListener('change',()=>{const v=ni.value.trim().slice(0,24);if(v)state.settings.name=v;else delete state.settings.name;S.saveSettingsCloud();render();});
   on('#btnUnmute',()=>{const seen=state.settings.seen||{};Object.keys(seen).forEach(k=>{if(k.indexOf('mute:')===0)delete seen[k];});S.saveSettingsCloud();openSettings();render();toast('Coaching notes are back on');});
   on('#btnExport',exportData);
   on('#verLine',()=>{const d=$('#vpDiag');if(d)d.hidden=!d.hidden;});
@@ -4821,6 +4910,25 @@ async function saveFile(base,ext,data,mime,label){
   try{if(window.claude&&claude.use){const dl=await claude.use('downloads');if(dl){await dl.save({filename:fname,data});toast(label+' saved');return;}}}catch(e){}
   try{const blob=new Blob([data],{type:mime});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=fname;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);toast(label+' downloaded');}
   catch(e){toast('Could not export here');}
+}
+// Calendar reminder (v0.75): pick days and a time, get one repeating event for the phone's calendar.
+// The app can't notify you when it's closed; your calendar can. Days default to the profile's count.
+let remDraft=null;
+function openReminder(){
+  if(!remDraft){const n=(state.settings.profile&&state.settings.profile.days)||3,pre={2:[1,4],3:[1,3,5],4:[1,2,4,5],5:[1,2,3,4,5],6:[1,2,3,4,5,6]};remDraft={days:new Set(pre[n]||pre[3]),t:'18:00'};}
+  const D=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'],order=[1,2,3,4,5,6,0];
+  openSheet('Workout reminder',`<div class="dim" style="font-size:13px;margin:-4px 2px 14px;line-height:1.5">Adds a repeating “Workout” event to your calendar, so your phone reminds you — even when Ironlog is closed.</div>
+    <div class="eyebrow" style="margin:0 2px 8px">Days</div>
+    <div class="chips" id="remDays">${order.map(d=>`<button class="chip ${remDraft.days.has(d)?'on':''}" data-remday="${d}" aria-pressed="${remDraft.days.has(d)}">${D[d]}</button>`).join('')}</div>
+    <div class="eyebrow" style="margin:18px 2px 8px">Time</div>
+    <input type="time" id="remTime" class="field" value="${remDraft.t}" style="width:auto;height:44px;padding:0 14px">
+    <button class="btn primary block" id="remGo" style="margin-top:18px">Add to my calendar</button>
+    <div class="dim" style="font-size:12px;text-align:center;margin-top:9px">Opens a calendar file — tap Add in your calendar app.</div>`);
+  $('#remDays').addEventListener('click',e=>{const b=e.target.closest('[data-remday]');if(!b)return;const d=+b.dataset.remday;remDraft.days.has(d)?remDraft.days.delete(d):remDraft.days.add(d);b.classList.toggle('on');b.setAttribute('aria-pressed',remDraft.days.has(d));});
+  $('#remTime').addEventListener('change',e=>{if(/^\d\d:\d\d$/.test(e.target.value))remDraft.t=e.target.value;});
+  $('#remGo').addEventListener('click',()=>{if(!remDraft.days.size){toast('Pick at least one day');return;}
+    const [hh,mm]=remDraft.t.split(':').map(Number);
+    saveFile('ironlog-reminder','ics',IL.sync.reminderIcs([...remDraft.days],hh,mm,Date.now()),'text/calendar','Reminder');closeSheet();});
 }
 function exportData(){return saveFile('ironlog-backup','json',JSON.stringify(S.exportPayload(),null,2),'application/json','Backup');}
 function exportCsv(){
@@ -5259,8 +5367,9 @@ const ACTIONS={
   deloadToggle:el=>{draft.deload=!draft.deload;el.classList.toggle('on',draft.deload);refreshBuildBtns();},
   staleFinish:()=>finishWorkout(),
   staleDiscard:()=>discardActive(),
-  profileGo:()=>{markSeen('profileIntro');openProfile();},
-  profileSkip:()=>{markSeen('profileIntro');render();},
+  gymOther:()=>{gymOther=true;render();},
+  bbNoRack:()=>{state.settings.profile=Object.assign({},state.settings.profile,{gym:'machine'});delete state.settings.profile.place;markSeen('bbAsk');render();toast('Got it — machines, Smith machine and dumbbells from now on');},
+  bbHasRack:()=>{markSeen('bbAsk');render();},
   profileOpen:()=>openProfile(),
   cardioOpen:()=>{if(state.active){toast('Finish or discard your current session first');return;}openCardioSheet();}
 };
@@ -5269,6 +5378,7 @@ function bind(){
   if(!v.__delegated){v.__delegated=true;v.addEventListener('click',e=>{
     const a=e.target.closest('[data-action]');if(a&&ACTIONS[a.dataset.action]){ACTIONS[a.dataset.action](a,e);return;}
     const stip=e.target.closest('[data-seentip]');if(stip){markSeen(stip.dataset.seentip);render();return;}   // generic one-time tip dismissal
+    const plc=e.target.closest('[data-place]');if(plc){setPlace(plc.dataset.place);return;}   // "Where do you train?" (v0.75)
     const mu=e.target.closest('[data-mute]');if(mu){const seen=state.settings.seen=state.settings.seen||{};seen['mute:'+mu.dataset.mute]=true;S.saveSettingsCloud();render();toast('Got it — hidden from Coach’s Focus list. Settings can bring it back',{label:'Undo',fn:()=>{delete seen['mute:'+mu.dataset.mute];S.saveSettingsCloud();render();}});return;}
     const cl=e.target.closest('[data-collapse]');if(cl){toggleCollapse(cl.dataset.collapse,cl.dataset.collapseClosed==='1');return;}
     const la=e.target.closest('[data-liftsall]');if(la){liftsAll=!liftsAll;render();return;}

@@ -81,6 +81,7 @@ test('UI: with a plan, toggling deload builds the same exercises lighter (no "Se
   const h=launch();
   try{
     pushHistory(h.state,h.S);
+    [24,31].forEach(d=>h.state.sessions.push({id:'q'+d,schema:1,date:Date.now()-d*86400000,updatedAt:1,completed:true,exercises:[{id:'leg-press',sets:[{w:200,r:10,done:true}]}]}));   // the deload switch shows from 5 workouts (v0.75)
     h.IL.ui.render();
     h.click('[data-action="startFlow"]');
     ['Chest','Shoulders','Triceps'].forEach(g=>h.click(h.$$('[data-g]').find(b=>b.dataset.g===g)));
@@ -224,29 +225,32 @@ test('UI: T3 — the Progress Time card summarises duration, rest and time-by-mu
   }finally{h.teardown();}
 });
 
-test('UI: P1 — the profile intro appears once; "I\'m good" dismisses it and changes nothing',()=>{
+test('UI: v0.75 — "Where do you train?" appears once; Skip dismisses it and changes nothing',()=>{
   const h=launch();
   try{
-    assert.ok(h.has('#profileIntro'),'intro card on first launch');
+    assert.ok(h.has('#gymPick'),'gym card on first launch');
     assert.equal(h.state.settings.profile,undefined,'no profile yet');
-    h.click('[data-action="profileSkip"]');
-    assert.ok(!h.has('#profileIntro'),'card gone after I\'m good');
-    assert.equal(h.state.settings.seen.profileIntro,true,'seen flag set');
+    h.click('#gymPick [data-seentip="gymAsk"]');
+    assert.ok(!h.has('#gymPick'),'card gone after Skip');
+    assert.equal(h.state.settings.seen.gymAsk,true,'seen flag set');
     assert.equal(h.state.settings.profile,undefined,'profile still absent');
-    h.IL.ui.render();assert.ok(!h.has('#profileIntro'),'stays gone');
+    h.IL.ui.render();assert.ok(!h.has('#gymPick'),'stays gone');
   }finally{h.teardown();}
 });
 
-test('UI: P1 — "Take me there" opens the profile; a choice saves it and bumps settingsUpdatedAt',()=>{
+test('UI: v0.75 — one tap on a gym sets the gym type and label; the profile sheet can still change it',()=>{
   const h=launch();
   try{
     const before=h.state.settings.settingsUpdatedAt||0;
-    h.click('[data-action="profileGo"]');
-    assert.equal(h.state.settings.seen.profileIntro,true,'seen set on open');
-    assert.ok(h.$('[data-pset="gym"]'),'profile sheet open');
-    h.click(h.$$('[data-pset="gym"]').find(b=>b.dataset.pv==='machine'));
-    assert.equal(h.state.settings.profile.gym,'machine','choice saved');
+    h.click('[data-place="pf"]');
+    assert.equal(h.state.settings.profile.gym,'machine','Planet Fitness → machine gym');assert.equal(h.state.settings.profile.place,'pf');
+    assert.ok(!h.has('#gymPick'),'card gone once answered');
     assert.ok((h.state.settings.settingsUpdatedAt||0)>=before,'settingsUpdatedAt advanced');
+    h.IL.ui.openSettings();h.click("#btnProfile");
+    assert.match(h.text('#sheetBody'),/Set from “Planet Fitness”/);
+    h.click(h.$$('[data-pset="gym"]').find(b=>b.dataset.pv==='full'));
+    assert.equal(h.state.settings.profile.gym,'full');
+    assert.equal(h.state.settings.profile.place,undefined,'a hand-picked type drops the gym label');
     h.click(h.$$('[data-pset="gym"]').find(b=>b.dataset.pv==='auto'));
     assert.ok(!h.state.settings.profile||!h.state.settings.profile.gym,'Balanced clears the field');
   }finally{h.teardown();}

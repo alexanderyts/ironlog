@@ -18,12 +18,12 @@ function homeView(){
   <div class="section">
     <div style="padding:6px 2px 0">
       <div class="eyebrow">${new Date().toLocaleDateString(undefined,{weekday:'long',month:'long',day:'numeric'})}</div>
-      <h2 style="font-size:27px;margin-top:5px">${greet}.</h2>
+      <h2 style="font-size:27px;margin-top:5px">${greet}${state.settings.name?', '+esc(state.settings.name):''}.</h2>
     </div>
-    ${profileIntroCard()}
+    ${gymPickCard()}
     ${state.active?resumeCard():''}
     ${backupNudge()}
-    <div class="dim" id="homeSummary" style="font-size:13.5px;margin:10px 2px 16px">${wkAny} workout${wkAny!==1?'s':''} this week${streak?` · ${streak}-week streak`:''}</div>   <!-- one line: the full tiles live on Progress (review 5.6) -->
+    <div class="dim" id="homeSummary" style="font-size:13.5px;margin:10px 2px 16px">${homeSummary(now,wkAny,streak,last)}</div>   <!-- one line: the full tiles live on Progress (review 5.6) -->
     ${state.active?'':startBlock()}
     ${state.active?'':cardioBlock()}
     ${last?`<div class="eyebrow" style="margin:26px 2px 10px">Last session</div>${sessCard(last)}`:emptyHome()}
@@ -31,6 +31,17 @@ function homeView(){
     <button class="btn ghost block" data-action="goLibrary" style="justify-content:space-between">
       <span>Browse exercise library</span><span class="dim mono">${EXERCISES.length} exercises ›</span></button>
   </div>`;
+}
+// One line under the greeting (v0.75). Trained this week → the count. Not yet → last week's recap (a
+// fresh week shouldn't open on "0 workouts"). Nothing last week either → how long since the last one.
+function homeSummary(now,wkAny,streak,last){
+  const sk=streak?` · ${streak}-week streak`:'';
+  if(wkAny||!last)return `${wkAny} workout${wkAny!==1?'s':''} this week${sk}`;
+  const ws=P.weekStart(now),prev=completedAny().filter(s=>s.date>=ws-7*86400000&&s.date<ws);
+  if(prev.length){const sets=prev.reduce((a,s)=>a+(s.kind==='cardio'?0:setsOf(s)),0);
+    return `Last week: ${prev.length} workout${prev.length!==1?'s':''}${sets?` · ${sets} sets`:''}${sk}`;}
+  const d=Math.round((startOfDay(now)-startOfDay(last.date))/DAY);
+  return `Last workout ${d<=1?'yesterday':d+' days ago'} — new week, fresh start`;
 }
 // "Your lifts live only on this phone" (batch 1): after 3 workouts with no cloud backup, once per 20
 // workouts. Export always works; Dropbox is offered where this build has it.
@@ -143,13 +154,45 @@ function startCardio(){
   const s={id:S.uid(),schema:SCHEMA,date:Date.now(),updatedAt:Date.now(),completed:false,kind:'cardio',exercises:[],cardio};
   closeSheet();S.setActive(s);todayScreen='active';render();
 }
-// One-time card introducing the optional training profile (P1). Dismissed by either button (synced).
-function profileIntroCard(){
-  if(seenFlag('profileIntro'))return '';
-  return `<div class="card" id="profileIntro" style="margin:16px 0 0;padding:16px;border:1px solid color-mix(in srgb,var(--accent) 45%,transparent)">
-    <div style="font-weight:700;font-size:15px">New: a training profile</div>
-    <div class="dim" style="font-size:13px;line-height:1.5;margin-top:5px">Tell Ironlog your goal, the kind of gym you use, days per week and anything you're protecting, and it builds around that. Skip it and you get the balanced default — the same as today.</div>
-    <div style="display:flex;gap:9px;margin-top:13px"><button class="btn primary sm" data-action="profileGo">Take me there</button><button class="btn ghost sm" data-action="profileSkip">I'm good</button></div></div>`;
+// "Where do you train?" (v0.75) — one tap on Home instead of a settings form. A gym's name is a
+// shortcut onto the builder's three gym types; chains vary by branch, so it's a starting guess the
+// app corrects from what you skip (see barbellAskCard), never a promise about your branch.
+const GYM_PLACES=[
+  {id:'pf',label:'Planet Fitness',gym:'machine'},{id:'la',label:'LA Fitness',gym:'full'},
+  {id:'anytime',label:'Anytime Fitness',gym:'full'},{id:'crunch',label:'Crunch',gym:'full'},
+  {id:'ymca',label:'YMCA',gym:'full'},{id:'24hr',label:'24 Hour Fitness',gym:'full'},
+  {id:'big',label:'Big gym',gym:'full',other:true},{id:'machines',label:'Mostly machines',gym:'machine',other:true},
+  {id:'apt',label:'Apartment / hotel gym',gym:'home',other:true},{id:'home',label:'Home',gym:'home',other:true}];
+const GYM_NOTE={full:'barbells, racks, machines and dumbbells',machine:'machines, Smith machine and dumbbells — no barbell rack',home:'dumbbells and bodyweight'};
+let gymOther=false;   // "Somewhere else" opens the generic choices
+function gymPickCard(){
+  const pf=state.settings.profile||{};
+  if(pf.gym||seenFlag('gymAsk')||state.active)return '';
+  const chip=g=>`<button class="chip" data-place="${g.id}">${esc(g.label)}</button>`;
+  return `<div class="card" id="gymPick" style="margin:16px 0 0;padding:16px;border:1px solid color-mix(in srgb,var(--accent) 45%,transparent)">
+    <div style="font-weight:700;font-size:15px">Where do you train?</div>
+    <div class="dim" style="font-size:13px;line-height:1.5;margin-top:4px">So workouts only use equipment you have. One tap — change it any time in Settings.</div>
+    <div class="chips" style="margin-top:12px">${GYM_PLACES.filter(g=>!g.other).map(chip).join('')}${gymOther?'':'<button class="chip" data-action="gymOther">Somewhere else…</button>'}</div>
+    ${gymOther?`<div class="chips" style="margin-top:8px">${GYM_PLACES.filter(g=>g.other).map(chip).join('')}</div>`:''}
+    <button class="linkbtn dim" data-seentip="gymAsk" style="font-size:12.5px;margin-top:8px;padding:2px 0">Skip</button></div>`;
+}
+function setPlace(id){const g=GYM_PLACES.find(x=>x.id===id);if(!g)return;
+  state.settings.profile=Object.assign({},state.settings.profile,{gym:g.gym,place:g.id});markSeen('gymAsk');render();
+  toast(g.label+': '+GYM_NOTE[g.gym]+'. Change it in Settings.');}
+// Learning from what you skip (v0.75): replace barbell lifts in two different workouts and the app
+// ASKS whether your gym has a barbell rack — an offer, never a silent change.
+function noteBarbellSkip(t,old,toId){
+  const x=old&&EX[old.id],to=EX[toId],pf=state.settings.profile||{};
+  if(!t||!x||!to||x.equip!=='Barbell'||to.equip==='Barbell'||modeOf(old)==='smith'||pf.gym==='machine'||pf.gym==='home'||seenFlag('bbAsk'))return;
+  const k='bbswap:'+String(t.id).slice(0,40);if(!seenFlag(k))markSeen(k);}
+function barbellAskCard(){
+  const pf=state.settings.profile||{};
+  if(seenFlag('bbAsk')||pf.gym==='machine'||pf.gym==='home')return '';
+  if(Object.keys(state.settings.seen||{}).filter(k=>k.indexOf('bbswap:')===0).length<2)return '';
+  return `<div class="card" id="bbAsk" style="margin:0 0 12px;padding:14px 15px">
+    <div style="font-weight:700;font-size:14px">No barbell rack at your gym?</div>
+    <div class="dim" style="font-size:12.5px;margin-top:3px;line-height:1.45">You’ve swapped out barbell lifts a couple of times. Ironlog can stick to machines, the Smith machine and dumbbells instead.</div>
+    <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap"><button class="btn primary sm" data-action="bbNoRack">No rack — skip barbells</button><button class="btn ghost sm" data-action="bbHasRack">I have one</button></div></div>`;
 }
 function resumeCard(){
   const s=state.active;
@@ -173,12 +216,12 @@ function startWorkoutView(){
       <h2 style="font-size:24px;margin-top:6px">What are you training?</h2>
       <p class="muted" style="margin:7px 0 0">Pick your muscle groups (first pick leads the session) and I'll fill in a balanced set of exercises with your weights from last time — or start from scratch.</p>
     </div>
-    <div style="height:18px"></div>${coachNudge()}
+    <div style="height:18px"></div>${barbellAskCard()}${coachNudge()}
     <div class="eyebrow" style="margin:16px 2px 10px">Quick picks</div>
     <div class="chips hscroll">${PRESETS.map(p=>`<button class="chip ${presetOn(p)?'on':''}" data-action="preset" data-preset="${p.label}">${p.label}</button>`).join('')}</div>
     <div class="eyebrow" style="margin:16px 2px 10px">Target muscle groups</div>
     <div class="chips" id="groupPick">${GROUPS.map(g=>`<button class="chip ${draft.groups.has(g)?'on':''}" data-g="${g}">${g}</button>`).join('')}</div>
-    <div class="card settingrow" style="margin:18px 0 0;padding:14px 15px"><div><div style="font-weight:600">Deload / recovery session</div><div class="dim" style="font-size:12.5px">Sore or beat up? Build it ~60% lighter — full range, focus on the stretch. Won't count against your progress or PRs.</div></div><button class="sw ${draft.deload?'on':''}" data-action="deloadToggle" aria-label="Deload session"></button></div>
+    ${completedSessions().length>=5||draft.deload?`<div class="card settingrow" style="margin:18px 0 0;padding:14px 15px"><div><div style="font-weight:600">Deload / recovery session</div><div class="dim" style="font-size:12.5px">Sore or beat up? Build it ~60% lighter — full range, focus on the stretch. Won't count against your progress or PRs.</div></div><button class="sw ${draft.deload?'on':''}" data-action="deloadToggle" aria-label="Deload session"></button></div>`:''}   <!-- a recovery week means nothing before ~5 workouts (v0.75) -->
     <div class="spacer"></div><div class="spacer"></div>
     <div id="buildBtns">${buildButtons()}</div>
     <div class="dim" data-action="profileOpen" style="text-align:center;font-size:12px;margin:10px 0 2px;cursor:pointer">Profile: ${profileSummary()} · <span style="color:var(--accent)">change</span></div>
@@ -234,6 +277,7 @@ const SCHEMA=1;
 function newSession(exIds,deload,volumeBump,opts){const pf=state.settings.profile||{},goal=pf.goal,setStyle=pf.sets,push=pushMode(),gym=pf.gym;
   const s={id:S.uid(),schema:SCHEMA,date:Date.now(),updatedAt:Date.now(),completed:false,exercises:(exIds||[]).map(id=>B.seedExercise(id,state.sessions,{unit:U(),deload,extraSet:volumeBump&&volumeBump.indexOf(id)>=0,goal,setStyle,push,gym}))};
   if(opts&&opts.budget)B.fitSessionBudget(s.exercises,pf);
+  if(opts&&opts.first)B.fitFirstSession(s.exercises);
   if(deload)s.deload=true;return s;}
 // The ONLY way a workout begins. spec: {ids, deload, msg, volumeBump, source}. Every start path —
 // build / blank / repeat / routine / history-repeat — routes through here, so the draft reset (and,
@@ -241,7 +285,7 @@ function newSession(exIds,deload,volumeBump,opts){const pf=state.settings.profil
 function startSession(spec){
   spec=spec||{};
   const begin=()=>{
-    S.setActive(attachOffers(newSession(spec.ids||[],!!spec.deload,spec.volumeBump,{budget:!!spec.budget}),spec.offers));
+    S.setActive(attachOffers(newSession(spec.ids||[],!!spec.deload,spec.volumeBump,{budget:!!spec.budget,first:!!spec.first}),spec.offers));
     resetDraft();
     todayScreen='active';render();
     if(spec.msg)toast(spec.msg);
@@ -379,7 +423,7 @@ function openReplace(ei){
   openSheet('Replace '+ex.name,`<div class="dim" style="font-size:13px;margin:-4px 2px 14px">Pick a swap — it takes ${esc(ex.name)}’s spot in your workout.</div>
     ${best.length?`<div class="eyebrow" style="margin:0 2px 8px">Best swaps</div><div class="card list">${best.map(id=>row(EX[id])).join('')}</div>`:''}
     ${others.length?`<div class="eyebrow" style="margin:16px 2px 8px">Other ${ex.group.toLowerCase()} exercises</div><div class="card list">${others.map(row).join('')}</div>`:''}`);
-  $('#sheetBody').querySelectorAll('[data-replacewith]').forEach(b=>b.addEventListener('click',()=>doReplace(ei,b.dataset.replacewith)));
+  $('#sheetBody').querySelectorAll('[data-replacewith]').forEach(b=>b.addEventListener('click',()=>{const t=cur();noteBarbellSkip(t,t&&t.exercises[ei],b.dataset.replacewith);doReplace(ei,b.dataset.replacewith);}));
 }
 // Replace keeps what you already did (batch 4): with sets ticked, the old exercise stays with ONLY those
 // sets and the new one goes right below it — machine taken after set 2 no longer deletes sets 1–2.
@@ -452,7 +496,9 @@ function buildAndStart(fresh){
   if(p.skipped&&p.skipped.length){const pf=state.settings.profile;
     const noFit=p.skipped.filter(g=>!IL.data.EXERCISES.some(e=>e.group===g&&B.profileAllows(e,g,pf,state.sessions)));
     msg+=noFit.length?' · nothing fits your settings for '+noFit.join(' & '):' · no room for '+p.skipped.join(' & ')+' — pick fewer muscles';}
-  startSession({ids:p.ids,msg,deload:p.deload,volumeBump:p.volumeBump,offers:p.offers,source:'build',budget:p.mode==='fresh'});
+  const first=p.mode==='fresh'&&!p.deload&&!completedSessions().length;   // brand new: a short first day (v0.75)
+  if(first)msg='Your first workout — kept short so you can learn the ropes';
+  startSession({ids:p.ids,msg,deload:p.deload,volumeBump:p.volumeBump,offers:p.offers,source:'build',budget:p.mode==='fresh',first});
 }
 // Reaction 1: a one-tap nudge toward the muscles the coach says are light or unbalanced this week.
 function coachNudge(){
@@ -484,7 +530,7 @@ function editorView(s,mode){
       <h2 style="font-size:23px;margin-top:4px">${new Date(s.date).toLocaleDateString(undefined,{weekday:'long'})}'s session${s.deload?' <span class="deload-badge">Deload</span>':''}</h2></div>
     ${edit?`<div class="settingrow" style="border:none;padding:8px 2px;margin:2px 0 0"><div><div style="font-weight:600;font-size:13.5px">Date</div><div class="dim" style="font-size:12px">Move this workout to another day</div></div>
       <input type="date" id="editDate" value="${dateISO(s.date)}" max="${todayISO()}" class="field" style="width:auto;height:38px;padding:0 12px"></div>`:''}
-    ${edit?'':staleBanner(s)}
+    ${edit?'':staleBanner(s)}${edit?'':firstTip()}
     ${s.deload?`<div class="card" style="margin:0 0 14px;padding:12px 14px;background:var(--good-soft);border:1px solid color-mix(in srgb,var(--good) 30%,transparent)"><div style="font-weight:600;color:var(--good);font-size:13.5px">🌿 Recovery session</div><div class="dim" style="font-size:12.5px;margin-top:3px">Lighter loads on purpose — take each rep through a full range, feel the stretch, and stop 3–4 reps shy of failure. This won't affect your progression or PRs.</div></div>`:''}
     <div class="statgrid" style="margin:14px 0 18px">
       <div class="card stat"><div class="k">Working sets</div><div class="v mono" id="stSets">${sets}</div></div>
@@ -503,6 +549,18 @@ function editorView(s,mode){
     ${edit?`<button class="btn primary block" id="btnSaveEdit">Save changes</button>`
           :`<button class="btn good block" id="btnFinish">Finish &amp; save workout</button>`}
   </div>`;
+}
+// The first workout ever (v0.75): how logging works, in four lines, until you tap Got it.
+function firstTip(){
+  if(completedSessions().length||seenFlag('firstTip'))return '';
+  return `<div class="card" id="firstTip" style="margin:0 0 14px;padding:14px 15px;border:1px solid color-mix(in srgb,var(--accent) 40%,transparent)">
+    <div style="font-weight:700;font-size:14px">How to log</div>
+    <ul class="dim" style="font-size:12.5px;line-height:1.55;margin:5px 0 0;padding-left:18px">
+      <li>Enter the weight and reps you did, then tap <b>✓</b>.</li>
+      <li>Only ticked sets are saved.</li>
+      <li>Not sure of a weight? Start light — next time the app remembers it.</li>
+      <li>Tap <b>Finish</b> when you’re done.</li></ul>
+    <button class="linkbtn dim" data-seentip="firstTip" style="font-size:12.5px;margin-top:6px;padding:2px 0">Got it</button></div>`;
 }
 function emptyLog(){return `<div class="card" style="padding:26px 18px;text-align:center;margin-bottom:14px"><div class="dim">No exercises yet.<br>Add one to start logging sets.</div></div>`;}
 function topSuggestionHTML(){

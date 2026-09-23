@@ -4,7 +4,8 @@ if(typeof require==='function'&&!IL.data)require('../data/exercises.js');
 const MODES=(IL.data&&IL.data.MODES)||{},EX=(IL.data&&IL.data.EX)||{},GROUPS=(IL.data&&IL.data.GROUPS)||[];   // to validate imported modality / profile ids
 // Training profile (v6 P2 reads it; P1 only stores it). Each field is optional; a valid non-'auto'
 // value is kept, anything else is dropped (so absent = auto = Balanced = today's behaviour).
-const PROFILE_ENUM={goal:['size','strength','general'],gym:['full','machine','home'],length:['short','standard','long'],sets:['straight','ramp'],push:['guide','quiet']};
+const PROFILE_ENUM={goal:['size','strength','general'],gym:['full','machine','home'],length:['short','standard','long'],sets:['straight','ramp'],push:['guide','quiet'],
+  place:['pf','la','anytime','crunch','ymca','24hr','big','machines','apt','home']};   // where you train (v0.75 gym picker) — a label; `gym` is what the builder reads
 // Cardio is its own session KIND (kind:'cardio', exercises:[]). These enums bound the two picked fields;
 // distance is optional and carries the unit it was logged in (so a later lb↔kg switch can't reinterpret it).
 const CARDIO_ENUM={type:['treadmill','elliptical','stairmaster','outdoor','indoor'],intensity:['easy','moderate','hard']};
@@ -118,6 +119,7 @@ function cleanSettings(o){if(!o||typeof o!=='object')return null;
   s.rest={auto:r.auto!==false,sound:r.sound!==false,notify:!!r.notify,
     compound:Math.max(0,Math.min(3600,sNum(r.compound)||120)),isolation:Math.max(0,Math.min(3600,sNum(r.isolation)||75))};
   const prof=cleanProfile(o.profile);if(prof)s.profile=prof;
+  if(typeof o.name==='string'&&o.name.trim())s.name=sStr(o.name.trim(),24);   // optional first name for the greeting (v0.75)
   const seen=cleanSeen(o.seen);if(seen)s.seen=seen;
   // remembered empty-bar weight per unit for the plate calculator (D-4): `bar` = barbell, `smithBar` = Smith
   const cleanBar=v=>{if(!v||typeof v!=='object')return null;const o={};if('lb'in v){const n=sNum(v.lb);if(n>=0)o.lb=Math.min(200,n);}if('kg'in v){const n=sNum(v.kg);if(n>=0)o.kg=Math.min(100,n);}return Object.keys(o).length?o:null;};   // preserve an explicit 0 (counterbalanced Smith)
@@ -192,5 +194,18 @@ function sessionSummaryCsv(sessions,unit,bw){
   return rows.map(r=>r.join(',')).join('\r\n')+'\r\n';
 }
 
-IL.sync={unionSets,hasTicked,MAX_SESSIONS,mergeSessions,applyTombstones,pruneTombstones,cleanDeleted,exportPayload,parseImport,resolveActive,cleanSession,cleanRoutine,cleanSettings,cleanProfile,cleanCardio,sessionSummaryCsv,PROFILE_ENUM,CARDIO_ENUM,TOMB_KEEP};
+// A weekly calendar reminder (v0.75): one repeating event on the chosen weekdays (0=Sun..6=Sat) at a
+// local time, as an .ics file the phone's Calendar imports. Floating local time (no time zone), so
+// "6 pm" stays 6 pm wherever you are. Starts on the next matching day that hasn't passed yet.
+function reminderIcs(days,hh,mm,now){
+  const BY=['SU','MO','TU','WE','TH','FR','SA'];days=[...new Set(days)].filter(d=>d>=0&&d<=6).sort();if(!days.length)return '';
+  const p2=n=>String(n).padStart(2,'0'),stamp=d=>d.getFullYear()+p2(d.getMonth()+1)+p2(d.getDate());
+  let d=new Date(now);d.setHours(hh,mm,0,0);while(days.indexOf(d.getDay())<0||d.getTime()<=now){d.setDate(d.getDate()+1);d.setHours(hh,mm,0,0);}
+  const u=new Date(now),utc=u.getUTCFullYear()+p2(u.getUTCMonth()+1)+p2(u.getUTCDate())+'T'+p2(u.getUTCHours())+p2(u.getUTCMinutes())+p2(u.getUTCSeconds())+'Z';
+  return ['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Ironlog//Reminder//EN','CALSCALE:GREGORIAN','BEGIN:VEVENT',
+    'UID:ironlog-reminder-'+now+'@ironlog','DTSTAMP:'+utc,'DTSTART:'+stamp(d)+'T'+p2(hh)+p2(mm)+'00','DURATION:PT1H',
+    'RRULE:FREQ=WEEKLY;BYDAY='+days.map(x=>BY[x]).join(','),'SUMMARY:Workout','DESCRIPTION:Open Ironlog and tap Start a workout.',
+    'BEGIN:VALARM','TRIGGER:PT0M','ACTION:DISPLAY','DESCRIPTION:Workout time','END:VALARM','END:VEVENT','END:VCALENDAR',''].join('\r\n');
+}
+IL.sync={reminderIcs,unionSets,hasTicked,MAX_SESSIONS,mergeSessions,applyTombstones,pruneTombstones,cleanDeleted,exportPayload,parseImport,resolveActive,cleanSession,cleanRoutine,cleanSettings,cleanProfile,cleanCardio,sessionSummaryCsv,PROFILE_ENUM,CARDIO_ENUM,TOMB_KEEP};
 if(typeof module!=='undefined')module.exports=IL.sync;

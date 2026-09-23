@@ -380,8 +380,9 @@ const ACTIONS={
   deloadToggle:el=>{draft.deload=!draft.deload;el.classList.toggle('on',draft.deload);refreshBuildBtns();},
   staleFinish:()=>finishWorkout(),
   staleDiscard:()=>discardActive(),
-  profileGo:()=>{markSeen('profileIntro');openProfile();},
-  profileSkip:()=>{markSeen('profileIntro');render();},
+  gymOther:()=>{gymOther=true;render();},
+  bbNoRack:()=>{state.settings.profile=Object.assign({},state.settings.profile,{gym:'machine'});delete state.settings.profile.place;markSeen('bbAsk');render();toast('Got it — machines, Smith machine and dumbbells from now on');},
+  bbHasRack:()=>{markSeen('bbAsk');render();},
   profileOpen:()=>openProfile(),
   cardioOpen:()=>{if(state.active){toast('Finish or discard your current session first');return;}openCardioSheet();}
 };
@@ -390,6 +391,7 @@ function bind(){
   if(!v.__delegated){v.__delegated=true;v.addEventListener('click',e=>{
     const a=e.target.closest('[data-action]');if(a&&ACTIONS[a.dataset.action]){ACTIONS[a.dataset.action](a,e);return;}
     const stip=e.target.closest('[data-seentip]');if(stip){markSeen(stip.dataset.seentip);render();return;}   // generic one-time tip dismissal
+    const plc=e.target.closest('[data-place]');if(plc){setPlace(plc.dataset.place);return;}   // "Where do you train?" (v0.75)
     const mu=e.target.closest('[data-mute]');if(mu){const seen=state.settings.seen=state.settings.seen||{};seen['mute:'+mu.dataset.mute]=true;S.saveSettingsCloud();render();toast('Got it — hidden from Coach’s Focus list. Settings can bring it back',{label:'Undo',fn:()=>{delete seen['mute:'+mu.dataset.mute];S.saveSettingsCloud();render();}});return;}
     const cl=e.target.closest('[data-collapse]');if(cl){toggleCollapse(cl.dataset.collapse,cl.dataset.collapseClosed==='1');return;}
     const la=e.target.closest('[data-liftsall]');if(la){liftsAll=!liftsAll;render();return;}

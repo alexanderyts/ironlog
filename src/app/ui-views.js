@@ -596,10 +596,12 @@ function toggleCollapse(key,closedByDefault){const k=(closedByDefault?'expand:':
 // A short label for the "Profile: …" lines; "Balanced" when nothing is set.
 function profileSummary(){const p=state.settings.profile||{};const parts=[];
   const g={size:'Size',strength:'Strength',general:'General'},gy={full:'Full gym',machine:'Machine gym',home:'Home'};
-  if(p.goal)parts.push(g[p.goal]);if(p.gym)parts.push(gy[p.gym]);if(p.days)parts.push(p.days+'d/wk');
+  const pl=p.place&&GYM_PLACES.find(x=>x.id===p.place);
+  if(p.goal)parts.push(g[p.goal]);if(p.gym)parts.push(pl?pl.label:gy[p.gym]);if(p.days)parts.push(p.days+'d/wk');
   return parts.length?parts.join(' · '):'Balanced';}
 function setProfile(field,val){const p=Object.assign({},state.settings.profile);
   if(!val||val==='auto')delete p[field];else p[field]=field==='days'?+val:val;
+  if(field==='gym')delete p.place;   // picking a gym type by hand replaces the "Planet Fitness"-style label
   state.settings.profile=Object.keys(p).length?p:undefined;S.saveSettingsCloud();render();}   // Progress targets follow at once (batch 5)
 function toggleProtect(gp){const p=Object.assign({},state.settings.profile),set=new Set(p.protect||[]);
   set.has(gp)?set.delete(gp):set.add(gp);if(set.size)p.protect=[...set];else delete p.protect;
@@ -614,7 +616,7 @@ function prow(label,inner){return `<div style="margin-bottom:18px"><div class="e
 function profileBody(){const p=state.settings.profile||{},avoid=p.avoid||[],protect=new Set(p.protect||[]);
   return `<div class="dim" style="font-size:13px;margin:-4px 2px 16px;line-height:1.5">All optional — anything left on <b>Balanced</b> works exactly like today. Changes save automatically; the workout builder and coach adapt to whatever you set here.</div>
     ${prow('Main goal',pchips('goal',[['auto','Balanced'],['size','Size'],['strength','Strength'],['general','General']]))}
-    ${prow('Your gym',pchips('gym',[['auto','Balanced'],['full','Full gym'],['machine','Machine-focused'],['home','Home / minimal']]))}
+    ${prow('Your gym',pchips('gym',[['auto','Balanced'],['full','Full gym'],['machine','Machine-focused'],['home','Home / minimal']])+(p.place&&GYM_PLACES.find(x=>x.id===p.place)?`<div class="dim" style="font-size:12px;margin:7px 2px 0">Set from “${esc(GYM_PLACES.find(x=>x.id===p.place).label)}” — ${GYM_NOTE[p.gym]}</div>`:''))}
     ${prow('Days per week',pchips('days',[['auto','Any'],['2','2'],['3','3'],['4','4'],['5','5'],['6','6']]))}
     ${prow('Session length',pchips('length',[['auto','Balanced'],['short','Short'],['standard','Standard'],['long','Long']]))}
     ${prow('Set style',pchips('sets',[['auto','Balanced'],['straight','Straight'],['ramp','Ramping']]))}
@@ -644,6 +646,8 @@ function openAvoidPicker(){
 function openSettings(){
   const R=state.settings.rest,st=state.settings;
   openSheet('Settings',`
+    <div class="settingrow"><div><div style="font-weight:600">Your name</div><div class="dim" style="font-size:13px">Optional — shown in the greeting</div></div>
+      <input id="nameIn" class="field" maxlength="24" autocomplete="given-name" placeholder="Optional" value="${esc(st.name||'')}" style="width:130px;height:38px;padding:0 12px"></div>
     <div class="settingrow"><div><div style="font-weight:600">Units</div><div class="dim" style="font-size:13px">Weight display</div></div>
       <div class="seg" id="segUnit"><button data-u="lb" class="${U()==='lb'?'on':''}">lb</button><button data-u="kg" class="${U()==='kg'?'on':''}">kg</button></div></div>
     <div class="settingrow"><div><div style="font-weight:600">Bodyweight</div><div class="dim" style="font-size:13px">Counts pull-ups, dips &amp; push-ups toward volume and PRs</div></div>
@@ -651,6 +655,7 @@ function openSettings(){
     <div class="settingrow"><div><div style="font-weight:600">Theme</div><div class="dim" style="font-size:13px">Appearance</div></div>
       <div class="seg" id="segTheme"><button data-t="system" class="${st.theme==='system'?'on':''}">Auto</button><button data-t="light" class="${st.theme==='light'?'on':''}">Light</button><button data-t="dark" class="${st.theme==='dark'?'on':''}">Dark</button></div></div>
     <button class="settingrow" id="btnProfile" style="width:100%;text-align:left;background:none;border:none;border-bottom:1px solid var(--line)"><div><div style="font-weight:600">Training profile</div><div class="dim" style="font-size:13px">How the builder tailors your workouts</div></div><span class="mono dim" style="font-size:13px">${profileSummary()} ›</span></button>
+    <button class="settingrow" id="btnReminder" style="width:100%;text-align:left;background:none;border:none;border-bottom:1px solid var(--line)"><div><div style="font-weight:600">Workout reminder</div><div class="dim" style="font-size:13px">Add your gym days to your phone’s calendar</div></div><span class="dim" style="font-size:13px">›</span></button>
     <div style="height:18px"></div>
     <div class="eyebrow" style="margin-bottom:10px">Cloud backup</div>
     ${cloudSection()}
@@ -684,6 +689,8 @@ function openSettings(){
   $('#bwVal').addEventListener('click',()=>openNumberSheet('Your bodyweight ('+U()+')',bw()||'',v=>{state.settings.bodyweight=Math.max(0,v);S.saveSettingsCloud();openSettings();}));
   const on=(sel,fn)=>{const el=$(sel);if(el)el.addEventListener('click',fn);};
   on('#btnProfile',openProfile);
+  on('#btnReminder',openReminder);
+  const ni=$('#nameIn');if(ni)ni.addEventListener('change',()=>{const v=ni.value.trim().slice(0,24);if(v)state.settings.name=v;else delete state.settings.name;S.saveSettingsCloud();render();});
   on('#btnUnmute',()=>{const seen=state.settings.seen||{};Object.keys(seen).forEach(k=>{if(k.indexOf('mute:')===0)delete seen[k];});S.saveSettingsCloud();openSettings();render();toast('Coaching notes are back on');});
   on('#btnExport',exportData);
   on('#verLine',()=>{const d=$('#vpDiag');if(d)d.hidden=!d.hidden;});
@@ -725,6 +732,25 @@ async function saveFile(base,ext,data,mime,label){
   try{if(window.claude&&claude.use){const dl=await claude.use('downloads');if(dl){await dl.save({filename:fname,data});toast(label+' saved');return;}}}catch(e){}
   try{const blob=new Blob([data],{type:mime});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=fname;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);toast(label+' downloaded');}
   catch(e){toast('Could not export here');}
+}
+// Calendar reminder (v0.75): pick days and a time, get one repeating event for the phone's calendar.
+// The app can't notify you when it's closed; your calendar can. Days default to the profile's count.
+let remDraft=null;
+function openReminder(){
+  if(!remDraft){const n=(state.settings.profile&&state.settings.profile.days)||3,pre={2:[1,4],3:[1,3,5],4:[1,2,4,5],5:[1,2,3,4,5],6:[1,2,3,4,5,6]};remDraft={days:new Set(pre[n]||pre[3]),t:'18:00'};}
+  const D=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'],order=[1,2,3,4,5,6,0];
+  openSheet('Workout reminder',`<div class="dim" style="font-size:13px;margin:-4px 2px 14px;line-height:1.5">Adds a repeating “Workout” event to your calendar, so your phone reminds you — even when Ironlog is closed.</div>
+    <div class="eyebrow" style="margin:0 2px 8px">Days</div>
+    <div class="chips" id="remDays">${order.map(d=>`<button class="chip ${remDraft.days.has(d)?'on':''}" data-remday="${d}" aria-pressed="${remDraft.days.has(d)}">${D[d]}</button>`).join('')}</div>
+    <div class="eyebrow" style="margin:18px 2px 8px">Time</div>
+    <input type="time" id="remTime" class="field" value="${remDraft.t}" style="width:auto;height:44px;padding:0 14px">
+    <button class="btn primary block" id="remGo" style="margin-top:18px">Add to my calendar</button>
+    <div class="dim" style="font-size:12px;text-align:center;margin-top:9px">Opens a calendar file — tap Add in your calendar app.</div>`);
+  $('#remDays').addEventListener('click',e=>{const b=e.target.closest('[data-remday]');if(!b)return;const d=+b.dataset.remday;remDraft.days.has(d)?remDraft.days.delete(d):remDraft.days.add(d);b.classList.toggle('on');b.setAttribute('aria-pressed',remDraft.days.has(d));});
+  $('#remTime').addEventListener('change',e=>{if(/^\d\d:\d\d$/.test(e.target.value))remDraft.t=e.target.value;});
+  $('#remGo').addEventListener('click',()=>{if(!remDraft.days.size){toast('Pick at least one day');return;}
+    const [hh,mm]=remDraft.t.split(':').map(Number);
+    saveFile('ironlog-reminder','ics',IL.sync.reminderIcs([...remDraft.days],hh,mm,Date.now()),'text/calendar','Reminder');closeSheet();});
 }
 function exportData(){return saveFile('ironlog-backup','json',JSON.stringify(S.exportPayload(),null,2),'application/json','Backup');}
 function exportCsv(){

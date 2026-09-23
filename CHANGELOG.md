@@ -2,6 +2,18 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.75.0 — 2026-09-23 · First run & Home
+Batch 5b from the overnight review: an easier first week and a friendlier Home.
+- **"Where do you train?"** One tap on Home replaces the training-profile intro card. Pick Planet Fitness, LA Fitness, Anytime Fitness, Crunch, YMCA or 24 Hour Fitness. "Somewhere else…" offers Big gym, Mostly machines, Apartment / hotel gym and Home. Planet Fitness means machines, the Smith machine and dumbbells, with no barbell rack. You can change it in Settings → Training profile.
+- **It learns from what you skip.** Swap a barbell lift for a non-barbell one in two different workouts and the New-workout screen asks: "No barbell rack at your gym?" It changes nothing unless you say so.
+- **A short first workout.** With no history, a built workout is at most 4 exercises × 3 sets.
+- **"How to log" tip** on your first workout: enter the numbers, tap ✓, only ticked sets save, Finish when done. **Got it** hides it.
+- **The deload switch appears after 5 workouts.** Before then it's just noise.
+- **Your name** (optional, in Settings) appears in the greeting: "Good evening, Sam."
+- **A new week opens on last week's recap** ("Last week: 3 workouts · 48 sets") instead of "0 workouts this week". After a longer gap it says how long it's been.
+- **Workout reminder:** Settings → pick days and a time → **Add to my calendar**. Your phone's calendar reminds you even when the app is closed.
+- Not verified on-device.
+
 ## v0.74.0 — 2026-09-23 · Clearer screens
 Batch 5a from the overnight review: numbers that agree, and plain words.
 - **Your first weeks don't look like failure.** Weekly sets are no longer divided by 4 before you've trained 4 weeks, so 6 chest sets in week one reads 6, not 1.5. The coach waits for 3 workouts before suggesting gaps to fill, and says "Not trained yet" instead of "Nothing in 4 weeks".
