@@ -277,7 +277,9 @@ test('UI: P2 — the profile reaches the builder: avoid swaps a lift out; goal a
     // control: goal is a seed-only lever (reps/load), so the exercise list is unchanged from baseline
     h.state.settings.profile={goal:'strength'};h.IL.ui.render();
     const c=build();
-    assert.deepEqual(c,a,'goal:strength changes prescriptions, not which exercises are chosen');
+    // Array.from: normalise realms — a list rebuilt inside the jsdom bundle vs one mapped from node-built
+    // history are different Array prototypes, which deepStrictEqual rejects even with identical contents
+    assert.deepEqual(Array.from(c),Array.from(a),'goal:strength changes prescriptions, not which exercises are chosen');
   }finally{h.teardown();}
 });
 

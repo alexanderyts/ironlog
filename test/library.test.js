@@ -45,16 +45,19 @@ test('rotation families: a stalled lift is replaced within its own group, determ
 
 test('the new glute-medius region is covered by every fresh glute build',()=>{
   assert.ok(EXERCISES.some(e=>e.group==='Glutes'&&e.reg==='medius'),'a medius exercise exists');
-  // oracle for seed 0, property for all seeds
-  assert.deepEqual(B.buildRecommendation(['Glutes'],[],0),['hip-thrust','machine-hip-thrust','hip-abduction']);
+  // oracle for seed 0, property for all seeds. (v0.62.0: the old oracle was hip thrust + MACHINE hip
+  // thrust — a near-duplicate the builder audit flagged; a beginner now leads with the machine version.)
+  assert.deepEqual(B.buildRecommendation(['Glutes'],[],0),['machine-hip-thrust','hip-abduction']);
   for(let s=0;s<20;s++)assert.ok(B.buildRecommendation(['Glutes'],[],s).some(id=>EX[id].reg==='medius'),'glute build covers medius, seed '+s);
 });
 
 test('every fresh leg build includes a lengthened-position (stretch) movement',()=>{
-  // strengthened from ">=4 of 6": RDL/stiff-leg (both LONG_LENGTH) anchor hamstrings every time.
-  // oracle for seed 1, property across 20 seeds.
+  // oracle for seed 1, property across 20 seeds. (v0.62.0: the old oracle REQUIRED RDL + stiff-leg deadlift
+  // together — the near-duplicate pair the builder audit flagged. A beginner's hamstrings now anchor on the
+  // Dumbbell RDL, itself a stretch-position hinge.)
   const s1=B.buildRecommendation(['Hamstrings','Quads'],[],1);
-  assert.ok(s1.includes('romanian-deadlift')&&s1.includes('stiff-leg-deadlift'),'seed 1: '+s1.join(','));
+  assert.ok(s1.includes('dumbbell-romanian-deadlift'),'seed 1: '+s1.join(','));
+  assert.ok(!(s1.includes('romanian-deadlift')&&s1.includes('stiff-leg-deadlift')),'never RDL + stiff-leg together');
   for(let s=0;s<20;s++){const ids=B.buildRecommendation(['Hamstrings','Quads'],[],s);
     assert.ok(ids.some(id=>LONG_LENGTH.has(id)),'seed '+s+' has a stretch option: '+ids.join(','));}
 });

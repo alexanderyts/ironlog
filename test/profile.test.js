@@ -10,12 +10,15 @@ const br=(groups,seed,profile)=>B.buildRecommendation(groups,[],seed,undefined,u
 
 // ── 1. avoid ─────────────────────────────────────────────────────────────────────────────────────
 test('P2 avoid: an avoided lift never appears in a fresh plan, and IS there without the lever',()=>{
-  for(let seed=0;seed<8;seed++){
-    assert.ok(br(['Chest'],seed).includes('barbell-bench-press')||seed>0,'sanity: bench is a natural chest pick');
-    assert.ok(!br(['Chest'],seed,{avoid:['barbell-bench-press']}).includes('barbell-bench-press'),'avoid removes it, seed '+seed);
-  }
-  // control: with the lever off at seed 1 the bench is chosen (the exact plan we avoid against)
-  assert.ok(br(['Chest'],1).includes('barbell-bench-press'),'control: bench present without avoid');
+  // A lifter with chest history (a brand-new one is kept off barbell compounds by the beginner safeguard):
+  // the bench is their anchor — the exact plan we avoid against.
+  const hist=history(session(9,[['barbell-bench-press',[set(135,8)]]],{now:NOW}));
+  const bh=(seed,profile)=>B.buildRecommendation(['Chest'],hist,seed,undefined,undefined,profile);
+  assert.ok(bh(1).includes('barbell-bench-press'),'control: bench present without avoid');
+  for(let seed=0;seed<8;seed++)assert.ok(!bh(seed,{avoid:['barbell-bench-press']}).includes('barbell-bench-press'),'avoid removes it, seed '+seed);
+  // and for a beginner: whatever leads their chest day is gone once avoided
+  const lead=br(['Chest'],1)[0];
+  for(let seed=0;seed<8;seed++)assert.ok(!br(['Chest'],seed,{avoid:[lead]}).includes(lead),'avoid removes '+lead+', seed '+seed);
 });
 test('P2 avoid: a CONTINUED plan swaps an avoided lift for a same-group lift, and says why',()=>{
   const hist=[3,10,17].map(d=>session(d,[['barbell-bench-press',[set(185,6),set(185,6)]],['tricep-pushdown',[set(60,10)]]],{now:NOW}));
@@ -33,13 +36,24 @@ test('P2 avoid: a CONTINUED plan swaps an avoided lift for a same-group lift, an
 test('P2 gym=home: fresh proposals are dumbbell/bodyweight only; full gym keeps barbells (control)',()=>{
   const home=br(['Chest'],1,{gym:'home'});
   assert.ok(home.every(id=>EX[id].equip==='Dumbbell'||EX[id].equip==='Bodyweight'),'home = DB/BW only: '+home.join(','));
-  assert.ok(br(['Chest'],1).some(id=>EX[id].equip==='Barbell'),'control: full gym still proposes a barbell lift');
+  // control uses a lifter with chest history — a brand-new one is kept off barbell compounds on purpose
+  const hist=history(session(9,[['barbell-bench-press',[set(135,8)]]],{now:NOW}));
+  assert.ok(B.buildRecommendation(['Chest'],hist,1).some(id=>EX[id].equip==='Barbell'),'control: full gym still proposes a barbell lift');
+  const homeH=B.buildRecommendation(['Chest'],hist,1,undefined,undefined,{gym:'home'});
+  assert.ok(homeH.every(id=>EX[id].equip==='Dumbbell'||EX[id].equip==='Bodyweight'),'home stays DB/BW even with barbell history: '+homeH.join(','));
 });
-test('P2 gym=machine: excludes barbells UNLESS the user logs that lift in smith mode',()=>{
-  assert.ok(!br(['Chest'],1,{gym:'machine'}).some(id=>EX[id].equip==='Barbell'),'no barbell in a machine-gym fresh plan');
-  // a barbell lift logged in SMITH mode is kept (prescribed as smith) — the exception the spec calls out
-  const smith=history(session(3,[['barbell-bench-press',[set(135,8)]]],{now:NOW}));
-  smith[0].exercises[0].mode='smith';
+test('P2 gym=machine: only Smith-friendly barbell lifts, seeded in Smith mode; everything else barbell stays out',()=>{
+  const hist=history(session(9,[['barbell-bench-press',[set(135,8)]],['barbell-row',[set(115,8)]]],{now:NOW}));
+  for(let seed=0;seed<10;seed++){
+    const ids=B.buildRecommendation(['Chest','Back'],hist,seed,undefined,undefined,{gym:'machine'});
+    ids.filter(id=>EX[id].equip==='Barbell').forEach(id=>assert.ok(B.SMITH_OK.has(id),id+' is a barbell lift with no Smith version — must not reach a machine gym'));
+  }
+  assert.ok(!B.buildRecommendation(['Back'],hist,1,undefined,undefined,{gym:'machine'}).includes('barbell-row'),'barbell row (no Smith version here) is out');
+  // a Smith-friendly barbell lift is seeded in Smith mode at a machine gym, so its history/PRs/plates line up
+  assert.equal(B.seedExercise('barbell-bench-press',[],{unit:'lb',gym:'machine'}).mode,'smith');
+  assert.equal(B.seedExercise('barbell-bench-press',[],{unit:'lb'}).mode,undefined,'control: a full gym keeps the barbell');
+  // a lift the user has logged in Smith mode also survives, as before
+  const smith=history(session(3,[['barbell-bench-press',[set(135,8)]]],{now:NOW}));smith[0].exercises[0].mode='smith';
   assert.ok(B.buildRecommendation(['Chest'],smith,1,undefined,undefined,{gym:'machine'}).includes('barbell-bench-press'),'a smith-logged barbell lift survives the machine filter');
 });
 
@@ -80,11 +94,13 @@ test('P2 goal: size seeds more reps on a fresh lift; on history it holds where g
 });
 
 // ── 6. sets (set style) ────────────────────────────────────────────────────────────────────────────
-test('P2 sets: ramp makes a tier-1 top set a 3-step climb; straight flattens an ascending prescription',()=>{
+test('P2 sets: ramp climbs 80%/90% into the prescribed TOP sets; straight flattens an ascending prescription',()=>{
   const hist=history(session(3,[['barbell-bench-press',[set(185,8),set(185,8)]]],{now:NOW}));   // general bumps → 190×5 flat
   const ramp=B.seedExercise('barbell-bench-press',hist,{unit:'lb',setStyle:'ramp'}).sets;
-  assert.deepEqual(ramp.map(s=>s.w),[150,170,190],'ramp: 0.8/0.9/1.0 of 190 on the 5lb grid');
-  assert.equal(ramp.length,3,'ramp is exactly three sets');
+  // builder audit #12: a flat 80/90/100 left ONE hard set (and repeated forever, since next time's count
+  // came from that 3-set history). Now: two ramp sets, then the main lift's 4 prescribed sets' worth of top sets.
+  assert.deepEqual(ramp.map(s=>s.w),[150,170,190,190],'ramp: 0.8/0.9 of 190 on the 5lb grid, then two top sets');
+  assert.equal(ramp.filter(s=>s.w===190).length,2,'two hard top sets, not one');
   // straight flattens a non-flat prescription to the top weight
   const asc=history(session(3,[['barbell-bench-press',[set(170,5),set(180,5),set(190,8)]]],{now:NOW}));
   assert.deepEqual(B.seedExercise('barbell-bench-press',asc,{unit:'lb'}).sets.map(s=>s.w),[175,185,195],'control: auto mirrors the ascending shape');
@@ -93,7 +109,7 @@ test('P2 sets: ramp makes a tier-1 top set a 3-step climb; straight flattens an 
   // mirrors; ramp must carry the OPENER's 5 reps to the top set, not the back-offs' 8
   const desc=history(session(3,[['barbell-bench-press',[set(200,5),set(180,8),set(180,8)]]],{now:NOW}));
   assert.deepEqual(B.seedExercise('barbell-bench-press',desc,{unit:'lb'}).sets.map(s=>[s.w,s.r]),[[200,5],[180,8],[180,8]],'control: auto mirrors the descending shape');
-  assert.deepEqual(B.seedExercise('barbell-bench-press',desc,{unit:'lb',setStyle:'ramp'}).sets.map(s=>[s.w,s.r]),[[160,5],[180,5],[200,5]],'ramp: top-set reps come from the set that carried the top weight');
+  assert.deepEqual(B.seedExercise('barbell-bench-press',desc,{unit:'lb',setStyle:'ramp'}).sets.map(s=>[s.w,s.r]),[[160,5],[180,5],[200,5],[200,5]],'ramp: top-set reps come from the set that carried the top weight');
 });
 
 // ── 7. push ─────────────────────────────────────────────────────────────────────────────────────
@@ -126,8 +142,15 @@ test('P2 audit: a combined machine + protect Shoulders + short profile keeps CHU
     assert.equal(p.rotation,null,'HOLD WHAT WORKS: no spurious rotation under a profile, iter '+i);
     assert.deepEqual(new Set(p.ids),baseSet,'CHURN: the plan is identical across seeds under a profile, iter '+i);
   }
-  // a continued barbell anchor the user already trains is NOT retroactively swapped by gym/protect
-  assert.ok(base.ids.includes('overhead-press'),'a continued barbell anchor is retained, not force-swapped (no retroactive churn)');
+  // SETTINGS WIN on a continued plan (owner decision 2026-09-22; builder audit #1): "go easy on shoulders"
+  // swaps the heavy barbell overhead press for a shoulder lift that fits — deterministically (CHURN above
+  // still holds), not counted as a rotation (HOLD above), and the build says why.
+  assert.ok(!base.ids.includes('overhead-press'),'protected shoulders lose the heavy barbell press');
+  const sw=(base.reactions||[]).find(r=>r.from==='overhead-press');
+  assert.ok(sw&&sw.to&&/going easy on shoulders/.test(sw.why),'swapped with a reason: '+JSON.stringify(sw));
+  assert.equal(EX[sw.to].group,'Shoulders','swapped for another shoulder lift, not dropped');
+  // the barbell bench has a Smith version, so the machine gym keeps it (seeded in Smith mode)
+  assert.ok(base.ids.includes('barbell-bench-press'),'a Smith-friendly barbell lift stays at a machine gym');
 });
 
 // ── Phase P4: adversarial combinatorial audit ────────────────────────────────────────────────────

@@ -43,7 +43,8 @@ function toast(msg,action){
   const t=$('#toast'),b=$('#toastAct');$('#toastMsg').textContent=msg;
   if(action){b.hidden=false;b.textContent=action.label;b.onclick=()=>{hideToast();action.fn();};t.classList.add('act');}
   else{b.hidden=true;b.onclick=null;t.classList.remove('act');}
-  t.classList.add('on');clearTimeout(toastT);toastT=setTimeout(hideToast,action?6000:1900);
+  // long enough to actually read: ~55 ms per character, 1.9 s minimum, 7 s maximum (review 7.3)
+  t.classList.add('on');clearTimeout(toastT);toastT=setTimeout(hideToast,action?6000:Math.min(7000,Math.max(1900,String(msg).length*55)));
 }
 function hideToast(){$('#toast').classList.remove('on','act');}
 let _confirmCb=null;

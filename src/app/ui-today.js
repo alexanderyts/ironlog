@@ -219,14 +219,19 @@ function recentTemplates(){
       <span class="ex-add" style="background:var(--surface-2)">↻</span></button>`).join('');
 }
 const SCHEMA=1;
-function newSession(exIds,deload,volumeBump){const pf=state.settings.profile||{},goal=pf.goal,setStyle=pf.sets,push=pf.push;const s={id:S.uid(),schema:SCHEMA,date:Date.now(),updatedAt:Date.now(),completed:false,exercises:(exIds||[]).map(id=>B.seedExercise(id,state.sessions,{unit:U(),deload,extraSet:volumeBump&&volumeBump.indexOf(id)>=0,goal,setStyle,push}))};if(deload)s.deload=true;return s;}
+// opts.budget: a FRESHLY built workout is trimmed to the session-length budget (~60 / 45 / 75 min). A
+// continued plan, a repeat or a routine keeps the user's own set counts.
+function newSession(exIds,deload,volumeBump,opts){const pf=state.settings.profile||{},goal=pf.goal,setStyle=pf.sets,push=pf.push,gym=pf.gym;
+  const s={id:S.uid(),schema:SCHEMA,date:Date.now(),updatedAt:Date.now(),completed:false,exercises:(exIds||[]).map(id=>B.seedExercise(id,state.sessions,{unit:U(),deload,extraSet:volumeBump&&volumeBump.indexOf(id)>=0,goal,setStyle,push,gym}))};
+  if(opts&&opts.budget)B.fitSessionBudget(s.exercises,pf);
+  if(deload)s.deload=true;return s;}
 // The ONLY way a workout begins. spec: {ids, deload, msg, volumeBump, source}. Every start path —
 // build / blank / repeat / routine / history-repeat — routes through here, so the draft reset (and,
 // from Phase 1, the discard guard) live in one place instead of at each call site.
 function startSession(spec){
   spec=spec||{};
   const begin=()=>{
-    S.setActive(newSession(spec.ids||[],!!spec.deload,spec.volumeBump));
+    S.setActive(newSession(spec.ids||[],!!spec.deload,spec.volumeBump,{budget:!!spec.budget}));
     resetDraft();
     todayScreen='active';render();
     if(spec.msg)toast(spec.msg);
@@ -339,7 +344,14 @@ function buildAndStart(fresh){
     else if(p.volumeBump&&p.volumeBump.length){const vr=(p.reactions||[]).find(r=>r.type==='volume');msg='Weights from last time · +1 set on '+((vr&&EX[vr.exId]&&EX[vr.exId].name)||(vr&&vr.group)||'a lift where volume was low');}
     else msg='Weights carried from your last session — adjust anything';
   }
-  startSession({ids:p.ids,msg,deload:p.deload,volumeBump:p.volumeBump,source:'build'});
+  // Settings win on a continued plan: say what was swapped/left out and why (it outranks the messages above)
+  const prof=(p.reactions||[]).filter(r=>r.type==='profile-swap'||r.type==='avoid-swap'||r.type==='profile-drop');
+  if(prof.length)msg=prof[0].why.charAt(0).toUpperCase()+prof[0].why.slice(1)+(prof.length>1?' (+'+(prof.length-1)+' more)':'');
+  // A muscle you picked that got nothing: no room (too many muscles), or nothing fits your settings
+  if(p.skipped&&p.skipped.length){const pf=state.settings.profile;
+    const noFit=p.skipped.filter(g=>!IL.data.EXERCISES.some(e=>e.group===g&&B.profileAllows(e,g,pf,state.sessions)));
+    msg+=noFit.length?' · nothing fits your settings for '+noFit.join(' & '):' · no room for '+p.skipped.join(' & ')+' — pick fewer muscles';}
+  startSession({ids:p.ids,msg,deload:p.deload,volumeBump:p.volumeBump,source:'build',budget:p.mode==='fresh'});
 }
 // Reaction 1: a one-tap nudge toward the muscles the coach says are light or unbalanced this week.
 function coachNudge(){

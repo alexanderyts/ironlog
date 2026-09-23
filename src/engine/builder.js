@@ -3,12 +3,12 @@
 var IL=globalThis.IL||(globalThis.IL={});
 if(typeof require==='function'&&!IL.data)require('../data/exercises.js');
 if(typeof require==='function'&&!IL.prog)require('./progression.js');
-const {C,I,EXERCISES,EX,REGIONS,IDEAL_PATS,PAT_RANK,EQUIP_LOAD,LONG_LENGTH,INVERTED_LOAD,TIME_METRIC,regLabel,patLabel,hashId}=IL.data;
-const {lastPerf,lastModeFor,lastSideFor,trackOf,nextSets,deloadSets,repRange,modeOf,real,DAY,unitIncrement}=IL.prog;
+const {C,I,EXERCISES,EX,REGIONS,IDEAL_PATS,PAT_RANK,EQUIP_LOAD,LONG_LENGTH,INVERTED_LOAD,TIME_METRIC,UNILATERAL,regLabel,patLabel,hashId}=IL.data;
+const {lastPerf,lastModeFor,lastSideFor,trackOf,sidesOf,nextSets,deloadSets,repRange,modeOf,real,DAY,unitIncrement}=IL.prog;
 
 // Working sets a movement deserves when you've never logged it: main lifts 4, other compounds 3,
 // isolation 3, finishers 2. Reps prefilled at the bottom of the target range.
-function prescribedSets(ex){if(!ex)return 3;if(ex.type===C)return ex.tier===1?4:3;return ex.tier===3?2:3;}
+function prescribedSets(ex){if(!ex)return 3;if(ex.type===C&&!(TIME_METRIC&&TIME_METRIC.has(ex.id)))return ex.tier===1?4:3;return ex.tier===3?2:3;}   // a timed carry is not a 4-set main lift
 // With history, the sets are seeded with the pattern-aware progressive-overload prescription
 // (see nextSets in progression.js), not a stale copy of last time. The modality the user last
 // performed this exercise with is remembered and carried onto the new instance, and the seed pulls
@@ -30,16 +30,23 @@ function shapeStyle(sets,style,ex,unit){
     // reps come from the set that CARRIES the top weight — on a descending pattern (heavy opener,
     // lighter back-offs) the last set holds back-off reps, which must not land on the top set
     const inc=unitIncrement(unit||'lb',ex),topR=(sets.find(s=>(+s.w||0)===w)||sets[sets.length-1]).r,grid=x=>Math.max(inc,Math.round(x/inc)*inc);
-    return[{w:grid(w*0.8),r:topR,done:false},{w:grid(w*0.9),r:topR,done:false},{w,r:topR,done:false}];
+    // Two ramp sets, then the prescribed number of TOP sets (builder audit #12: a flat 80/90/100 left one
+    // hard set, and repeated itself forever because next time's count came from that 3-set history).
+    const n=Math.max(prescribedSets(ex),sets.length,3),out=[{w:grid(w*0.8),r:topR,done:false},{w:grid(w*0.9),r:topR,done:false}];
+    while(out.length<n)out.push({w,r:topR,done:false});
+    return out;
   }
   return sets;
 }
 function seedExercise(id,sessions,opts){
-  opts=opts||{};const {excludeId,unit,deload,extraSet,goal,setStyle,push}=opts;   // goal/setStyle/push: profile levers
+  opts=opts||{};const {excludeId,unit,deload,extraSet,goal,setStyle,push,gym}=opts;   // goal/setStyle/push/gym: profile levers
   const ex=EX[id];const mode=lastModeFor(sessions,id),side=lastSideFor(sessions,id);
   const inst={id,name:ex?ex.name:id};if(mode)inst.mode=mode;if(side!=null)inst.side=side;   // remember "⇆ Each side" like the equipment choice
-  // An overridden side is its own history track — seed from THAT track, never the other way of doing it
-  const lp=lastPerf(sessions||[],id,{excludeId,mode:side!=null?trackOf(inst):(mode||undefined),clean:true});   // real sessions only — a deload is never a baseline; `clean` so a set marked "doesn't count" is never prefilled back at you
+  // A machine gym has no free barbell: a Smith-friendly barbell lift starts in Smith mode (so its
+  // history, PRs and the plate loader's Smith bar all line up). An explicit earlier choice still wins.
+  if(!inst.mode&&gym==='machine'&&ex&&ex.equip==='Barbell'&&SMITH_OK.has(id))inst.mode='smith';
+  // An overridden side / auto-Smith is its own history track — seed from THAT track, never another one
+  const lp=lastPerf(sessions||[],id,{excludeId,mode:side!=null||(inst.mode||null)!==(mode||null)?trackOf(inst):(mode||undefined),clean:true});   // real sessions only — a deload is never a baseline; `clean` so a set marked "doesn't count" is never prefilled back at you
   const rr=goal?repRange(ex,goal):(ex?ex.rr:[8,12]);   // goal shifts the target range in one place
   let sets;
   // push:'quiet' — "just record": the rows mirror last time exactly, never a bump. Must agree with
@@ -61,8 +68,14 @@ function lastSessionIds(sessions,g){
 // isolation last, foundational before secondary, and the focus muscle's key lift leads.
 function perfPriority(ex,focus){
   if(!ex)return -1;                    // unknown id (retired/imported) sorts last, never crashes ordering
-  let p=(PAT_RANK[ex.pat]||1)*16;      // squat/hinge 96 · press/pull 64 · lunge 48 · iso 16
-  if(ex.type===C)p+=15;
+  // Only a real compound earns its pattern's rank. An isolation that happens to be tagged with a big
+  // pattern (a back extension is 'hinge') or a timed carry must not outrank the presses — it sorts with
+  // the isolations. (Builder audit #3/#13: back extension led the machine-gym full body; carry before curls.)
+  const timed=!!(TIME_METRIC&&TIME_METRIC.has(ex.id)),comp=ex.type===C&&!timed;
+  // squat/hinge 96 · press/pull 64 · lunge 48 · iso 16 · timed holds/carries 8 — finishers go LAST
+  // (a farmer's carry before curls fries the grip the curls need)
+  let p=timed?8:(comp?(PAT_RANK[ex.pat]||1):1)*16;
+  if(comp)p+=15;
   p+=EQUIP_LOAD[ex.equip]||0;
   p+=ex.tier===1?6:ex.tier===2?2:0;
   if(focus&&ex.group===focus)p+=10;
@@ -77,28 +90,42 @@ const isHeavyAxial=e=>!!e&&e.type===C&&e.equip==='Barbell'&&(e.pat==='squat'||e.
 // test with no backoff — for callers where dropping the exercise is fine. profilePool applies the
 // same three rules but relaxes them rather than strand a group; this never relaxes. Same rule set,
 // so the two can't drift on what "machine excludes" or "protect drops" means.
+// Barbell lifts a machine gym can still do — on the Smith machine. Seeded in Smith mode (seedExercise).
+const SMITH_OK=new Set(['back-squat','barbell-bench-press','incline-barbell-press','overhead-press','romanian-deadlift','hip-thrust','shrug']);
 function profileAllows(e,g,profile,sessions){
   if(!profile||!e)return true;
   if(profile.avoid&&profile.avoid.indexOf(e.id)>=0)return false;
-  if(profile.gym==='machine'&&e.equip==='Barbell'&&lastModeFor(sessions,e.id)!=='smith')return false;
+  if(profile.gym==='machine'&&e.equip==='Barbell'&&!SMITH_OK.has(e.id)&&lastModeFor(sessions,e.id)!=='smith')return false;
   if(profile.gym==='home'&&!(e.equip==='Dumbbell'||e.equip==='Bodyweight'))return false;
   if(profile.protect&&profile.protect.indexOf(g)>=0&&e.tier===1&&e.type==='compound'&&(e.equip==='Barbell'||e.equip==='Dumbbell'))return false;
   return true;
 }
-// Safety: at most two heavy barbell squat/hinge lifts per session. Extras swap to a non-barbell
-// variant of the same pattern from the same muscle, else are dropped. The alternative must clear the
-// profile too — an over-cap swap is the builder's own change, so it may not smuggle back an avoided /
-// off-equipment / protected lift (a real leak the P4 audit caught). No legal alt → drop the extra.
-function capHeavyAxial(ids,profile,sessions){
-  const heavy=ids.filter(id=>isHeavyAxial(EX[id]));
-  if(heavy.length<=2)return ids;
-  const keep=new Set(orderByFatigue(heavy).slice(0,2));
-  return ids.map(id=>{
-    if(!isHeavyAxial(EX[id])||keep.has(id))return id;
+// Spinal load per lift: a heavy barbell squat or hinge = 1 unit, a barbell row = ½ (the back holds a
+// braced hinge under load). Hip thrust loads the hips, not the spine (0).
+const spinalUnits=e=>!e||e.type!==C||e.equip!=='Barbell'?0:isHeavyAxial(e)?1:e.pat==='hpull'?0.5:0;
+// Safety: a session carries at most 2 units of spinal load, and at most ONE heavy squat and ONE heavy
+// hinge — two squats and no hinge isn't a balanced leg day (builder audit #2/#8). Decided by priority,
+// so the most important lifts keep their slot. Extras swap to the best non-spinal lift of the same
+// muscle and pattern, else are dropped. The alternative must clear the profile (an over-cap swap is the
+// builder's own change — it may not smuggle back an avoided / off-equipment / protected lift) and may
+// not already be in the session (the old check looked only at the ORIGINAL list, so two extras could
+// both become the same back extension — audit #2).
+// `balance` (fresh builds only): also at most one heavy squat and one heavy hinge. A continued plan is
+// the user's own programming, so it gets only the 2-unit safety cap.
+function capHeavyAxial(ids,profile,sessions,balance){
+  const keep=new Set();let units=0;const heavyPat={};
+  orderByFatigue(ids.slice()).forEach(id=>{const e=EX[id],u=spinalUnits(e);if(!u){keep.add(id);return;}
+    if((!balance||!isHeavyAxial(e)||!heavyPat[e.pat])&&units+u<=2){keep.add(id);units+=u;if(isHeavyAxial(e))heavyPat[e.pat]=true;}});
+  if(keep.size===ids.length)return ids;
+  const out=[];
+  ids.forEach(id=>{
+    if(keep.has(id)){out.push(id);return;}
     const e=EX[id];
-    const alt=EXERCISES.find(x=>x.group===e.group&&x.pat===e.pat&&!isHeavyAxial(x)&&ids.indexOf(x.id)<0&&profileAllows(x,x.group,profile,sessions));
-    return alt?alt.id:null;
-  }).filter(Boolean);
+    const alt=EXERCISES.filter(x=>x.group===e.group&&x.pat===e.pat&&!spinalUnits(x)&&ids.indexOf(x.id)<0&&out.indexOf(x.id)<0&&profileAllows(x,x.group,profile,sessions))
+      .sort((a,b)=>perfPriority(b)-perfPriority(a))[0];
+    if(alt)out.push(alt.id);
+  });
+  return out;
 }
 
 // Pick exercises for one muscle group:
@@ -111,61 +138,117 @@ function fillsGap(e,hints){
   if(!hints||!hints.gaps)return false;
   return hints.gaps.some(gp=>gp.group===e.group&&(gp.reg===e.reg||gp.pat===e.pat));
 }
-// Training-profile equipment/avoid/protect levers, applied to a candidate list in a FIXED order
-// (avoid → gym → protect) so they compose predictably. Each is a no-op when the profile is Balanced.
-// Never returns empty: if a lever would strand a group, it backs off to the least-restrictive result.
+// Training-profile equipment/avoid/protect levers applied to a candidate list. STRICT, never relaxed
+// (builder audit #1): the gym rule is physical (the equipment isn't there), the avoid list is often an
+// injury, and "protect" exists to keep heavy compounds off a muscle. The old backoff, when a group ran
+// dry, relaxed the gym rule and handed a machine gym a barbell RDL. Now an empty result means the group
+// is skipped — planWorkout reports it in `skipped` and the app says so.
 function profilePool(list,g,profile,sessions){
   if(!profile)return list;
-  const avoid=profile.avoid&&profile.avoid.length?new Set(profile.avoid):null;
-  const p=avoid?list.filter(e=>!avoid.has(e.id)):list;
-  const full=p.filter(e=>profileAllows(e,g,profile,sessions));   // avoid+gym+protect, the strict rule
-  if(full.length)return full;              // best case: all levers satisfied
-  const gymFilter=e=>profile.gym==='machine'?(e.equip!=='Barbell'||lastModeFor(sessions,e.id)==='smith')
-    :profile.gym==='home'?(e.equip==='Dumbbell'||e.equip==='Bodyweight'):true;
-  const gymOnly=p.filter(gymFilter);
-  if(gymOnly.length)return gymOnly;        // protect emptied it → keep the gym constraint at least
-  return p.length?p:list;                  // gym emptied it → avoid-only, else the untouched list
+  return list.filter(e=>profileAllows(e,g,profile,sessions));
 }
+// Moves most beginners can't do yet — their own bodyweight is already too heavy. Kept out of a muscle's
+// build until it has history (audit #7).
+const HARD_BW=new Set(['chest-dip','tricep-dip','nordic-curl','ab-wheel','sissy-squat','hanging-leg-raise','pull-up','chin-up']);
+// Leftover slots in a multi-group session go to the bigger muscles; a small muscle sharing a 3+ group
+// session gets one exercise (audit #4: Lower got two calf raises and no leg curl).
+const MUSCLE_SIZE={Quads:3,Hamstrings:3,Glutes:3,Back:3,Chest:3,Shoulders:2,Biceps:1,Triceps:1,Calves:1,Core:1,Forearms:1};
+const SMALL_GROUP=new Set(['Calves','Forearms','Core']);
+// Exercise ids from the last n completed sessions that trained group g (sessions are newest-first).
+function recentGroupIds(sessions,g,n){const out=new Set();let k=0;
+  for(const s of sessions||[]){if(s.completed===false||!s.exercises.some(e=>EX[e.id]&&EX[e.id].group===g))continue;
+    s.exercises.forEach(e=>out.add(e.id));if(++k>=n)break;}
+  return out;}
+// Among the strongest candidates (within `window` priority points of the best), pick by the build's
+// seed — variety between builds without ever choosing a weak option (audit #11: every build of a
+// selection used to come out identical; the seed only broke exact ties).
+function pickTop(list,seed,window){
+  const r=list.slice().sort((a,b)=>perfPriority(b)-perfPriority(a));if(!r.length)return null;
+  const top=perfPriority(r[0]),c=r.filter(e=>perfPriority(e)>=top-window);return c[seed%c.length];}
 // `trace` (optional array) collects {id, sc, why:[...]} for every pick — a window into WHY the builder
 // chose each exercise, used by tools/review.js. No effect on the result.
-function pickForGroup(g,per,seed,sessions,hints,trace,profile){
-  sessions=sessions||[];
-  const pool=profilePool(EXERCISES.filter(e=>e.group===g),g,profile,sessions);
+// ctx: {taken: ids already chosen for this session (other groups), fresh: the user asked for DIFFERENT
+// exercises ("Different exercises instead")}.
+function pickForGroup(g,per,seed,sessions,hints,trace,profile,ctx){
+  sessions=sessions||[];ctx=ctx||{};
+  let pool=profilePool(EXERCISES.filter(e=>e.group===g),g,profile,sessions);
   if(!pool.length)return [];
-  const ideal=REGIONS[g]||['overall'],idealPats=IDEAL_PATS[g]||['iso'];
+  // Beginner safeguard: a muscle you've never trained here leads with machines and dumbbells. Barbell
+  // compounds wait until you've done ANY barbell compound (barbell skill carries across muscles — a
+  // lifter who squats isn't a beginner at the hip thrust); moves most beginners can't lift yet (dips,
+  // pull-ups, Nordics) wait until that muscle has history (bodyweight strength doesn't carry over).
+  if(!lastSessionIds(sessions,g).length){
+    const barbellExp=sessions.some(s=>s.completed!==false&&s.exercises.some(e=>EX[e.id]&&EX[e.id].equip==='Barbell'&&EX[e.id].type===C));
+    if(!barbellExp){const safe=pool.filter(e=>!(e.equip==='Barbell'&&e.type===C));if(safe.length)pool=safe;}}
+  // A move most people can't do yet (dips, pull-ups, Nordics…) waits until you've logged THAT move or its
+  // twin (pull-up ↔ chin-up) — a lat pulldown doesn't mean a chin-up. Applies at any experience level.
+  {const done=id=>sessions.some(s=>s.completed!==false&&s.exercises.some(x=>x.id===id));
+   const hardOK=e=>!HARD_BW.has(e.id)||done(e.id)||EXERCISES.some(x=>x.id!==e.id&&HARD_BW.has(x.id)&&x.group===e.group&&x.pat===e.pat&&done(x.id));
+   const ok=pool.filter(hardOK);if(ok.length)pool=ok;}
+  // Pressing already in the session trains the triceps hard; a close-grip bench or dip on top is a third
+  // press, not triceps variety (audit #5) — the triceps get isolation work instead.
+  const taken=(ctx.taken||[]).map(id=>EX[id]).filter(Boolean);
+  if(g==='Triceps'&&taken.some(x=>x.type===C&&(x.pat==='hpush'||x.pat==='vpush'))){const iso=pool.filter(e=>e.type!==C);if(iso.length)pool=iso;}
+  const ideal=REGIONS[g]||['overall'],idealPats=IDEAL_PATS[g]||['iso'],idealComp=idealPats.filter(p=>p!=='iso');
   const recent=lastSessionIds(sessions,g);
+  const avoidRecent=ctx.fresh?recentGroupIds(sessions,g,2):null;   // "Different exercises instead"
   const sel=[],covReg=new Set(),covPat=new Set();
-  let cand=pool.filter(e=>e.tier===1);
-  if(!cand.length)cand=pool.filter(e=>e.type===C);
-  if(!cand.length)cand=pool;
-  const keyed=cand.filter(e=>idealPats.indexOf(e.pat)>=0);
-  if(keyed.length)cand=keyed;
-  const withHist=cand.map(e=>({e,lp:lastPerf(sessions,e.id)})).filter(x=>x.lp).sort((a,b)=>b.lp.date-a.lp.date);
-  let anchor;
-  if(withHist.length)anchor=withHist[0].e;
-  else{const ranked=cand.slice().sort((a,b)=>perfPriority(b)-perfPriority(a));
-    const top=ranked.filter(e=>perfPriority(e)===perfPriority(ranked[0]));
-    anchor=top[seed%top.length];}
+  let anchor=null,anchorWhy='';
+  // One shoulder slot beside chest pressing: the front delts are already worked, so the slot goes to a
+  // side-delt isolation rather than a second press (audit #5: Upper never had side-delt work).
+  // Isolation only (a lateral raise — never an upright row, a compound with an impingement-prone path),
+  // and only when you're not already progressing a shoulder lift: your history wins (continuity).
+  const shHist=g==='Shoulders'&&pool.some(e=>e.type===C&&lastPerf(sessions,e.id));
+  if(g==='Shoulders'&&per===1&&!shHist&&taken.some(x=>x.type===C&&x.pat==='hpush')){
+    const side=pool.filter(e=>e.reg==='side'&&e.type!==C);if(side.length){anchor=pickTop(side,seed,6);anchorWhy='side delts: pressing already covers the front of the shoulder';}}
+  if(!anchor){
+    let cand=pool.filter(e=>e.tier===1);
+    if(!cand.length)cand=pool.filter(e=>e.type===C);
+    if(!cand.length)cand=pool;
+    const keyed=cand.filter(e=>idealPats.indexOf(e.pat)>=0);
+    if(keyed.length)cand=keyed;
+    let withHist=cand.map(e=>({e,lp:lastPerf(sessions,e.id)})).filter(x=>x.lp).sort((a,b)=>b.lp.date-a.lp.date);
+    // Continuity reaches past tier 1: if you've been progressing a key-pattern compound of ANY tier (a
+    // machine chest press at a machine gym) and have no tier-1 history, that lift stays your anchor —
+    // a new Smith press shouldn't displace the one you're building.
+    if(!withHist.length)withHist=pool.filter(e=>e.type===C&&idealPats.indexOf(e.pat)>=0).map(e=>({e,lp:lastPerf(sessions,e.id)})).filter(x=>x.lp).sort((a,b)=>b.lp.date-a.lp.date);
+    // A NEW anchor is two-sided: a one-leg/one-arm lift is balance-limited, harder to load and progress,
+    // and doubles the time — it makes a good accessory, not the lift a muscle's day is built on.
+    // (Your own history still wins: if you've been anchoring on one, the plan continues it.)
+    if(!(withHist.length&&!avoidRecent)){const two=cand.filter(e=>!(UNILATERAL&&UNILATERAL.has(e.id)));if(two.length)cand=two;}
+    if(withHist.length&&!avoidRecent){anchor=withHist[0].e;anchorWhy='anchor: your most recently trained foundational '+g.toLowerCase()+' lift';}
+    else{let c=cand;if(avoidRecent){const other=cand.filter(e=>!avoidRecent.has(e.id));if(other.length)c=other;}
+      anchor=pickTop(c,seed,6);anchorWhy=avoidRecent?'anchor: a different foundational '+g.toLowerCase()+' lift (you asked for a change)':'anchor: a top foundational '+g.toLowerCase()+' lift';}
+  }
   sel.push(anchor);covReg.add(anchor.reg);covPat.add(anchor.pat);
-  if(trace)trace.push({id:anchor.id,sc:null,why:[withHist.length?'anchor: your most recently trained foundational '+g.toLowerCase()+' lift':'anchor: highest-priority foundational '+g.toLowerCase()+' lift (no history)']});
+  if(trace)trace.push({id:anchor.id,sc:null,why:[anchorWhy]});
   while(sel.length<per&&sel.length<pool.length){
     let best=null,bestScore=0,bestWhy=null;
     const isoCount=sel.filter(x=>x.type===I).length,compCount=sel.filter(x=>x.type===C).length;
+    const compsCovered=idealComp.every(p=>covPat.has(p));
     pool.forEach(e=>{
       if(sel.indexOf(e)>=0)return;
       let sc=0;const why=[];
       const newReg=!covReg.has(e.reg),newPat=!covPat.has(e.pat);
       if(newReg){const v=ideal.indexOf(e.reg)>=0?4:1;sc+=v;why.push(`+${v} new region (${e.reg})`);}
       if(newPat){const v=idealPats.indexOf(e.pat)>=0?3:1;sc+=v;why.push(`+${v} new pattern (${e.pat})`);}
-      if(e.type===I&&isoCount===0&&sel.length>=1){sc+=1.5;why.push('+1.5 first isolation');}
+      // The first-isolation nudge waits until the muscle's key compound patterns are in — otherwise a
+      // face pull beat the row on a machine-gym back day (audit #9).
+      if(e.type===I&&isoCount===0&&sel.length>=1&&compsCovered){sc+=1.5;why.push('+1.5 first isolation');}
       if(e.type===C&&compCount>=2){const v=compCount>=3?1.5:0.5;sc-=v;why.push(`-${v} already ${compCount} compounds`);}
       if(isHeavyAxial(e)&&idealPats.indexOf(e.pat)<0){sc-=2.5;why.push('-2.5 heavy axial off-pattern');}
-      if(!newReg&&!newPat){
-        if(e.type===C&&!sel.some(x=>x.pat===e.pat&&x.equip===e.equip)){sc+=0.8;why.push('+0.8 same pattern, different equipment');} else{sc-=1;why.push('-1 nothing new');}
-      }
+      // Nothing new (same region AND same pattern) is a near-duplicate — hip thrust + machine hip thrust,
+      // RDL + stiff-leg deadlift. It used to get +0.8 for "different equipment" (audit #5); now it's padding.
+      if(!newReg&&!newPat){sc-=1;why.push('-1 nothing new');}
       const tb=e.tier===1?0.6:e.tier===2?0.3:0;if(tb){sc+=tb;why.push(`+${tb} tier ${e.tier}`);}
       const eq=(EQUIP_LOAD[e.equip]||0)/20;sc+=eq;if(eq)why.push(`+${eq.toFixed(2)} ${e.equip.toLowerCase()} loadability`);
-      if(recent.indexOf(e.id)>=0){sc-=0.4;why.push('-0.4 did it last session');}
+      // Side delts are the part of the shoulder nothing else trains (presses hit the front, rows the rear),
+      // so they win a tie for the shoulder isolation slot; and rows elsewhere in the session already cover
+      // the rear delts.
+      if(g==='Shoulders'&&e.reg==='side'){sc+=0.5;why.push('+0.5 side delts (nothing else trains them)');}
+      if(g==='Shoulders'&&e.reg==='rear'&&taken.some(x=>x.pat==='hpull')){sc-=1;why.push('-1 rows already hit the rear delts');}
+      if(avoidRecent&&avoidRecent.has(e.id)){sc-=2;why.push('-2 you asked for different exercises');}
+      else if(recent.indexOf(e.id)>=0){sc-=0.4;why.push('-0.4 did it last session');}
       // Phase D: a small nudge toward including one lengthened-position (stretch) movement per muscle
       if(LONG_LENGTH&&LONG_LENGTH.has(e.id)&&!sel.some(x=>LONG_LENGTH.has(x.id))){sc+=0.7;why.push('+0.7 stretch-position option');}
       if(fillsGap(e,hints)){sc+=2;why.push('+2 covers a Coach-flagged gap');}   // Phase C
@@ -179,7 +262,8 @@ function pickForGroup(g,per,seed,sessions,hints,trace,profile){
   return sel;
 }
 // groups: muscle groups in the order the user picked them (first = session focus)
-function buildRecommendation(groups,sessions,seed,hints,trace,profile){
+function buildRecommendation(groups,sessions,seed,hints,trace,profile,opts){
+  opts=opts||{};
   groups=groups&&groups.length?groups.slice():['Chest','Back'];
   seed=seed==null?Math.floor(Math.random()*997):seed;
   let total=groups.length>=3?7:groups.length===2?6:4;
@@ -187,15 +271,19 @@ function buildRecommendation(groups,sessions,seed,hints,trace,profile){
   const per={};const base=Math.max(1,Math.floor(total/groups.length));
   groups.forEach(g=>per[g]=base);
   let rem=total-base*groups.length;
-  const bySize=groups.slice().sort((a,b)=>(REGIONS[b]||[]).length-(REGIONS[a]||[]).length);
-  for(let i=0;i<rem;i++)per[bySize[i%bySize.length]]++;
+  // A small muscle sharing a 3+ group session gets one exercise; its spare slots go back into the pot
+  if(groups.length>=3)groups.forEach(g=>{if(SMALL_GROUP.has(g)&&per[g]>1){rem+=per[g]-1;per[g]=1;}});
+  // Leftover slots: bigger muscles first, ties in the order you picked them (audit #4)
+  const bySize=groups.filter(g=>!(groups.length>=3&&SMALL_GROUP.has(g))).sort((a,b)=>(MUSCLE_SIZE[b]||1)-(MUSCLE_SIZE[a]||1)||groups.indexOf(a)-groups.indexOf(b));
+  for(let i=0;i<rem&&bySize.length;i++)per[bySize[i%bySize.length]]++;
   let out=[];
   groups.forEach(g=>{const cap=Math.min(per[g],Math.max((REGIONS[g]||['overall']).length,(IDEAL_PATS[g]||[]).length)+1,EXERCISES.filter(e=>e.group===g).length);
-    out.push(...pickForGroup(g,cap,seed,sessions,hints,trace,profile).map(e=>e.id));});
-  // Hard session ceiling: picking many groups (e.g. all 11) must not produce an 11-exercise workout.
-  // orderByFatigue puts the highest-priority work first, so the slice drops the lowest-priority
-  // isolation last. The 'long' length lever raises the ceiling to 8.
-  return orderByFatigue(capHeavyAxial(out,profile,sessions),groups[0]).slice(0,Math.max(MAX_SESSION_EX,total));
+    out.push(...pickForGroup(g,cap,seed,sessions,hints,trace,profile,{taken:out,fresh:opts.fresh}).map(e=>e.id));});
+  // Hard session ceiling = the session size: picking many groups (e.g. all 11) must not produce an
+  // 11-exercise workout, and 'short' really is short (it used Math.max(7, total), so short still gave 7
+  // — audit #6). orderByFatigue puts the highest-priority work first, so the lowest-priority isolation
+  // is what gets cut; planWorkout reports any group left with nothing.
+  return orderByFatigue(capHeavyAxial(out,profile,sessions,true),groups[0]).slice(0,total);
 }
 // Suggest exercises that COMPLEMENT what's already chosen — always from a muscle group already in
 // the workout (a pull day should never get a press "to balance" it; that's a program-level,
@@ -360,10 +448,16 @@ function planAnchor(ids,g){
 // The replacement for a rotated exercise is DETERMINISTIC (tie-broken by hashId, not the build seed)
 // so rebuilding a stalled plan gives the same swap — a rotation shouldn't be a lottery. (Seed still
 // varies fresh builds; only the continue-path rotation goes through here.)
+// Scoring (builder audit #10): the same MOVEMENT matters most (+4 pattern, +3 region — a front raise
+// used to become an overhead press on region alone), then like-for-like type/equipment. Never swaps a
+// normal lift for a timed hold (leg extension → wall sit → back) or the reverse, and never swaps IN
+// spinal load or a hard bodyweight move the original didn't have (machine hip thrust → sumo deadlift).
 function replacementFor(exId,planIds,seed,hints,profile,sessions){
-  const e=EX[exId];
-  const cands=profilePool(EXERCISES.filter(x=>x.group===e.group&&x.id!==exId&&planIds.indexOf(x.id)<0),e.group,profile,sessions);
-  return cands.map(x=>{let sc=(x.reg===e.reg?4:0)+(x.pat===e.pat?3:0)+(x.type===e.type?1:0)+(x.tier===1?.5:x.tier===2?.3:0)+(fillsGap(x,hints)?2:0)+(hashId(x.id)%5)/100;return{x,sc};})
+  const e=EX[exId];if(!e)return null;
+  const timed=id=>!!(TIME_METRIC&&TIME_METRIC.has(id));
+  const cands=profilePool(EXERCISES.filter(x=>x.group===e.group&&x.id!==exId&&planIds.indexOf(x.id)<0&&timed(x.id)===timed(exId)),e.group,profile,sessions);
+  return cands.map(x=>{let sc=(x.pat===e.pat?4:0)+(x.reg===e.reg?3:0)+(x.type===e.type?1:0)+(x.equip===e.equip?1:0)+(x.tier===1?.5:x.tier===2?.3:0)+(fillsGap(x,hints)?2:0)
+      +(spinalUnits(x)>spinalUnits(e)?-3:0)+(HARD_BW.has(x.id)&&!HARD_BW.has(exId)?-2:0)+(hashId(x.id)%5)/100;return{x,sc};})
     .sort((a,b)=>b.sc-a.sc)[0]?.x||null;
 }
 // A same-group, same-pattern tier-1 alternative for a stalled anchor (bench→incline, squat→front
@@ -382,6 +476,28 @@ function gapFillExercise(gp,ids,profile,sessions){
   const cands=EXERCISES.filter(x=>x.group===gp.group&&ids.indexOf(x.id)<0&&(gp.reg?x.reg===gp.reg:x.pat===gp.pat)&&profileAllows(x,gp.group,profile,sessions));
   return cands.sort((a,b)=>(a.tier-b.tier)||(perfPriority(b)-perfPriority(a)))[0]?.id||null;
 }
+// Session budget for a FRESHLY built workout (builder audit #6: 21% of builds ran past 75 min, a full-
+// body day ~100). Working sets are the lever — aiming for ~60 min standard, ~45 short, ~75 long:
+//   1. the third and later main lifts get 3 sets, not 4;
+//   2. then sets are trimmed from the END of the workout (lowest priority first), round-robin, never
+//      below 2 per exercise; an exercise is dropped only as a last resort (and never below 3).
+// Not applied to a continued plan: those sets are the user's own, carried from what they did.
+const SESSION_SETS={short:11,standard:16,long:21};   // tuned with tools/builder-audit.js: 0% over target, p95 46 / 62 / 77 min
+// A set done one side at a time takes longer (both sides), so it costs 1.5 of the budget.
+const setCost=e=>sidesOf(e)===2?1.5:1;
+function fitSessionBudget(exs,profile){
+  const cap=SESSION_SETS[(profile&&profile.length)||'standard']||SESSION_SETS.standard;
+  let mains=0;exs.forEach(e=>{const x=EX[e.id];if(x&&x.type===C&&x.tier===1&&!(TIME_METRIC&&TIME_METRIC.has(x.id))&&++mains>2&&e.sets.length>3)e.sets=e.sets.slice(0,3);});
+  let total=exs.reduce((a,e)=>a+e.sets.length*setCost(e),0);
+  while(total>cap){let cut=false;for(let i=exs.length-1;i>=0&&total>cap;i--)if(exs[i].sets.length>2){exs[i].sets.pop();total-=setCost(exs[i]);cut=true;}if(!cut)break;}
+  // Last resort: drop a whole exercise — the lowest-priority one whose muscle still has another exercise
+  // (never a muscle's ONLY one: you picked that muscle). If none qualifies, accept the overrun.
+  const grp=e=>EX[e.id]?EX[e.id].group:e.id;
+  while(total>cap&&exs.length>3){
+    let i=exs.length-1;while(i>=0&&exs.filter(x=>grp(x)===grp(exs[i])).length<2)i--;
+    if(i<0)break;const d=exs.splice(i,1)[0];total-=d.sets.length*setCost(d);}
+  return exs;
+}
 // What to train for these groups today. Returns {ids, mode:'continue'|'fresh', plan, rotation, streak,
 // reactions, volumeBump}. opts.fresh forces a fresh build; opts.hints (from analysis.buildHints) lets
 // the builder REACT to Coach's findings — always additively/by scoring, never overriding continuity.
@@ -395,21 +511,31 @@ function planWorkout(groups,sessions,seed,opts){
   const hints=deload?null:opts.hints,reactions=[],volumeBump=[];   // a deload never adds volume/coverage
   const meta={};
   const plan=opts.fresh?null:findPlan(groups,sessions,opts.now,meta);
-  if(!plan)return{ids:buildRecommendation(groups,sessions,seed,hints,undefined,profile),mode:'fresh',plan:null,rotation:null,streak:0,reactions,volumeBump,deload};
+  // Muscles you picked that ended up with nothing (all filtered out, or too many groups for one session)
+  const skippedOf=ids=>groups.filter(g=>!ids.some(id=>EX[id]&&EX[id].group===g));
+  if(!plan){const ids=buildRecommendation(groups,sessions,seed,hints,undefined,profile,{fresh:!!opts.fresh});
+    return{ids,mode:'fresh',plan:null,rotation:null,streak:0,reactions,volumeBump,deload,skipped:skippedOf(ids)};}
   const lapsed=!!meta.lapsed;
   let ids=plan.exercises.map(e=>e.id).filter(id=>EX[id]);
-  // Profile 'avoid' applies even to a continued plan: swap any avoided lift for a same-group
-  // alternative (a user directive, not a reaction — so it holds on a deload too).
-  if(profile&&profile.avoid&&profile.avoid.length){const av=new Set(profile.avoid);
-    ids=ids.map(id=>{if(!av.has(id))return id;const to=replacementFor(id,ids,seed,hints,profile,sessions);
-      if(to){reactions.push({type:'avoid-swap',from:id,to:to.id,why:'swapped '+(EX[id]?EX[id].name:id)+' — you asked to avoid it'});return to.id;}return id;});}
+  // The profile applies to a continued plan too — avoid, gym AND protect (builder audit #1: a plan
+  // logged at a full gym, continued with gym=machine, kept its barbell lifts). Each failing lift swaps
+  // to a same-group alternative that passes; with none, it's dropped rather than kept. A user directive
+  // (not a reaction), so it holds on a deload and after a lapse too.
+  if(profile){const av=new Set(profile.avoid||[]),next=[];
+    for(const id of ids){if(profileAllows(EX[id],EX[id].group,profile,sessions)){next.push(id);continue;}
+      // exclude the original plan AND replacements already made, so two swaps can't land on one lift
+      const to=replacementFor(id,ids.concat(next),seed,hints,profile,sessions),nm=EX[id].name;
+      const reason=av.has(id)?'you asked to avoid it':(profile.protect||[]).indexOf(EX[id].group)>=0?'you’re going easy on '+EX[id].group.toLowerCase():'it needs equipment your gym doesn’t have';
+      if(to){next.push(to.id);reactions.push({type:av.has(id)?'avoid-swap':'profile-swap',from:id,to:to.id,why:'swapped '+nm+' — '+reason});}
+      else reactions.push({type:'profile-drop',from:id,why:'left out '+nm+' — '+reason});}
+    ids=next;}
   // A deload CONTINUES the plan verbatim — same exercises, just lighter (seedExercise cuts load and
   // volume). Zero structural changes: no stall check, rotation, anchor swap, gap-add or volume bump.
-  if(deload)return{ids:orderByFatigue(capHeavyAxial(ids,profile,sessions),groups[0]),mode:'continue',plan,rotation:null,streak:0,reactions,volumeBump,deload:true};
+  if(deload){const fin=orderByFatigue(capHeavyAxial(ids,profile,sessions),groups[0]);return{ids:fin,mode:'continue',plan,rotation:null,streak:0,reactions,volumeBump,deload:true,skipped:skippedOf(fin)};}
   // Coming back after a lapse (a missed week / holiday): continue the plan with weights carried from
   // where you left off, but make NO structural change — you weren't stalled, you were away, and a
   // detrained first session back shouldn't get extra volume or a rotation.
-  if(lapsed)return{ids:orderByFatigue(capHeavyAxial(ids,profile,sessions),groups[0]),mode:'continue',plan,rotation:null,streak:0,reactions,volumeBump,deload:false,lapsed:true};
+  if(lapsed){const fin=orderByFatigue(capHeavyAxial(ids,profile,sessions),groups[0]);return{ids:fin,mode:'continue',plan,rotation:null,streak:0,reactions,volumeBump,deload:false,lapsed:true,skipped:skippedOf(fin)};}
   const modeById={};plan.exercises.forEach(e=>{if(EX[e.id])modeById[e.id]=trackOf(e);});   // stall checks follow the same track (equipment + side)
   // Anchors are protected from rotation: the group's key tier-1 lift AND every other tier-1 lift in the
   // plan (a main deadlift/squat is not an "accessory" to be swapped out on a stall — #15).
@@ -451,9 +577,10 @@ function planWorkout(groups,sessions,seed,opts){
       if(target&&volumeBump.indexOf(target)<0){volumeBump.push(target);reactions.push({type:'volume',exId:target,group:g,why:g.toLowerCase()+' volume is low — added a set'});}}
   }
   const streak=Math.min(...ids.filter(id=>!rotation||id!==rotation.to).map(id=>exerciseStreak(sessions,id)));
-  return{ids:orderByFatigue(capHeavyAxial(ids,profile,sessions),groups[0]),mode:"continue",plan,rotation,streak:isFinite(streak)?streak:0,reactions,volumeBump,deload:false};
+  const fin=orderByFatigue(capHeavyAxial(ids,profile,sessions),groups[0]);
+  return{ids:fin,mode:"continue",plan,rotation,streak:isFinite(streak)?streak:0,reactions,volumeBump,deload:false,skipped:skippedOf(fin)};
 }
 
-IL.builder={prescribedSets,seedExercise,lastSessionIds,perfPriority,orderByFatigue,isHeavyAxial,capHeavyAxial,pickForGroup,buildRecommendation,complementSuggestions,
+IL.builder={prescribedSets,seedExercise,lastSessionIds,perfPriority,orderByFatigue,isHeavyAxial,spinalUnits,capHeavyAxial,pickForGroup,buildRecommendation,complementSuggestions,fitSessionBudget,SESSION_SETS,SMITH_OK,HARD_BW,
   CONTINUE_DAYS,STALL_MIN_DAYS,ANCHOR_STALL_WEEKS,ANCHOR_DELOAD_DAYS,MAX_SESSION_EX,MAX_SETS_PER_EX,findPlan,exerciseTenure,exerciseStreak,isStalled,recentDeload,planAnchor,replacementFor,anchorVariation,fillsGap,gapFillExercise,profileAllows,planWorkout};
 if(typeof module!=='undefined')module.exports=IL.builder;

@@ -280,7 +280,9 @@ function fmtPerf(sets,unit,rsuf){
 // One place owns the shift, so seedExercise and nextSets stay in agreement.
 function repRange(ex,goal){
   const lo=ex?ex.rr[0]:8,hi=ex?ex.rr[1]:12,cap=Math.max(15,hi);   // the cap can't shrink a naturally high-rep move (plank 30–60, carry 20–40) — #17
-  if(goal==='strength')return[lo,lo];
+  // Strength narrows the COMPOUND lifts to the low end. Isolation and timed work keep their range — a
+  // lateral raise at "12-12" added load every session, and a wrist roller became 1 rep (builder audit #13).
+  if(goal==='strength')return ex&&ex.type==='compound'&&!(TIME_METRIC&&TIME_METRIC.has(ex.id))?[lo,lo]:[lo,hi];
   if(goal==='size')return[Math.min(lo+2,cap),Math.min(hi+2,cap)];
   return[lo,hi];
 }

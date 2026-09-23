@@ -20,13 +20,16 @@ test('presets build a sane session and continue only when the same groups are pi
 test('presets build the EXACT expected session (oracle for seed 1)',()=>{
   // Pins what the builder actually chooses, so a library or scoring change surfaces here on purpose.
   // If a change is intended, update these lists deliberately.
+  // v0.62.0 (builder audit): with EMPTY history these are a beginner's builds — machines and dumbbells
+  // (no technical barbell compounds), a real row, a leg curl on Lower, side delts beside pressing, one calf
+  // exercise, no close-grip bench beside chest presses, the carry no longer leading an arm day.
   const expect={
-    'Full body':['front-squat','stiff-leg-deadlift','incline-barbell-press','barbell-row','overhead-press','lat-pulldown','dumbbell-pullover'],
-    'Push':['incline-barbell-press','barbell-bench-press','overhead-press','close-grip-bench','dumbbell-pullover','overhead-tricep-extension','leaning-cable-lateral'],
-    'Lower':['front-squat','stiff-leg-deadlift','hip-thrust','leg-extension','standing-calf-raise','hip-abduction','seated-calf-raise'],
-    'Pull':['barbell-row','lat-pulldown','face-pull','barbell-curl','incline-dumbbell-curl','hammer-curl'],
-    'Arms':['close-grip-bench','farmers-carry','barbell-curl','incline-dumbbell-curl','hammer-curl','reverse-wrist-curl','overhead-tricep-extension'],
-    'Upper':['incline-barbell-press','barbell-row','overhead-press','close-grip-bench','lat-pulldown','dumbbell-pullover','barbell-curl']
+    'Full body':['leg-press','dumbbell-romanian-deadlift','incline-dumbbell-press','lat-pulldown','dumbbell-split-squat','machine-lateral-raise','dumbbell-pullover'],
+    'Upper':['incline-dumbbell-press','lat-pulldown','dumbbell-row','dumbbell-pullover','dumbbell-curl','overhead-tricep-extension','machine-lateral-raise'],
+    'Lower':['leg-press','dumbbell-romanian-deadlift','cable-pull-through','dumbbell-split-squat','standing-calf-raise','lying-leg-curl','hip-abduction'],
+    'Push':['incline-dumbbell-press','dumbbell-bench-press','dumbbell-shoulder-press','dumbbell-pullover','overhead-tricep-extension','machine-tricep-extension','leaning-cable-lateral'],
+    'Pull':['lat-pulldown','dumbbell-row','face-pull','dumbbell-curl','incline-dumbbell-curl','hammer-curl'],
+    'Arms':['assisted-dip','dumbbell-curl','incline-dumbbell-curl','hammer-curl','reverse-wrist-curl','overhead-tricep-extension']
   };
   PRESETS.forEach(p=>assert.deepEqual(B.buildRecommendation(p.groups,[],1),expect[p.label],p.label));
 });
@@ -57,14 +60,20 @@ test('single-muscle plans cover every ideal region or complementary pattern',()=
 });
 
 test('anchor is a foundational lift on the muscle\'s key pattern',()=>{
+  // Always on the key pattern. With NO history the beginner safeguard may lead with a tier-2 machine or
+  // dumbbell version (never a barbell compound or a hard bodyweight move); once the lifter has barbell
+  // history, the tier-1 lift comes back.
+  const barbellHist=[session(40,[['back-squat',[set(135,5)]]])];
   for(const g of GROUPS){
     for(let seed=0;seed<6;seed++){
-      const ids=B.buildRecommendation([g],[],seed);
-      const first=EX[ids[0]];
-      assert.equal(first.tier,1,g+' anchors on tier-1, got '+first.name);
+      const first=EX[B.buildRecommendation([g],[],seed)[0]];
       assert.ok((IDEAL_PATS[g]||[]).includes(first.pat),g+' anchors on key pattern, got '+first.name);
+      assert.ok(first.tier<=2,g+' anchors on a foundational/secondary lift, got '+first.name);
+      assert.ok(!(first.equip==='Barbell'&&first.type===C)&&!B.HARD_BW.has(first.id),g+' beginner anchor is not a barbell compound / hard bodyweight move, got '+first.name);
     }
   }
+  // an experienced lifter (any barbell history) gets the tier-1 barbell anchors where they exist
+  assert.equal(EX[B.buildRecommendation(['Chest'],barbellHist,0)[0]].tier,1,'with barbell history, chest anchors on tier 1');
 });
 
 test('never anchors shoulders on an upright row or back on a deadlift',()=>{

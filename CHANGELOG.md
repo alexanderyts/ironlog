@@ -2,6 +2,36 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.62.0 — 2026-09-22 · A safer, smarter workout builder — and 17 new exercises
+The workout builder got a full safety and quality overhaul. It was tested by simulating 263,208 workouts: every muscle choice, gym type and session length, with every random variation the app can pick. Every check now comes back clean.
+
+**Safer**
+- **A machine gym never gets free-barbell lifts.** Before, this could slip in when continuing a saved plan. Machine gyms now get Smith-machine versions of the key barbell lifts (squat, bench, incline, overhead press, RDL, hip thrust, shrug), set to Smith mode automatically so the plate loader uses the Smith bar.
+- **Beginners start on machines and dumbbells.** If you've never trained a muscle, the builder won't open with technical barbell lifts (until you've done *any* barbell lift). It also won't give you moves most people can't do yet, like dips, pull-ups or Nordic curls, until you've logged that move.
+- **Less stress on your lower back.** At most one heavy squat and one heavy hinge per workout (barbell rows count as half).
+- **Your settings win.** If "machine gym" or "go easy on shoulders" rules out a lift in a plan you're continuing, it's swapped for one that fits, and the build message tells you why. If nothing fits a muscle, you're told instead of handed the wrong thing.
+
+**Better programming**
+- No more near-duplicate pairs (hip thrust + machine hip thrust, RDL + stiff-leg deadlift, close-grip bench next to bench press).
+- Big lifts always come first. A back extension no longer jumps ahead of the presses, and a farmer's carry no longer comes before your curls.
+- Lower days now include a **leg curl** and just one calf exercise. Upper and push days get **side-delt** work. Machine-gym back days get a **real row**.
+- If you've been progressing a lift, the builder keeps it as your main lift, even a machine one like the chest press.
+- "Different exercises instead" now actually gives different exercises, and every new build has more variety.
+- When a stalled lift gets swapped, the replacement is the same kind of movement, and never a timed hold or a heavier back-loading lift.
+
+**Right-sized sessions**
+- Built workouts aim for about **60 minutes** (45 on Short, 75 on Long). Sets are trimmed from the least important end first, and one-sided work counts for the extra time it takes.
+- The "ramp" set style now keeps two hard top sets instead of one.
+- The Strength goal only tightens reps on the big compound lifts; lateral raises and planks keep their normal range.
+
+**17 new exercises**
+- **Machine gym / everywhere:** Dumbbell Romanian Deadlift, Incline Dumbbell Row, Cable Pull-Through, Dumbbell Split Squat, Captain's Chair Knee Raise, Low-to-High Cable Fly, Cable Reverse Fly, Single-Arm Cable Pulldown, Cable Woodchop, Rope Hammer Curl, Dumbbell Skull Crusher, Dead Bug, Dumbbell Shrug, Single-Leg RDL.
+- **Full gym:** Belt Squat, Chest-Supported T-Bar Row, Trap Bar Deadlift.
+
+**Also:** pop-up messages now wrap onto more lines instead of being cut off, and stay on screen long enough to read.
+
+Not verified on-device.
+
 ## v0.61.0 — 2026-09-22 · One arm at a time, logged accurately — and new exercises slot into place
 - **New "⇆ Each side" switch** on cable, dumbbell and machine exercises. Doing a cable curl one arm at a time? Tap it: the column changes to "Reps / side", you enter one side's reps, and both sides count. A one-arm version keeps its own PRs and progress, so a 20 lb one-arm curl never competes with (or looks like a drop from) a 45 lb two-hand bar. It's remembered for next time, like your equipment choice.
 - **The column headers now tell you exactly what to type.** "Lb ea" means the weight of one dumbbell (or one cable stack); "Reps / side" means one side's reps. Naturally one-sided moves (dumbbell row, split squats, single-leg curl) show "Reps / side" automatically.

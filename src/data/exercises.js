@@ -150,7 +150,27 @@ const RAW=[
  ["wall-sit","Wall Sit","Quads",["Quads","Glutes"],"Bodyweight",I,[30,60],"Slide down a wall to a 90° knee bend and hold; log seconds held.","wall squat hold"],
  ["side-plank","Side Plank","Core",["Core"],"Bodyweight",I,[20,45],"On one forearm, stack the hips and hold a straight line; log seconds per side.","side bridge"],
  ["hollow-hold","Hollow Hold","Core",["Core"],"Bodyweight",I,[20,45],"On your back, press the low back down and lift shoulders and legs into a dish; log seconds held.","hollow body hold"],
- ["suitcase-carry","Suitcase Carry","Forearms",["Forearms","Core"],"Dumbbell",C,[20,40],"Carry one heavy dumbbell at your side, resisting the lean; log seconds per side.","one arm carry,suitcase walk"]
+ ["suitcase-carry","Suitcase Carry","Forearms",["Forearms","Core"],"Dumbbell",C,[20,40],"Carry one heavy dumbbell at your side, resisting the lean; log seconds per side.","one arm carry,suitcase walk"],
+ // v0.62.0 additions — machine/cable/dumbbell staples a Planet-Fitness-style gym has (the builder audit's
+ // library-gap list). The Dumbbell RDL gives machine and home gyms a real hinge for the hamstrings.
+ ["dumbbell-romanian-deadlift","Dumbbell Romanian Deadlift","Hamstrings",["Hamstrings","Glutes"],"Dumbbell",C,[8,12],"Dumbbells at the thighs, push the hips back with soft knees to a hamstring stretch, stand tall.","db rdl,dumbbell rdl"],
+ ["incline-dumbbell-row","Incline Dumbbell Row","Back",["Back","Biceps"],"Dumbbell",C,[8,12],"Chest down on an incline bench, row both dumbbells to the hips, lower to a full stretch.","chest supported db row,prone db row"],
+ ["cable-pull-through","Cable Pull-Through","Glutes",["Glutes","Hamstrings"],"Cable",C,[12,15],"Facing away from a low pulley, rope between the legs, hinge back and drive the hips through.","pull through"],
+ ["dumbbell-split-squat","Dumbbell Split Squat","Quads",["Quads","Glutes"],"Dumbbell",C,[8,12],"Staggered stance with both feet down, drop the back knee straight down and drive up; log per side.","static lunge"],
+ ["captains-chair-knee-raise","Captain's Chair Knee Raise","Core",["Core"],"Bodyweight",I,[10,15],"Back against the pad, forearms on the rests, lift the knees to the chest and lower slowly.","captains chair,vertical knee raise,knee raise"],
+ ["low-to-high-cable-fly","Low-to-High Cable Fly","Chest",["Chest","Shoulders"],"Cable",I,[10,15],"From low pulleys, sweep the handles up and together to upper-chest height.","incline cable fly,low cable fly"],
+ ["cable-reverse-fly","Cable Reverse Fly","Shoulders",["Shoulders","Back"],"Cable",I,[12,20],"Cross the cables at chest height and sweep the arms back and out for the rear delts.","cable rear delt fly"],
+ ["single-arm-lat-pulldown","Single-Arm Cable Pulldown","Back",["Back","Biceps"],"Cable",C,[10,15],"Under a high pulley, pull one handle down to the side of the chest, then reach fully up.","one arm pulldown,single arm pulldown"],
+ ["cable-woodchop","Cable Woodchop","Core",["Core"],"Cable",I,[10,15],"Rotate the handle diagonally across the body from high to low, turning through the hips; log per side.","woodchopper,wood chop"],
+ ["rope-hammer-curl","Rope Hammer Curl","Biceps",["Biceps","Forearms"],"Cable",I,[10,15],"Curl a rope from the low pulley with a neutral grip, elbows pinned at your sides.","cable hammer curl"],
+ ["dumbbell-skull-crusher","Dumbbell Skull Crusher","Triceps",["Triceps"],"Dumbbell",I,[10,15],"Lying on a bench, lower the dumbbells beside the head with elbows fixed, extend to lockout.","db skull crusher,lying db extension"],
+ ["dead-bug","Dead Bug","Core",["Core"],"Bodyweight",I,[8,12],"On your back, low back pressed down, lower the opposite arm and leg and return; log reps per side.",""],
+ ["dumbbell-shrug","Dumbbell Shrug","Shoulders",["Shoulders"],"Dumbbell",I,[10,15],"Dumbbells at your sides, lift the shoulders straight up toward the ears, pause, lower.","db shrug"],
+ ["single-leg-rdl","Single-Leg Romanian Deadlift","Hamstrings",["Hamstrings","Glutes"],"Dumbbell",C,[8,12],"Hold a dumbbell, hinge on one leg as the other reaches back, return to standing; log per side.","single leg rdl,sl rdl"],
+ // full-gym additions
+ ["belt-squat","Belt Squat","Quads",["Quads","Glutes"],"Machine",C,[8,12],"Belt around the hips, squat to depth with an upright torso and drive up; no load on the spine.","belt squat machine"],
+ ["chest-supported-t-bar-row","Chest-Supported T-Bar Row","Back",["Back","Biceps"],"Machine",C,[8,12],"Chest on the pad, row the handles to the ribs, squeeze, lower to a full stretch.","t-bar machine,t bar row machine"],
+ ["trap-bar-deadlift","Trap Bar Deadlift","Back",["Back","Quads","Glutes","Hamstrings"],"Barbell",C,[4,8],"Stand inside the hex bar, brace, and push the floor away to stand tall.","hex bar deadlift,trap bar"]
 ];
 
 // [region/head, movement pattern, tier]. tier 1 = foundational lift (can anchor a session and should be
@@ -184,22 +204,27 @@ const META={
  'hip-adduction':['overall','iso',3],'glute-kickback-machine':['overall','iso',2],'machine-hip-thrust':['overall','hinge',2],
  'ab-crunch-machine':['flexion','iso',2],'torso-rotation-machine':['rotation','iso',3],'machine-back-extension':['overall','hinge',2],'cable-wrist-curl':['flexor','iso',2],
  // time-held additions (v0.50.0)
- 'dead-hang':['grip','iso',3],'wall-sit':['overall','iso',3],'side-plank':['rotation','iso',3],'hollow-hold':['antiext','iso',3],'suitcase-carry':['grip','iso',3]
+ 'dead-hang':['grip','iso',3],'wall-sit':['overall','iso',3],'side-plank':['rotation','iso',3],'hollow-hold':['antiext','iso',3],'suitcase-carry':['grip','iso',3],
+ // v0.62.0 additions (tier 2 for the DB RDL on purpose — at tier 1 it would compete with the barbell RDL)
+ 'dumbbell-romanian-deadlift':['overall','hinge',2],'incline-dumbbell-row':['mid','hpull',2],'cable-pull-through':['overall','hinge',2],'dumbbell-split-squat':['overall','lunge',2],
+ 'captains-chair-knee-raise':['flexion','iso',2],'low-to-high-cable-fly':['upper','iso',3],'cable-reverse-fly':['rear','iso',3],'single-arm-lat-pulldown':['lats','vpull',3],
+ 'cable-woodchop':['rotation','iso',2],'rope-hammer-curl':['brachialis','iso',3],'dumbbell-skull-crusher':['long','iso',2],'dead-bug':['antiext','iso',3],'dumbbell-shrug':['traps','iso',3],'single-leg-rdl':['overall','hinge',3],
+ 'belt-squat':['overall','squat',2],'chest-supported-t-bar-row':['mid','hpull',2],'trap-bar-deadlift':['lower','hinge',2]
 };
 // Movements trained at a long muscle length (a strong hypertrophy driver) — the builder gives these a
 // small preference so a plan tends to include a stretch-biased option per muscle. Existing lifts that
 // already load the stretch are tagged here too.
-const LONG_LENGTH=new Set(['incline-dumbbell-fly','dumbbell-pullover','cable-pullover','bayesian-cable-curl','incline-dumbbell-curl','cable-overhead-extension','overhead-tricep-extension','leaning-cable-lateral','sissy-squat','romanian-deadlift','stiff-leg-deadlift','seated-leg-curl']);
+const LONG_LENGTH=new Set(['incline-dumbbell-fly','dumbbell-pullover','cable-pullover','bayesian-cable-curl','incline-dumbbell-curl','cable-overhead-extension','overhead-tricep-extension','leaning-cable-lateral','sissy-squat','romanian-deadlift','stiff-leg-deadlift','seated-leg-curl','dumbbell-romanian-deadlift','single-leg-rdl']);
 // Per-side accounting. A set's volume = weight × reps × how many times that weight moves:
 //   holds — copies of the entered weight in motion at once (two dumbbells, two cable stacks) → ×2
 //   sides — the entered reps are done once per side (one arm / one leg at a time)            → ×2
 // UNILATERAL = done one side at a time by default: reps are PER SIDE (the column says so).
-const UNILATERAL=new Set(['single-arm-cable-row','concentration-curl','single-arm-pushdown','reverse-lunge','single-leg-curl','single-leg-hip-thrust','single-leg-calf-raise','bulgarian-split-squat','walking-lunge','step-up','dumbbell-row','cable-kickback','side-plank','suitcase-carry','leaning-cable-lateral']);
+const UNILATERAL=new Set(['single-arm-cable-row','concentration-curl','single-arm-pushdown','reverse-lunge','single-leg-curl','single-leg-hip-thrust','single-leg-calf-raise','bulgarian-split-squat','walking-lunge','step-up','dumbbell-row','cable-kickback','side-plank','suitcase-carry','leaning-cable-lateral','single-leg-rdl','single-arm-lat-pulldown','dumbbell-split-squat','cable-woodchop','dead-bug']);
 // Dumbbell lifts done with ONE dumbbell (held in both hands, or one hand only) — the entered weight
 // moves once, not twice like a pair.
-const ONE_DB=new Set(['goblet-squat','dumbbell-pullover','overhead-tricep-extension','dumbbell-row','concentration-curl','single-leg-calf-raise','suitcase-carry']);
+const ONE_DB=new Set(['goblet-squat','dumbbell-pullover','overhead-tricep-extension','dumbbell-row','concentration-curl','single-leg-calf-raise','suitcase-carry','single-leg-rdl']);
 // Cable lifts that use two stacks at once (one handle per hand) — the entered weight is PER STACK.
-const DUAL_STACK=new Set(['cable-crossover']);
+const DUAL_STACK=new Set(['cable-crossover','low-to-high-cable-fly','cable-reverse-fly']);
 // Assist machines where LESS weight is harder: progression REDUCES the load and a PR is the lowest
 // assist, not the highest (#16). The engine flips the increment and the PR ranking for these ids.
 const INVERTED_LOAD=new Set(['assisted-pull-up','assisted-dip']);
