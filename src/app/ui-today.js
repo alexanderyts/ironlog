@@ -618,7 +618,7 @@ function logExercise(s,e,ei,mode){
   // Headers say exactly what to type: "Lb ea" = weight of ONE dumbbell / one stack; "/ side" = one side's reps
   // A bodyweight move's weight box is EXTRA load (vest, plate, belt) — blank reads "BW", just you. An
   // assist machine's number is the HELP, so its header says so. (Owner: "what goes in the lb column?")
-  const bwMove=!!ex&&ex.equip==='Bodyweight'&&emode==='bodyweight',assistMove=D.isAssist(e.id);
+  const bwMove=emode==='bodyweight',assistMove=D.isAssist(e.id);
   const whdr=(bwMove?'Added ':assistMove?'Assist ':'')+(U()==='kg'?'Kg':'Lb')+(holds===2?' ea':''),rhdr=(D.TIME_METRIC.has(e.id)?'Sec':'Reps')+(sides===2?' / side':'');
   // "⇆ Each side" only where doing it one-sided is realistic and changes the math
   const sideOK=(emode==='cable'||emode==='dumbbell'||emode==='machine')&&!D.isAssist(e.id)&&!D.TIME_METRIC.has(e.id);

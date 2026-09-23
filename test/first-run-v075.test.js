@@ -110,3 +110,27 @@ test('UI: push-ups — the weight box is "Added lb", blank reads BW, with a one-
     h.click('[data-check="0"][data-s="0"]');assert.equal(h.state.active.exercises[0].sets[0].done,true,'ticks with BW blank');
   }finally{h.teardown();}
 });
+
+test('library: a plain Bodyweight Squat, found by "air squat"; it never displaces a loadable leg lift as the main lift',()=>{
+  const SR=require('../src/engine/search.js');
+  assert.equal(SR.searchEx('air squat')[0].id,'bodyweight-squat');
+  assert.equal(SR.searchEx('bodyweight squat')[0].id,'bodyweight-squat');
+  assert.ok(SR.searchEx('squat').some(e=>e.id==='bodyweight-squat'));
+  for(let seed=0;seed<40;seed++){const p=B.planWorkout(['Quads'],[],seed,{profile:{gym:'home'}});assert.notEqual(p.ids[0],'bodyweight-squat','seed '+seed+': a goblet squat can take weight');}
+  const bare=B.planWorkout(['Quads'],[],1,{profile:{gym:'home',avoid:['goblet-squat','bulgarian-split-squat','walking-lunge','reverse-lunge','step-up','dumbbell-split-squat']}});
+  assert.equal(bare.ids[0],'bodyweight-squat','…but with nothing loadable it’s the pick');
+  // scored by reps, like other weightless moves
+  assert.equal(IL.prog.scoreSet('bodyweight-squat',{w:'',r:30},180).score,30);
+});
+
+test('a lunge switched to Bodyweight: ticks with no weight, keeps it at Finish, and the box reads BW',()=>{
+  const fin=IL.prog.finalizeSets([{id:'walking-lunge',mode:'bodyweight',sets:[{w:'',r:12,done:true}]},{id:'walking-lunge',sets:[{w:'',r:12,done:true}]}]);
+  assert.equal(fin.length,1,'bodyweight-mode set kept; a dumbbell lunge with no weight still dropped');
+  const h=launch();
+  try{
+    h.S.setActive({id:'l1',schema:1,date:Date.now(),updatedAt:1,completed:false,exercises:[{id:'walking-lunge',name:'Walking Lunge',mode:'bodyweight',sets:[{w:'',r:12,done:false}]}]});
+    h.IL.ui.render();h.click('[data-action="resume"]');
+    assert.equal(h.$('input[data-f="w"]').placeholder,'BW');
+    h.click('[data-check="0"][data-s="0"]');assert.equal(h.state.active.exercises[0].sets[0].done,true);
+  }finally{h.teardown();}
+});

@@ -2,6 +2,12 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.75.2 — 2026-09-23 · Bodyweight Squat
+- **New exercise: Bodyweight Squat.** Search "squat", "air squat" or "bodyweight squat". It's tracked by reps, like push-ups, and the weight box reads BW.
+- **The builder won't make it your main leg lift** when something you can add weight to fits, like a goblet squat at a home gym with dumbbells. With no loadable option, it's the pick. Core is exempt: ab wheel and hanging leg raise stay fine main core lifts.
+- **Any lift switched to "Bodyweight"** (a walking lunge, say) now shows Added lb / BW. It can be ticked with no weight, and that set is kept when you finish. Before, it asked for a weight first.
+- Not verified on-device.
+
 ## v0.75.1 — 2026-09-23 · Push-ups: what goes in the weight box
 - **Bodyweight moves** (push-ups, pull-ups, dips, planks…): the weight column is now headed **Added lb** and an empty box reads **BW**. A line underneath explains it: leave it blank for just your bodyweight, and only enter extra weight from a vest or plate. A saved 0 also shows as BW.
 - **Assist machines:** the column is headed **Assist lb**, since the number is the help, not the load.

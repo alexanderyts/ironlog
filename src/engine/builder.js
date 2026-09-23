@@ -3,7 +3,7 @@
 var IL=globalThis.IL||(globalThis.IL={});
 if(typeof require==='function'&&!IL.data)require('../data/exercises.js');
 if(typeof require==='function'&&!IL.prog)require('./progression.js');
-const {C,I,EXERCISES,EX,REGIONS,IDEAL_PATS,PAT_RANK,EQUIP_LOAD,LONG_LENGTH,isAssist,TIME_METRIC,UNILATERAL,regLabel,patLabel,hashId}=IL.data;
+const {C,I,EXERCISES,EX,REGIONS,IDEAL_PATS,PAT_RANK,EQUIP_LOAD,LONG_LENGTH,isAssist,TIME_METRIC,UNILATERAL,regLabel,patLabel,hashId,BW_FACTOR}=IL.data;
 const {lastPerf,lastModeFor,lastSideFor,trackOf,sidesOf,scoreSet,sbw,nextSets,deloadSets,repRange,modeOf,real,DAY,unitIncrement}=IL.prog;
 
 // Working sets a movement deserves when you've never logged it: main lifts 4, other compounds 3,
@@ -235,6 +235,10 @@ function pickForGroup(g,per,seed,sessions,hints,trace,profile,ctx){
     // and doubles the time — it makes a good accessory, not the lift a muscle's day is built on.
     // (Your own history still wins: if you've been anchoring on one, the plan continues it.)
     if(!(withHist.length&&!avoidRecent)){const two=cand.filter(e=>!(UNILATERAL&&UNILATERAL.has(e.id)));if(two.length)cand=two;}
+    // …and loadable: a rep-only bodyweight move (air squat, sissy squat) can't take added weight, so it
+    // anchors a muscle's day only when nothing loadable fits (a no-equipment home). Not core: an ab wheel
+    // or hanging leg raise is a fine core anchor, progressed by reps. (v0.75.2)
+    if(g!=='Core'&&!(withHist.length&&!avoidRecent)){const ld=cand.filter(e=>!(e.equip==='Bodyweight'&&!(BW_FACTOR&&BW_FACTOR[e.id])));if(ld.length)cand=ld;}
     if(withHist.length&&!avoidRecent){anchor=withHist[0].e;anchorWhy='anchor: your most recently trained foundational '+g.toLowerCase()+' lift';}
     else{let c=cand;if(avoidRecent){const other=cand.filter(e=>!avoidRecent.has(e.id));if(other.length)c=other;}
       anchor=pickTop(c,seed,6);anchorWhy=avoidRecent?'anchor: a different foundational '+g.toLowerCase()+' lift (you asked for a change)':'anchor: a top foundational '+g.toLowerCase()+' lift';}

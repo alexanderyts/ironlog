@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-zABVmg4YuBbTyRBstoCeUbzAVt1xhSUCgO1rX/qgick=' 'sha256-WPBob/luB2k1aalTWXpi6zk3SrIbj8GlZV7AlFdG7oA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-iRlznAfGJUrt/vbqmWfBLwQq9je8lOFKNXISLONVCzY=' 'sha256-WPBob/luB2k1aalTWXpi6zk3SrIbj8GlZV7AlFdG7oA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Ironlog</title>
@@ -456,8 +456,8 @@ html.kb-open .tabbar{display:none}
 </div>
 
 <script>
-/* Ironlog v0.75.1 · site build */
-var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.75.1",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
+/* Ironlog v0.75.2 · site build */
+var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.75.2",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
 
 /* ===== src/data/exercises.js ===== */
 (function(){'use strict';
@@ -525,6 +525,7 @@ const RAW=[
  ["leg-press","Leg Press","Quads",["Quads","Glutes"],"Machine",C,[8,15],"Press the platform away to near lockout, control back to depth.",""],
  ["hack-squat","Hack Squat","Quads",["Quads"],"Machine",C,[8,12],"Squat on the machine with the back supported, drive up.",""],
  ["goblet-squat","Goblet Squat","Quads",["Quads","Glutes"],"Dumbbell",C,[8,15],"Hold a dumbbell at the chest and squat to depth.",""],
+ ["bodyweight-squat","Bodyweight Squat","Quads",["Quads","Glutes"],"Bodyweight",C,[12,25],"Feet shoulder-width, sit the hips back and down until the thighs are at least parallel, then stand tall. Arms forward for balance.","air squat,squat,squats,bw squat,body weight squat,no equipment squat"],
  ["bulgarian-split-squat","Bulgarian Split Squat","Quads",["Quads","Glutes"],"Dumbbell",C,[8,12],"Rear foot elevated, lunge straight down on the front leg.","split squat"],
  ["walking-lunge","Walking Lunge","Quads",["Quads","Glutes"],"Dumbbell",C,[10,14],"Step forward into a lunge and alternate legs walking forward.","lunge"],
  ["step-up","Step-Up","Quads",["Quads","Glutes"],"Dumbbell",C,[8,12],"Step onto a box or bench, driving through the lead leg to stand tall.",""],
@@ -645,7 +646,7 @@ const META={
  'overhead-press':['front','vpush',1],'dumbbell-shoulder-press':['front','vpush',1],'arnold-press':['front','vpush',2],'lateral-raise':['side','iso',2],'front-raise':['front','iso',3],'rear-delt-fly':['rear','iso',2],'cable-lateral-raise':['side','iso',3],'upright-row':['side','vpull',3],'shrug':['traps','iso',3],
  'barbell-curl':['overall','iso',1],'dumbbell-curl':['overall','iso',1],'hammer-curl':['brachialis','iso',2],'preacher-curl':['short','iso',2],'incline-dumbbell-curl':['long','iso',2],'cable-curl':['overall','iso',3],
  'tricep-pushdown':['lateral','iso',2],'rope-pushdown':['lateral','iso',2],'overhead-tricep-extension':['long','iso',2],'skull-crusher':['long','iso',2],'close-grip-bench':['lateral','hpush',1],'tricep-dip':['lateral','hpush',1],'tricep-kickback':['lateral','iso',3],
- 'back-squat':['overall','squat',1],'front-squat':['overall','squat',1],'leg-press':['overall','squat',1],'hack-squat':['overall','squat',2],'goblet-squat':['overall','squat',2],'bulgarian-split-squat':['overall','lunge',2],'walking-lunge':['overall','lunge',2],'leg-extension':['overall','iso',3],
+ 'back-squat':['overall','squat',1],'front-squat':['overall','squat',1],'leg-press':['overall','squat',1],'hack-squat':['overall','squat',2],'goblet-squat':['overall','squat',2],'bodyweight-squat':['overall','squat',3],'bulgarian-split-squat':['overall','lunge',2],'walking-lunge':['overall','lunge',2],'leg-extension':['overall','iso',3],
  'romanian-deadlift':['overall','hinge',1],'lying-leg-curl':['overall','iso',2],'seated-leg-curl':['overall','iso',2],'stiff-leg-deadlift':['overall','hinge',1],'good-morning':['overall','hinge',2],
  'hip-thrust':['overall','hinge',1],'glute-bridge':['overall','iso',3],'cable-kickback':['overall','iso',3],'sumo-deadlift':['overall','hinge',1],
  'standing-calf-raise':['gastro','iso',1],'seated-calf-raise':['soleus','iso',2],
@@ -866,7 +867,7 @@ function finalizeSets(exercises){
     // or a weighted lift ticked with no weight (it would save as 0-volume and skew "last time"). An
     // unknown id is treated as bodyweight so a custom move isn't wrongly dropped.
     // Object.assign copies `at` (the check timestamp) through; only `t` (the transient touched flag) is stripped.
-    const ex=EX[e.id],allowBlank=!ex||ex.equip==='Bodyweight'||(TIME_METRIC&&TIME_METRIC.has(e.id));   // a time-held lift (plank/carry/hang) can be logged by seconds alone — load is optional
+    const ex=EX[e.id],allowBlank=!ex||ex.equip==='Bodyweight'||modeOf(e)==='bodyweight'||(TIME_METRIC&&TIME_METRIC.has(e.id));   // modeOf: a lunge switched to Bodyweight is done with no weight (v0.75.2)   // a time-held lift (plank/carry/hang) can be logged by seconds alone — load is optional
     // An assist machine at an EXPLICIT 0 is an unassisted rep — the strongest possible, and the goal the
     // suggestions point you at — so it must save. A blank field is still dropped (it could be a forgotten
     // entry, and would otherwise record a false "unassisted" PR). (Full review 4.2)
@@ -1388,7 +1389,7 @@ if(typeof module!=='undefined')module.exports=IL.search;
 var IL=globalThis.IL||(globalThis.IL={});
 if(typeof require==='function'&&!IL.data)require('../data/exercises.js');
 if(typeof require==='function'&&!IL.prog)require('./progression.js');
-const {C,I,EXERCISES,EX,REGIONS,IDEAL_PATS,PAT_RANK,EQUIP_LOAD,LONG_LENGTH,isAssist,TIME_METRIC,UNILATERAL,regLabel,patLabel,hashId}=IL.data;
+const {C,I,EXERCISES,EX,REGIONS,IDEAL_PATS,PAT_RANK,EQUIP_LOAD,LONG_LENGTH,isAssist,TIME_METRIC,UNILATERAL,regLabel,patLabel,hashId,BW_FACTOR}=IL.data;
 const {lastPerf,lastModeFor,lastSideFor,trackOf,sidesOf,scoreSet,sbw,nextSets,deloadSets,repRange,modeOf,real,DAY,unitIncrement}=IL.prog;
 
 // Working sets a movement deserves when you've never logged it: main lifts 4, other compounds 3,
@@ -1620,6 +1621,10 @@ function pickForGroup(g,per,seed,sessions,hints,trace,profile,ctx){
     // and doubles the time — it makes a good accessory, not the lift a muscle's day is built on.
     // (Your own history still wins: if you've been anchoring on one, the plan continues it.)
     if(!(withHist.length&&!avoidRecent)){const two=cand.filter(e=>!(UNILATERAL&&UNILATERAL.has(e.id)));if(two.length)cand=two;}
+    // …and loadable: a rep-only bodyweight move (air squat, sissy squat) can't take added weight, so it
+    // anchors a muscle's day only when nothing loadable fits (a no-equipment home). Not core: an ab wheel
+    // or hanging leg raise is a fine core anchor, progressed by reps. (v0.75.2)
+    if(g!=='Core'&&!(withHist.length&&!avoidRecent)){const ld=cand.filter(e=>!(e.equip==='Bodyweight'&&!(BW_FACTOR&&BW_FACTOR[e.id])));if(ld.length)cand=ld;}
     if(withHist.length&&!avoidRecent){anchor=withHist[0].e;anchorWhy='anchor: your most recently trained foundational '+g.toLowerCase()+' lift';}
     else{let c=cand;if(avoidRecent){const other=cand.filter(e=>!avoidRecent.has(e.id));if(other.length)c=other;}
       anchor=pickTop(c,seed,6);anchorWhy=avoidRecent?'anchor: a different foundational '+g.toLowerCase()+' lift (you asked for a change)':'anchor: a top foundational '+g.toLowerCase()+' lift';}
@@ -4134,7 +4139,7 @@ function logExercise(s,e,ei,mode){
   // Headers say exactly what to type: "Lb ea" = weight of ONE dumbbell / one stack; "/ side" = one side's reps
   // A bodyweight move's weight box is EXTRA load (vest, plate, belt) — blank reads "BW", just you. An
   // assist machine's number is the HELP, so its header says so. (Owner: "what goes in the lb column?")
-  const bwMove=!!ex&&ex.equip==='Bodyweight'&&emode==='bodyweight',assistMove=D.isAssist(e.id);
+  const bwMove=emode==='bodyweight',assistMove=D.isAssist(e.id);
   const whdr=(bwMove?'Added ':assistMove?'Assist ':'')+(U()==='kg'?'Kg':'Lb')+(holds===2?' ea':''),rhdr=(D.TIME_METRIC.has(e.id)?'Sec':'Reps')+(sides===2?' / side':'');
   // "⇆ Each side" only where doing it one-sided is realistic and changes the math
   const sideOK=(emode==='cable'||emode==='dumbbell'||emode==='machine')&&!D.isAssist(e.id)&&!D.TIME_METRIC.has(e.id);
@@ -5494,7 +5499,7 @@ function bindLog(root){
         // and so are time-held lifts (a carry can be logged by time alone; load is optional).
         // An assist machine may be ticked at an explicit 0 (unassisted — the goal); only a blank is nudged.
         const inv=!!cex&&D.isAssist(cex.id),blankW=st.w==null||String(st.w).trim()==='';
-        if(cex&&cex.equip!=='Bodyweight'&&!D.TIME_METRIC.has(cex.id)&&(inv?blankW:!(+st.w>0))){const wi=$(`input[data-f="w"][data-ei="${ei}"][data-s="${si}"]`);if(wi){wi.focus();if(wi.select)wi.select();}toast(inv?'Enter the assist — 0 if unassisted':'Add a weight first');return;}
+        if(cex&&cex.equip!=='Bodyweight'&&modeOf(t.exercises[ei])!=='bodyweight'&&!D.TIME_METRIC.has(cex.id)&&(inv?blankW:!(+st.w>0))){const wi=$(`input[data-f="w"][data-ei="${ei}"][data-s="${si}"]`);if(wi){wi.focus();if(wi.select)wi.select();}toast(inv?'Enter the assist — 0 if unassisted':'Add a weight first');return;}
         // Timed lifts log seconds in the reps field. Ticking with it empty saves a set finalizeSets then
         // drops (r>0 required), losing the tick with no warning — require the seconds first.
         if(!(+st.r>0)){const ri=$(`input[data-f="r"][data-ei="${ei}"][data-s="${si}"]`);if(ri){ri.focus();if(ri.select)ri.select();}toast(cex&&D.TIME_METRIC.has(cex.id)?'Add seconds first':'Add reps first');return;}}   // a ticked set with no reps was silently dropped at Finish (batch 1)

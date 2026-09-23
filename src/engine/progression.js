@@ -87,7 +87,7 @@ function finalizeSets(exercises){
     // or a weighted lift ticked with no weight (it would save as 0-volume and skew "last time"). An
     // unknown id is treated as bodyweight so a custom move isn't wrongly dropped.
     // Object.assign copies `at` (the check timestamp) through; only `t` (the transient touched flag) is stripped.
-    const ex=EX[e.id],allowBlank=!ex||ex.equip==='Bodyweight'||(TIME_METRIC&&TIME_METRIC.has(e.id));   // a time-held lift (plank/carry/hang) can be logged by seconds alone — load is optional
+    const ex=EX[e.id],allowBlank=!ex||ex.equip==='Bodyweight'||modeOf(e)==='bodyweight'||(TIME_METRIC&&TIME_METRIC.has(e.id));   // modeOf: a lunge switched to Bodyweight is done with no weight (v0.75.2)   // a time-held lift (plank/carry/hang) can be logged by seconds alone — load is optional
     // An assist machine at an EXPLICIT 0 is an unassisted rep — the strongest possible, and the goal the
     // suggestions point you at — so it must save. A blank field is still dropped (it could be a forgotten
     // entry, and would otherwise record a false "unassisted" PR). (Full review 4.2)
