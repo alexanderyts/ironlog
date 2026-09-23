@@ -48,17 +48,22 @@ function sessCard(s){
 }
 
 /* ---------------- LIBRARY ---------------- */
-function viewLibrary(){
+// The count + list only — search re-renders THIS, not the page, so the text field (and the keyboard's
+// predictive text) is never torn down mid-word (review 7.8).
+function libResultsHtml(){
   let res=SR.searchEx(libQuery);
   if(libGroup!=='All')res=res.filter(e=>e.group===libGroup||e.muscles.includes(libGroup));
+  return `<div class="dim" style="font-size:12.5px;margin:8px 2px 10px" aria-live="polite">${res.length} exercise${res.length!==1?'s':''}</div>
+    <div class="card list">${res.length?res.map(e=>libRow(e)).join(''):'<div style="padding:24px;text-align:center" class="dim">No match. Try a simpler word like “press” or “curl”.</div>'}</div>`;
+}
+function viewLibrary(){
   return `<div class="section">
     <div class="view-title" style="margin:0 2px 14px;font-size:22px">Exercise Library</div>
     <div class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
-      <input id="libSearch" placeholder="Describe or name an exercise…" value="${esc(libQuery)}"></div>
+      <input id="libSearch" type="search" aria-label="Search exercises" placeholder="Describe or name an exercise…" value="${esc(libQuery)}"></div>
     <div class="chips hscroll" style="margin:13px 0 4px">
       ${['All',...GROUPS].map(g=>`<button class="chip ${libGroup===g?'on':''}" data-lg="${g}">${g}</button>`).join('')}</div>
-    <div class="dim" style="font-size:12.5px;margin:8px 2px 10px">${res.length} exercise${res.length!==1?'s':''}</div>
-    <div class="card list">${res.length?res.map(e=>libRow(e)).join(''):'<div style="padding:24px;text-align:center" class="dim">No match. Try a simpler word like “press” or “curl”.</div>'}</div>
+    <div id="libResults">${libResultsHtml()}</div>
   </div>`;
 }
 function libRow(e,attr){
@@ -342,7 +347,7 @@ function exerciseDetail(id){
       ${rest!=null?`<div class="row-between" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--line)"><span class="eyebrow">Rest you usually take</span><span class="mono" style="font-weight:600">~${fmtSec(rest)}</span></div>`:''}
     </div>
     <a class="btn ghost block" href="${demoURL(id)}" target="_blank" rel="noopener noreferrer" style="margin-bottom:10px;text-decoration:none">▶ Watch a demo video</a>
-    <button class="btn primary block" data-addto="${id}">${inWorkout?'✓ Already in this workout':'＋ Add to '+(todayScreen==='edit'?'this session':'today’s workout')}</button>`;
+    <button class="btn primary block" data-addto="${id}">${inWorkout?'✓ Already in this workout':(todayScreen==='edit'&&editSession?'＋ Add to your '+fmtDate(editSession.date)+' session (editing)':'＋ Add to today’s workout')}</button>`;   // name the session: from the Library, a past workout left open for editing is easy to forget (review 7.9)
 }
 function openAddExercise(){
   const target=cur();
@@ -545,7 +550,7 @@ function openAvoidPicker(){
     <div class="card list" id="avResults"></div>
     <button class="btn primary block" id="avDone" style="margin-top:14px">Done</button>`);
   const avoidSet=()=>new Set((state.settings.profile&&state.settings.profile.avoid)||[]);
-  const row=e=>{const on=avoidSet().has(e.id);return `<div class="ex-row" data-avtoggle="${e.id}"><div class="ex-ic">${exIcon(e.group)}</div><div style="flex:1;min-width:0"><div class="ex-name">${esc(e.name)}</div><div class="ex-sub">${e.group} · ${e.equip}</div></div><div class="ex-add" style="${on?'background:var(--warn);color:#fff':''}">${on?'✓':'＋'}</div></div>`;};
+  const row=e=>{const on=avoidSet().has(e.id);return `<div class="ex-row" data-avtoggle="${e.id}" aria-pressed="${on}"><div class="ex-ic">${exIcon(e.group)}</div><div style="flex:1;min-width:0"><div class="ex-name">${esc(e.name)}</div><div class="ex-sub">${e.group} · ${e.equip}</div></div><div class="ex-add" style="${on?'background:var(--warn);color:#fff':''}">${on?'✓':'＋'}</div></div>`;};
   const inp=$('#avSearch'),refresh=()=>{const r=SR.searchEx(inp.value);$('#avResults').innerHTML=r.slice(0,60).map(row).join('')||'<div style="padding:20px;text-align:center" class="dim">No match.</div>';};
   refresh();inp.addEventListener('input',refresh);
   $('#avResults').addEventListener('click',ev=>{const b=ev.target.closest('[data-avtoggle]');if(!b)return;const id=b.dataset.avtoggle;avoidSet().has(id)?removeAvoid(id):addAvoid(id);refresh();});
@@ -605,15 +610,16 @@ function openSettings(){
   on('#btnSyncNow',async()=>{if(state.cloud){toast('Syncing…');await state.cloud.syncNow();openSettings();}});
   $('#sheetBody').querySelectorAll('[data-sw]').forEach(b=>b.addEventListener('click',async()=>{
     const k=b.dataset.sw;
+    const R=state.settings.rest;   // read LIVE — a sync can replace state.settings while Settings is open (review 7.5)
     if(k==='notify'&&!R.notify){
       if('Notification'in window){try{const p=await Notification.requestPermission();if(p!=='granted'){toast('Allow notifications in your browser to use this');return;}}catch(e){toast('Notifications not available here');return;}}
       else{toast('Notifications not supported here');return;}
     }
-    R[k]=!R[k];b.classList.toggle('on',R[k]);S.saveSettingsCloud();
+    R[k]=!R[k];b.classList.toggle('on',R[k]);b.setAttribute('aria-checked',String(R[k]));S.saveSettingsCloud();
     if(k==='sound'&&R.sound){unlockAudio();beep();}
   }));
   $('#sheetBody').querySelectorAll('[data-rest]').forEach(b=>b.addEventListener('click',()=>{
-    const k=b.dataset.rest,d=+b.dataset.d;R[k]=Math.max(15,Math.min(600,R[k]+d));
+    const R=state.settings.rest,k=b.dataset.rest,d=+b.dataset.d;R[k]=Math.max(15,Math.min(600,R[k]+d));
     $(k==='compound'?'#rvC':'#rvI').textContent=fmtSec(R[k]);S.saveSettingsCloud();
   }));
 }

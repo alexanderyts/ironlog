@@ -48,12 +48,15 @@ function toast(msg,action){
 }
 function hideToast(){$('#toast').classList.remove('on','act');}
 let _confirmCb=null;
+let _confirmReturn=null;
 function showConfirm(title,msg,okLabel,cb,kind){
   $('#cdTitle').textContent=title;$('#cdMsg').textContent=msg;
   const ok=$('#cdOk');ok.textContent=okLabel;ok.className='btn '+(kind==='primary'?'primary':'danger');
-  _confirmCb=cb;$('#cdialog').classList.add('on');$('#cscrim').classList.add('on');
+  _confirmCb=cb;const d=$('#cdialog');d.classList.add('on');d.setAttribute('aria-hidden','false');$('#cscrim').classList.add('on');
+  _confirmReturn=document.activeElement;focusQuiet($('#cdCancel'));   // VoiceOver lands IN the dialog; Cancel is the safe default
 }
-function closeConfirm(){$('#cdialog').classList.remove('on');$('#cscrim').classList.remove('on');_confirmCb=null;}
+function closeConfirm(){const d=$('#cdialog');d.classList.remove('on');d.setAttribute('aria-hidden','true');$('#cscrim').classList.remove('on');_confirmCb=null;
+  const r=_confirmReturn;_confirmReturn=null;if(r&&document.contains(r)&&r!==document.body&&!/^(INPUT|TEXTAREA)$/.test(r.tagName))focusQuiet(r);}
 /* scrollTop=0: a reused sheet must open at its top (search bar), not wherever the last one was scrolled.
    The blur + scroll-to-top is the fix for "I tapped Add exercise and nothing happened": the sheet is
    position:fixed, i.e. anchored to the LAYOUT viewport, and iOS does not shrink that viewport for the
@@ -61,7 +64,8 @@ function closeConfirm(){$('#cdialog').classList.remove('on');$('#cscrim').classL
    still held focus painted it below the visible area, above the band the keyboard occupies. Dropping
    focus first lets iOS restore the viewport before the sheet slides up. Deliberately touches nothing
    in the tab-bar / safe-area model (--deficit, --screen-h) — see the invariant note in styles.css. */
-let _sheetReturnY=null;   // background scroll position stashed when a sheet had to scroll the page to top
+let _sheetReturnY=null,_sheetReturnFocus=null;   // background scroll position stashed when a sheet had to scroll the page to top; the element that opened it
+function focusQuiet(el){try{if(el)el.focus({preventScroll:true});}catch(e){}}
 function openSheet(title,body){
   // Only when a field actually had focus — blurring/scrolling unconditionally would throw away the
   // reader's scroll position every time they tap a PR row or an exercise from a scrolled list. When we
@@ -71,11 +75,14 @@ function openSheet(title,body){
     if(ae&&/^(INPUT|TEXTAREA)$/.test(ae.tagName)){ae.blur();
       if(window.scrollY){if(_sheetReturnY==null)_sheetReturnY=window.scrollY;window.scrollTo(0,0);}}
   }catch(e){}
-  $('#sheetTitle').textContent=title;const b=$('#sheetBody');b.innerHTML=body;b.scrollTop=0;$('#sheet').classList.add('on');$('#scrim').classList.add('on');
+  const sh=$('#sheet');if(!sh.classList.contains('on'))_sheetReturnFocus=document.activeElement;
+  $('#sheetTitle').textContent=title;const b=$('#sheetBody');b.innerHTML=body;b.scrollTop=0;sh.classList.add('on');sh.setAttribute('aria-hidden','false');$('#scrim').classList.add('on');a11yScan(b);
+  focusQuiet($('#sheetTitle'));   // announce the panel; a sheet that wants a field focused (notes) does so right after
 }
 function closeSheet(){const sh=$('#sheet'),sc=$('#scrim');
   sh.style.transition='';sh.style.transform='';if(sc)sc.style.opacity='';   // drop any leftover swipe-drag inline styles so the CSS slide-out runs
-  sh.classList.remove('on');sc.classList.remove('on');
+  sh.classList.remove('on');sh.setAttribute('aria-hidden','true');sc.classList.remove('on');
+  const rf=_sheetReturnFocus;_sheetReturnFocus=null;if(rf&&document.contains(rf)&&rf!==document.body&&!/^(INPUT|TEXTAREA)$/.test(rf.tagName))focusQuiet(rf);   // back to the button that opened it (not a field: that would pop the keyboard)
   if(_sheetReturnY!=null){const y=_sheetReturnY;_sheetReturnY=null;try{window.scrollTo(0,y);}catch(e){}}   // restore the pre-sheet scroll position
 }
 // Swipe-down-to-dismiss for the bottom sheet (the grab bar promised this). Drag from the grab bar/header,
@@ -126,6 +133,38 @@ function updateCloud(){
   }else{el.className='cloud local';t.textContent='On this phone';}
 }
 
+/* ---------------- accessibility (review 7.7) ----------------
+   Tappable rows are <div>s with data-* handlers, and toggles are styled buttons whose state is a CSS
+   class. Rather than hand-annotating ~40 templates, one observer marks them as they appear: rows get
+   role=button + tabindex, .sw toggles become switches (aria-checked), chips/segments report
+   aria-pressed, kept in sync whenever their `on` class flips. Enter/Space activates a div "button". */
+const A11Y_ROWS='[data-day],[data-sess],[data-open],[data-openex],[data-quickadd],[data-avtoggle],[data-routine],div[data-action],span[data-vol-info]';
+const A11Y_TOGGLES='button.sw,button.chip,.seg button';
+function a11yMark(el){
+  if(el.matches(A11Y_ROWS)&&!/^(BUTTON|A|INPUT)$/.test(el.tagName)){if(!el.hasAttribute('role'))el.setAttribute('role','button');if(!el.hasAttribute('tabindex'))el.setAttribute('tabindex','0');}
+  if(el.matches('button.sw')){el.setAttribute('role','switch');el.setAttribute('aria-checked',String(el.classList.contains('on')));}
+  else if(el.matches('button.chip,.seg button'))el.setAttribute('aria-pressed',String(el.classList.contains('on')));
+}
+function a11yScan(root){if(!root||root.nodeType!==1)return;a11yMark(root);root.querySelectorAll(A11Y_ROWS+','+A11Y_TOGGLES).forEach(a11yMark);}
+function initA11y(){
+  try{
+    a11yScan(document.body);
+    new MutationObserver(ms=>ms.forEach(m=>{
+      if(m.type==='attributes'){if(m.target.matches&&m.target.matches(A11Y_TOGGLES))a11yMark(m.target);}
+      else m.addedNodes.forEach(a11yScan);
+    })).observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:['class']});
+    document.addEventListener('keydown',e=>{
+      if(e.defaultPrevented||(e.key!=='Enter'&&e.key!==' '))return;
+      const t=e.target;if(!t||!t.getAttribute||t.getAttribute('role')!=='button'||/^(BUTTON|A|INPUT|TEXTAREA)$/.test(t.tagName))return;
+      e.preventDefault();t.click();
+    });
+    document.addEventListener('keydown',e=>{if(e.key!=='Escape')return;
+      if($('#cdialog').classList.contains('on'))closeConfirm();else if($('#sheet').classList.contains('on'))closeSheet();});
+  }catch(e){}
+}
+// Speak a short event (rest started / over, hold began); the ticking clocks themselves stay silent.
+function announce(msg){const el=$('#srLive');if(!el)return;el.textContent='';setTimeout(()=>{el.textContent=msg;},50);}
+
 /* ---------------- router ---------------- */
 let currentTab='today';
 let todayScreen='home';          // 'home' | 'start' | 'active' | 'edit'
@@ -139,7 +178,7 @@ let cardioDraft=null;
 const distanceUnit=()=>U()==='kg'?'km':'mi';   // cardio distance unit follows the weight unit
 let calMonth=new Date().getFullYear()*12+new Date().getMonth(),selDay=null,histShown=30;   // History renders 30 at a time (#13)
 let libQuery='',libGroup='All';
-function setTab(t){vlog('tab '+t);if(t!==currentTab)histShown=30;currentTab=t;document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===t));render();window.scrollTo(0,0);}
+function setTab(t){vlog('tab '+t);if(t!==currentTab)histShown=30;currentTab=t;document.querySelectorAll('.tab').forEach(b=>{const on=b.dataset.tab===t;b.classList.toggle('active',on);if(on)b.setAttribute('aria-current','page');else b.removeAttribute('aria-current');});render();window.scrollTo(0,0);}
 function render(){
   const v=$('#view');if(!v)return;
   // Error boundary: one malformed record must never white-screen the whole app. On failure, show a
@@ -149,7 +188,7 @@ function render(){
     else if(currentTab==='history')v.innerHTML=viewHistory();
     else if(currentTab==='library')v.innerHTML=viewLibrary();
     else if(currentTab==='progress')v.innerHTML=viewProgress();
-    bind();updateCloud();
+    bind();updateCloud();a11yScan(v);
   }catch(err){
     try{console.error('render failed',err);}catch(e){}
     v.innerHTML='<div class="wrap" style="padding:40px 16px;text-align:center"><h2 style="font-size:20px">Something went wrong</h2>'
@@ -180,6 +219,13 @@ function memoStat(key,fn){
 }
 // current session being edited on the Today tab (the live workout or a past one)
 const cur=()=>todayScreen==='edit'?editSession:state.active;
+// A sheet or undo toast captures the workout/exercise when it opens. If a sync replaces state.active
+// meanwhile (a newer copy from your other phone), writing to the captured object is silently lost —
+// persistCur saves the NEW object. Re-resolve at the moment of the write instead (review 7.5): same
+// object → it; same workout id → the live copy; the exercise → by identity, else same id at that index.
+function liveSession(t){const c=cur();return !t||!c?null:c===t?c:(c.id===t.id?c:null);}
+function liveExercise(t,ex,ei){const c=liveSession(t);if(!c||!ex)return null;if(c.exercises.indexOf(ex)>=0)return ex;const x=c.exercises[ei];return x&&x.id===ex.id?x:null;}
+function staleToast(){toast('This workout changed on another device — try that again');}
 function persistCur(){if(todayScreen==='edit'){editDirty=true;return;}
   const was=state.storageError;
   if(!S.persistActive()&&!was)toast('Storage is full — this workout isn’t being saved. Export a backup from Settings.');   // warn once on the transition, not every tap

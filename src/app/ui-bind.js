@@ -29,7 +29,7 @@ function slotFor(t,id){
 // restores into the SAME workout it was removed from.
 function removeExercise(ei){
   const t=cur();if(!t||!t.exercises[ei])return;const removed=t.exercises.splice(ei,1)[0];persistCur();render();
-  toast((removed.name||(EX[removed.id]&&EX[removed.id].name))+' removed',{label:'Undo',fn:()=>{const c=cur();if(c===t){c.exercises.splice(ei,0,removed);persistCur();render();}}});
+  toast((removed.name||(EX[removed.id]&&EX[removed.id].name))+' removed',{label:'Undo',fn:()=>{const c=liveSession(t);if(!c){staleToast();return;}c.exercises.splice(Math.min(ei,c.exercises.length),0,removed);persistCur();render();}});
 }
 function reorderCur(){
   const t=cur();if(!t||t.exercises.length<2)return;
@@ -409,12 +409,14 @@ function bind(){
   // progress: PR rows open the lift's detail (with its progress trend)
   const prc=$('#prCard');if(prc)prc.addEventListener('click',e=>{const r=e.target.closest('[data-openex]');if(r&&EX[r.dataset.openex])openSheet(EX[r.dataset.openex].name,exerciseDetail(r.dataset.openex));});
   // library
-  const ls=$('#libSearch');if(ls)ls.addEventListener('input',()=>{libQuery=ls.value;const pos=ls.selectionStart;render();const n=$('#libSearch');if(n){n.focus();n.setSelectionRange(pos,pos);}});
+  const ls=$('#libSearch');if(ls)ls.addEventListener('input',()=>{libQuery=ls.value;const r=$('#libResults');if(r)r.innerHTML=libResultsHtml();});
   v.querySelectorAll('[data-lg]').forEach(b=>b.addEventListener('click',()=>{libGroup=b.dataset.lg;render();}));
-  // library rows: the "+" adds straight to today's workout; the rest of the row opens details
-  v.querySelectorAll('[data-open]').forEach(b=>b.addEventListener('click',e=>{
-    if(e.target.closest('.ex-add')){addExerciseToCur(b.dataset.open);return;}
-    if(EX[b.dataset.open])openSheet(EX[b.dataset.open].name,exerciseDetail(b.dataset.open));}));
+  // library rows (delegated — search redraws the list): the "+" adds straight to today's workout; the
+  // rest of the row opens details. While a PAST workout is open for editing, "+" opens the details too,
+  // whose button names that session — a silent add used to land in the old workout (review 7.9).
+  const lr=$('#libResults');if(lr)lr.addEventListener('click',e=>{const b=e.target.closest('[data-open]');if(!b)return;
+    if(e.target.closest('.ex-add')&&todayScreen!=='edit'){addExerciseToCur(b.dataset.open);return;}
+    if(EX[b.dataset.open])openSheet(EX[b.dataset.open].name,exerciseDetail(b.dataset.open));});
 }
 // One stepper tick on a set's weight/reps (shared by tap and hold-to-repeat).
 // Copy-down (full review 5.1): sets BELOW that matched the one you just changed follow it — unless
@@ -439,6 +441,10 @@ function stepSet(ei,si,f,d){
 const HOLD_DELAY=400,HOLD_EVERY=110,HOLD_MAX=60;
 let holdT=null,holdI=null,holdSteps=0,heldRepeat=false;
 function stopHold(){clearTimeout(holdT);clearInterval(holdI);holdT=holdI=null;}
+// A cloud re-render must not land while someone is typing a number or holding a stepper.
+let _renderPending=false;
+function busyUI(){const a=document.activeElement;return !!(a&&/^(INPUT|TEXTAREA)$/.test(a.tagName)&&$('#view').contains(a))||!!(holdT||holdI);}
+function flushPendingRender(){if(_renderPending&&!busyUI()){_renderPending=false;render();}}
 function bindLog(root){
   stopHold();   // a re-render replaces the buttons mid-hold; never let a timer outlive its button
   if(!document.__holdWired){document.__holdWired=true;['pointerup','pointercancel'].forEach(ev=>document.addEventListener(ev,stopHold));}
@@ -483,12 +489,11 @@ function bindLog(root){
     const add=e.target.closest('[data-addset]');if(add){const ei=+add.dataset.addset;const sets=t.exercises[ei].sets;const last=sets[sets.length-1]||{w:'',r:''};sets.push({w:last.w,r:last.r,done:false});persistCur();render();return;}
     const sw=e.target.closest('[data-stopwatch]');if(sw){startStopwatch(+sw.dataset.stopwatch);return;}
     const pl=e.target.closest('[data-plates]');if(pl){const ex=t.exercises[+pl.dataset.plates],m=P.modeOf(ex);const top=Math.max(0,...ex.sets.filter(s=>!s.warm).map(s=>+s.w||0));openPlateSheet(top||barWeight(m),m);return;}   // heaviest entered work set (not just ticked ones — you load the bar before lifting)
-    const rem=e.target.closest('[data-delset]');if(rem){const ei=+rem.dataset.delset;const sets=t.exercises[ei].sets;if(sets.length<=1)return;
+    const rem=e.target.closest('[data-delset]');if(rem){const ei=+rem.dataset.delset,ex=t.exercises[ei];const sets=ex.sets;if(sets.length<=1)return;
       const idx=sets.length-1;
       const doRemove=()=>{const removed=sets.splice(idx,1)[0];persistCur();render();
-        toast('Set removed',{label:'Undo',fn:()=>{const c=cur();if(c&&c.exercises[ei]){c.exercises[ei].sets.splice(idx,0,removed);persistCur();render();}}});};
+        toast('Set removed',{label:'Undo',fn:()=>{const x=liveExercise(t,ex,ei);if(!x){staleToast();return;}x.sets.splice(Math.min(idx,x.sets.length),0,removed);persistCur();render();}});};   // by identity: after a reorder, index ei is a DIFFERENT exercise
       if(sets[idx].done)showConfirm('Remove last set?','That set is marked done — remove it anyway?','Remove',doRemove);else doRemove();return;}
-    const del=e.target.closest('[data-delex]');if(del){removeExercise(+del.dataset.delex);return;}
     const em=e.target.closest('[data-exmenu]');if(em){openExMenu(+em.dataset.exmenu);return;}
     const es=e.target.closest('[data-exsetup]');if(es){openExSetup(+es.dataset.exsetup);return;}
     const kw=e.target.closest('[data-keepw]');if(kw){const ei=+kw.dataset.keepw;const ex=t.exercises[ei];const lp=P.lastPerf(state.sessions,ex.id,{beforeTs:t.date,excludeId:t.id,mode:P.trackOf(ex)});
@@ -527,6 +532,7 @@ function startRest(seconds){
   stopSw();   // rest and stopwatch share one slot — never stack them (U2)
   restState={total:seconds,end:Date.now()+seconds*1000};
   const bar=$('#restbar');bar.classList.add('on');bar.classList.remove('done');$('#restLbl').textContent='Rest';
+  announce('Rest started, '+fmtSec(seconds));
   clearInterval(restInt);restInt=setInterval(tickRest,300);tickRest();
 }
 function tickRest(){
@@ -540,6 +546,7 @@ function finishRest(){
   clearInterval(restInt);restInt=null;
   const bar=$('#restbar');bar.classList.add('done');$('#restLbl').textContent='Rest done';$('#restTime').textContent='Go!';$('#restProg').style.width='100%';
   beep();try{if(navigator.vibrate)navigator.vibrate([180,90,180]);}catch(e){}
+  announce('Rest done. Next set.');
   if(state.settings.rest.notify&&'Notification'in window&&Notification.permission==='granted'){try{new Notification('Rest complete 💪',{body:'Time for your next set.'});}catch(e){}}
   restState=null;setTimeout(()=>{const b=$('#restbar');if(b.classList.contains('done'))stopRest();},5000);
 }
@@ -568,7 +575,7 @@ function tickSw(){
   if(swState.phase==='count'){
     const rem=Math.max(0,swState.end-Date.now()),n=Math.ceil(rem/1000);
     $('#swLbl').textContent='Get set';$('#swTime').textContent=n>0?String(n):'Go';
-    if(rem<=0){swState.phase='run';swState.start=Date.now();b.classList.add('run');beep();try{if(navigator.vibrate)navigator.vibrate(120);}catch(e){}}
+    if(rem<=0){swState.phase='run';swState.start=Date.now();b.classList.add('run');beep();announce('Go. Holding.');try{if(navigator.vibrate)navigator.vibrate(120);}catch(e){}}
     return;
   }
   const el=Math.floor((Date.now()-swState.start)/1000);
@@ -603,6 +610,10 @@ function boot(){
     const pm=e.target.closest('[data-prmark]');if(pm){markBestSet(pm.dataset.prmark,pm);return;}
     const pu=e.target.closest('[data-prunmark]');if(pu){unmarkSets(pu.dataset.prunmark);return;}});
   $('#btnSettings').addEventListener('click',openSettings);
+  // the header badge explains itself on tap, so "Storage full" can always be read again (review 7.3)
+  const cs=$('#cloudStatus');const csWhy=()=>toast(state.storageError?'Storage is full — new changes aren’t being saved on this phone. Export a backup in Settings, then delete old data.':($('#cloudText').textContent||'')+(state.cloudError?' — '+state.cloudError:''));
+  cs.addEventListener('click',csWhy);cs.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();csWhy();}});
+  initA11y();
   $('#restSkip').addEventListener('click',stopRest);
   $('#swStop').addEventListener('click',finishStopwatch);$('#swCancel').addEventListener('click',()=>{stopSw();toast('Stopwatch cancelled');});
   $('#restAdd').addEventListener('click',()=>{
@@ -616,8 +627,12 @@ function boot(){
   // time (a suspended tab's minute timer won't have fired). Never while typing.
   document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&todayScreen==='active'&&state.active){const a=document.activeElement;if(!(a&&a.tagName==='INPUT'))render();}});
   $('#view').addEventListener('click',e=>{if(e.target.closest('[data-vol-info]'))toast('Volume = weight × reps, added up across your working sets');});
-  // re-render on cloud changes, but never yank focus from someone typing a weight
-  S.onChange(()=>{updateCloud();const a=document.activeElement;if(a&&a.tagName==='INPUT')return;render();});
+  // Cloud changes: a status ping only refreshes the badge. A real data change re-renders — but never
+  // mid-keystroke or mid-hold; it waits until the field loses focus / the finger lifts (review 7.4). The
+  // old code skipped the render outright while typing, so the screen stayed stale until the next tap.
+  S.onChange(kind=>{updateCloud();if(kind==='status')return;if(busyUI()){_renderPending=true;return;}render();});
+  document.addEventListener('focusout',()=>setTimeout(flushPendingRender,0));
+  ['pointerup','pointercancel'].forEach(ev=>document.addEventListener(ev,()=>setTimeout(flushPendingRender,0)));
   applyTheme();watchViewport();initSheetGestures();setTab('today');S.initCloud();
   if(state.justSeeded)setTimeout(()=>toast('Sample data loaded — explore every tab'),600);
 }

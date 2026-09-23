@@ -61,7 +61,11 @@ const saveDirty=()=>lsSet(LS.dirty,[...state.dirty]);
 
 const listeners=[];
 function onChange(fn){listeners.push(fn);}
-function emit(){listeners.forEach(fn=>{try{fn();}catch(e){}});}
+// kind 'data' (default) = something on screen may have changed → the UI re-renders.
+// kind 'status' = only sync bookkeeping moved (syncing/lastSync/cloudError) → the UI refreshes just the
+// header badge. Every Dropbox sync used to redraw the whole screen twice, ~4 s after each edit, which
+// could cut off a held +/− press mid-set (review 7.4).
+function emit(kind){listeners.forEach(fn=>{try{fn(kind||'data');}catch(e){}});}
 
 /* ---- sessions ---- */
 function upsertSession(s,fromCloud){
@@ -179,7 +183,7 @@ function artifactAdapter(){
         // sessions we deleted locally but the cloud still has → delete there too
         remote.forEach(r=>{if(state.deleted[r.id]&&state.deleted[r.id]>=(r.updatedAt||0))db.doc('sessions/'+r.id).delete().catch(()=>{});});
         if(m.changedLocal){state.sessions=m.merged;saveSessions();emit();}
-        state.lastSync=Date.now();emit();
+        state.lastSync=Date.now();emit('status');
       },()=>{});
       // Shared tombstone doc: mergeSessions can add/update but never REMOVE, so without this a delete on one
       // device is undone the moment another device touches the row (pushSession re-creates it). This doc
@@ -202,7 +206,7 @@ function artifactAdapter(){
       },()=>{});
       return true;
     },
-    async pushSession(s){try{await db.doc('sessions/'+s.id).set(s);state.dirty.delete(s.id);saveDirty();state.lastSync=Date.now();state.cloudError='';emit();}catch(e){state.cloudError='Sync failed';emit();}},
+    async pushSession(s){try{await db.doc('sessions/'+s.id).set(s);state.dirty.delete(s.id);saveDirty();state.lastSync=Date.now();state.cloudError='';emit('status');}catch(e){state.cloudError='Sync failed';emit('status');}},
     deleteSession(id){db.doc('sessions/'+id).delete().catch(()=>{});A.pushTombstones();},
     pushTombstones(){db.doc('meta/deleted').set({map:state.deleted,updatedAt:Date.now()}).catch(()=>{});},   // publish the deletion so other devices don't resurrect it (D2)
     pushSettings(){db.doc('settings/app').set(state.settings).catch(()=>{});},
@@ -230,12 +234,15 @@ function dropboxAdapter(){
       await A.syncNow();
       return true;
     },
-    pushSession(){schedule();},deleteSession(){markPending();},pushSettings(){markPending();},pushRoutine(){markPending();},deleteRoutine(){markPending();},pushActive(){schedule();},
+    // pushActive must MARK pending, not just schedule: an in-progress workout dirties no session, so a bare
+    // schedule() reached syncNow with nothing flagged and uploaded nothing — your other phone never saw
+    // the live workout until something else happened to sync (review 7.11).
+    pushSession(){schedule();},deleteSession(){markPending();},pushSettings(){markPending();},pushRoutine(){markPending();},deleteRoutine(){markPending();},pushActive(){markPending();},
     flush(){return A.syncNow();},
     async syncNow(){
       if(state.syncing||!D.isConnected()){if(state.syncing)A._pending=true;return;}   // a sync requested mid-flight re-runs once
-      state.syncing=true;state.cloudError='';emit();
-      const guard=setTimeout(()=>{state.syncing=false;emit();},30000);   // never wedge if a request hangs
+      state.syncing=true;state.cloudError='';emit('status');
+      const guard=setTimeout(()=>{state.syncing=false;emit('status');},30000);   // never wedge if a request hangs
       try{
         const meta=await D.getMetadata();
         // The "remote is from a NEWER app" block must PERSIST across syncs, not just the download cycle.
@@ -263,7 +270,7 @@ function dropboxAdapter(){
         }
         lsSet(LS.dbxRev,rev);state.lastSync=Date.now();
       }catch(e){state.cloudError=e.message||'Sync failed';}
-      clearTimeout(guard);state.syncing=false;emit();
+      clearTimeout(guard);state.syncing=false;emit('status');
       if(A._pending){A._pending=false;return A.syncNow();}
     }
   };

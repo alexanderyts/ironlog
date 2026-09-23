@@ -254,7 +254,7 @@ function openModePicker(ei){
       <div class="ex-sub">${MODES[m].perHand?'Enter the weight of one dumbbell':MODES[m].e1rm?'Free-weight loading':'Stack / cable — shown as load, not a 1RM'}</div></div>
       ${m===curMode?'<span style="color:var(--accent);font-size:18px">✓</span>':''}</button>`).join('')}</div>`);
   $('#sheetBody').querySelectorAll('[data-pickmode]').forEach(b=>b.addEventListener('click',()=>{
-    const m=b.dataset.pickmode;if(m===native)delete ex.mode;else ex.mode=m;
+    const m=b.dataset.pickmode,x=liveExercise(t,ex,ei);if(!x){closeSheet();staleToast();return;}if(m===native)delete x.mode;else x.mode=m;
     persistCur();closeSheet();render();toast(MODES[m].label);}));
 }
 // A free-text note on an exercise in THIS session — timestamped by the session, saved with it, synced
@@ -267,8 +267,9 @@ function openNote(ei){
     <button class="btn primary block" id="noteSave" style="margin-top:12px">Save note</button>
     ${ex.note?'<button class="btn ghost block" id="noteClear" style="margin-top:8px">Remove note</button>':''}`);
   const ta=$('#noteText');if(ta){ta.focus();ta.setSelectionRange(ta.value.length,ta.value.length);}
-  $('#noteSave').addEventListener('click',()=>{const v=(ta.value||'').trim();if(v)ex.note=v.slice(0,500);else delete ex.note;persistCur();closeSheet();render();toast(v?'Note saved':'Note removed');});
-  const nc=$('#noteClear');if(nc)nc.addEventListener('click',()=>{delete ex.note;persistCur();closeSheet();render();toast('Note removed');});
+  const live=()=>{const x=liveExercise(t,ex,ei);if(!x){closeSheet();staleToast();}return x;};
+  $('#noteSave').addEventListener('click',()=>{const x=live();if(!x)return;const v=(ta.value||'').trim();if(v)x.note=v.slice(0,500);else delete x.note;persistCur();closeSheet();render();toast(v?'Note saved':'Note removed');});
+  const nc=$('#noteClear');if(nc)nc.addEventListener('click',()=>{const x=live();if(!x)return;delete x.note;persistCur();closeSheet();render();toast('Note removed');});
 }
 // A note for the whole workout (D-4) — how the session felt, sleep, an injury flare. Kept on the session
 // and shown in History. Works on the live workout or a past one being edited (cur()).
@@ -279,8 +280,9 @@ function openSessionNote(){
     <button class="btn primary block" id="snoteSave" style="margin-top:12px">Save note</button>
     ${t.note?'<button class="btn ghost block" id="snoteClear" style="margin-top:8px">Remove note</button>':''}`);
   const ta=$('#snoteText');if(ta){ta.focus();ta.setSelectionRange(ta.value.length,ta.value.length);}
-  $('#snoteSave').addEventListener('click',()=>{const v=(ta.value||'').trim();if(v)t.note=v.slice(0,500);else delete t.note;persistCur();closeSheet();render();toast(v?'Note saved':'Note removed');});
-  const nc=$('#snoteClear');if(nc)nc.addEventListener('click',()=>{delete t.note;persistCur();closeSheet();render();toast('Note removed');});
+  const live=()=>{const x=liveSession(t);if(!x){closeSheet();staleToast();}return x;};
+  $('#snoteSave').addEventListener('click',()=>{const x=live();if(!x)return;const v=(ta.value||'').trim();if(v)x.note=v.slice(0,500);else delete x.note;persistCur();closeSheet();render();toast(v?'Note saved':'Note removed');});
+  const nc=$('#snoteClear');if(nc)nc.addEventListener('click',()=>{const x=live();if(!x)return;delete x.note;persistCur();closeSheet();render();toast('Note removed');});
 }
 /* ---- plate calculator (D-4) ---- barbell/Smith lifts log the TOTAL bar weight, so this shows how to
    load each side. The empty-bar weight is remembered per equipment (barbell vs Smith) AND per unit — a
@@ -372,9 +374,9 @@ function openReplace(ei){
 }
 function doReplace(ei,id){
   const t=cur(),old=t&&t.exercises[ei];if(!old||!EX[id])return;const logged=old.sets.filter(s=>s.done).length;
-  const go=()=>{const pf=state.settings.profile||{};
-    const inst=B.seedExercise(id,state.sessions,{excludeId:t.id,unit:U(),goal:pf.goal,setStyle:pf.sets,push:pf.push,gym:pf.gym});
-    t.exercises.splice(ei,1,inst);persistCur();closeSheet();render();
+  const go=()=>{const pf=state.settings.profile||{},c=liveSession(t),o=liveExercise(t,old,ei);if(!c||!o){closeSheet();staleToast();return;}
+    const inst=B.seedExercise(id,state.sessions,{excludeId:c.id,unit:U(),goal:pf.goal,setStyle:pf.sets,push:pf.push,gym:pf.gym});
+    ei=c.exercises.indexOf(o);c.exercises.splice(ei,1,inst);persistCur();closeSheet();render();
     toast((old.name||EX[old.id].name)+' → '+EX[id].name,{label:'Undo',fn:()=>{const c=cur();if(c&&c.exercises[ei]===inst){c.exercises.splice(ei,1,old);persistCur();render();}}});};
   if(logged)showConfirm('Replace '+(old.name||EX[old.id].name)+'?','You’ve logged '+logged+' set'+(logged!==1?'s':'')+' on it — they’ll be removed from this workout.','Replace',go);else go();
 }

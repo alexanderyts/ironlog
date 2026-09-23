@@ -2,6 +2,19 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.66.0 — 2026-09-22 · Steadier syncing, easier to read, works with VoiceOver
+- **Your other phone now sees a workout while it's in progress.** Before, changes to a workout you hadn't finished only reached Dropbox when some other change happened to sync.
+- **Syncing no longer redraws the screen.** Each Dropbox sync used to redraw the page twice, a few seconds after every edit, which could cut off a held + or −. Now only the little sync label updates. If new data arrives while you're typing a number, the screen waits until you're done.
+- **Edits made during a sync aren't lost.** If a sync landed while a note, the equipment picker, a Replace, a Settings toggle or an Undo was open, the change could be saved to an old copy and quietly dropped. Undo for a removed set also goes back to the right exercise if you reordered in between.
+- **Library search** no longer rebuilds the page on every letter, so predictive text works.
+- **Library + while editing an old workout** opens the exercise details instead, and the button says which session it will add to. Before, it could land in the old workout without you noticing.
+- **Rest timer in dark mode:** the progress bar and the +15s / Skip buttons are visible now, and "Rest done" is readable.
+- **"Storage full"**: tap the label at the top to see the full warning again at any time.
+- **VoiceOver:** pop-ups are announced and receive focus, and they close with Escape. Toggles say on or off. Tappable rows act as buttons, and the current tab is announced. Rest start, rest end and the stopwatch "Go" are read aloud.
+- Left alone on purpose: the light-mode grey text and orange buttons. You chose the current look when darker greys were tried in v0.45.
+
+Not verified on-device.
+
 ## v0.65.0 — 2026-09-22 · One way to judge progress
 Before this update, the progress chart, the PR list, the "New PR" banner, the coach's "trending up" note and the stall check each had their own rules for a good set, so they sometimes disagreed. They now all use the same rules.
 - **Assist machines (assisted pull-up / dip) count properly.** Less assist is progress. 40 lb assist × 12 is no longer replaced as your record by a later 40 × 5. The chart now goes up as the assist drops, even if you haven't entered your bodyweight. The "New PR" banner now shows for these too.
