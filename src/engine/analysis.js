@@ -3,7 +3,7 @@ var IL=globalThis.IL||(globalThis.IL={});
 if(typeof require==='function'&&!IL.data)require('../data/exercises.js');
 if(typeof require==='function'&&!IL.prog)require('./progression.js');
 const {EX,EXERCISES,REGIONS,IDEAL_PATS,LOWER_GROUPS,MODES,INVERTED_LOAD,TIME_METRIC,regLabel,patLabel,exampleFor,hashId}=IL.data;
-const {DAY,startOfDay,e1rm,isWorking,setLoad,setScore,sbw,sessionVolume,sessionSets,sessionDuration,setTimeline,modeOf,calcStreak,real,weekIndex,weekStart,lastPerf}=IL.prog;
+const {DAY,startOfDay,e1rm,isWorking,setLoad,setScore,sbw,sessionVolume,sessionSets,sessionDuration,setTimeline,modeOf,trackOf,holdsOf,sidesOf,calcStreak,real,weekIndex,weekStart,lastPerf}=IL.prog;
 
 // completed() INCLUDES deloads on purpose — volume/frequency/PR-window analysis wants everything the
 // user actually did. Progression-only scans use real() (completed AND not a deload) instead.
@@ -51,7 +51,7 @@ function progressionStat(sessions,now,bw){
   now=now||Date.now();
   const done=real(sessions).filter(s=>s.date>=now-28*DAY&&s.date<now).sort((x,y)=>x.date-y.date);
   const byEx={};
-  done.forEach(s=>{const b=sbw(s,bw);s.exercises.forEach(e=>{const best=Math.max(0,...e.sets.filter(st=>!st.nc&&isWorking(st)).map(st=>setScore(e.id,st,b)));if(best)(byEx[e.id]=byEx[e.id]||[]).push(best);});});
+  done.forEach(s=>{const b=sbw(s,bw);s.exercises.forEach(e=>{const best=Math.max(0,...e.sets.filter(st=>!st.nc&&isWorking(st)).map(st=>setScore(e.id,st,b)));const k=e.id+':'+trackOf(e);if(best)(byEx[k]=byEx[k]||[]).push(best);});});   // per lift AND track — Smith 100 → dumbbell 40 is not "going down"
   let n=0,up=0;Object.values(byEx).forEach(arr=>{if(arr.length>=2){n++;if(arr[arr.length-1]>arr[0])up++;}});
   return {n,up};
 }
@@ -321,7 +321,8 @@ function personalRecords(sessions,bw,limit){
   // Time-held: longest hold first, heavier load as the tiebreak — matches setScore (seconds) so the PR
   // card and the progress trend never disagree about the same lift (a weighted carry included).
   const beats=(c,b,inverted,time)=>inverted?(!b||c.load<b.load):time?(!b||c.r>b.r||(c.r===b.r&&c.load>b.load)):(!b||c.est>b.est);
-  real(sessions).forEach(s=>{const sb=sbw(s,bw);s.exercises.forEach(e=>{const mode=modeOf(e),key=e.id+':'+mode,ex=EX[e.id];
+  real(sessions).forEach(s=>{const sb=sbw(s,bw);s.exercises.forEach(e=>{const mode=modeOf(e),track=trackOf(e),key=e.id+':'+track,ex=EX[e.id];   // one record per lift per TRACK: a one-arm cable curl never competes with the two-hand bar
+    const holds=holdsOf(e),sides=sidesOf(e);
     const inverted=!!(ex&&INVERTED_LOAD&&INVERTED_LOAD.has(e.id));   // assist machine: the PR is the LEAST assist, and no 1RM estimate (#16)
     const time=!!(TIME_METRIC&&TIME_METRIC.has(e.id));   // time-held: "reps" are seconds → no 1RM; best = longest, then heaviest
     e.sets.forEach(st=>{
@@ -337,7 +338,7 @@ function personalRecords(sessions,bw,limit){
     // untouched everywhere else: it still counts for volume, sets-per-muscle, rest and history.
     if(st.nc){if(beats(cand,set_aside[key],inverted,time))set_aside[key]=cand;return;}
     const showEst=!!ex&&ex.type==='compound'&&!inverted&&!time&&!!(MODES[mode]&&MODES[mode].e1rm);
-    if(beats(cand,best[key],inverted,time))best[key]={id:e.id,mode,w:cand.w,load:w,r,est,name:ex?ex.name:e.name,date:s.date,compound:!!ex&&ex.type==='compound',showEst,inverted,time,bodyweight:mode==='bodyweight'};
+    if(beats(cand,best[key],inverted,time))best[key]={id:e.id,mode,track,holds,sides,w:cand.w,load:w,r,est,name:ex?ex.name:e.name,date:s.date,compound:!!ex&&ex.type==='compound',showEst,inverted,time,bodyweight:mode==='bodyweight'};
   })})});
   // Attach the set-aside set only where it WOULD have been the PR — marking an ordinary set says nothing
   Object.keys(best).forEach(k=>{const a=set_aside[k],b=best[k];
@@ -368,7 +369,7 @@ function deloadStats(sessions,now){
   allDl.forEach(s=>s.exercises.forEach(e=>{
     const ex=EX[e.id];if(!ex)return;
     const dTop=Math.max(0,...e.sets.filter(isWorking).map(st=>+st.w||0));
-    const rp=lastPerf(done,e.id,{mode:modeOf(e)});   // real only
+    const rp=lastPerf(done,e.id,{mode:trackOf(e)});   // real only; same track (equipment + side)
     if(!rp){onlyOnDeload.add(e.id);return;}
     const rTop=Math.max(0,...rp.sets.map(st=>st.w));
     if(dTop>0&&rTop>0)ratios.push(dTop/rTop*100);   // in percent, so averaging doesn't lose a half-point to float error

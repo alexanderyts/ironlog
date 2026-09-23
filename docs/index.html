@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-m5dOpJdh+VJzVUH1VRLflz1tOFPXXrpYyAWqCgqcNso=' 'sha256-WPBob/luB2k1aalTWXpi6zk3SrIbj8GlZV7AlFdG7oA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-9pRpGE9TSm0QXFR926aZF0DtLxY/OqRKo6WQ88cJ808=' 'sha256-WPBob/luB2k1aalTWXpi6zk3SrIbj8GlZV7AlFdG7oA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Ironlog</title>
@@ -227,6 +227,10 @@ html.kb-open .tabbar{display:none}
 .modechip{margin:0 12px 10px;padding:4px 11px;border-radius:9px;background:var(--surface-2);color:var(--ink-2);font-size:12px;font-weight:600;display:inline-flex;align-items:center;gap:4px;position:relative}
 .modechip::after{content:"";position:absolute;inset:-10px -8px}   /* hit-slop → ≥44pt target (#27) */
 .modechip:active{background:var(--accent-soft);color:var(--accent)}
+.chiprow{display:flex;flex-wrap:wrap;gap:10px;margin:0 12px 10px}
+.chiprow .modechip{margin:0}
+.chiprow .modechip::after{inset:-10px -5px}   /* keep the two chips' hit-slop from overlapping */
+.modechip.on{background:var(--accent-soft);color:var(--accent)}
 .modelist{display:flex;flex-direction:column;gap:2px}
 .modeopt{display:flex;align-items:center;gap:10px;text-align:left;padding:12px 12px;border-radius:12px}
 .modeopt.on{background:var(--accent-soft)}
@@ -442,8 +446,8 @@ html.kb-open .tabbar{display:none}
 </div>
 
 <script>
-/* Ironlog v0.60.0 · site build */
-var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.60.0",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
+/* Ironlog v0.61.0 · site build */
+var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.61.0",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
 
 /* ===== src/data/exercises.js ===== */
 (function(){'use strict';
@@ -640,8 +644,16 @@ const META={
 // small preference so a plan tends to include a stretch-biased option per muscle. Existing lifts that
 // already load the stretch are tagged here too.
 const LONG_LENGTH=new Set(['incline-dumbbell-fly','dumbbell-pullover','cable-pullover','bayesian-cable-curl','incline-dumbbell-curl','cable-overhead-extension','overhead-tricep-extension','leaning-cable-lateral','sissy-squat','romanian-deadlift','stiff-leg-deadlift','seated-leg-curl']);
-// Single-limb movements (for future per-side volume handling and to diversify rotation families).
-const UNILATERAL=new Set(['single-arm-cable-row','concentration-curl','single-arm-pushdown','reverse-lunge','single-leg-curl','single-leg-hip-thrust','single-leg-calf-raise','bulgarian-split-squat','walking-lunge','step-up','dumbbell-row','cable-kickback','side-plank','suitcase-carry']);
+// Per-side accounting. A set's volume = weight × reps × how many times that weight moves:
+//   holds — copies of the entered weight in motion at once (two dumbbells, two cable stacks) → ×2
+//   sides — the entered reps are done once per side (one arm / one leg at a time)            → ×2
+// UNILATERAL = done one side at a time by default: reps are PER SIDE (the column says so).
+const UNILATERAL=new Set(['single-arm-cable-row','concentration-curl','single-arm-pushdown','reverse-lunge','single-leg-curl','single-leg-hip-thrust','single-leg-calf-raise','bulgarian-split-squat','walking-lunge','step-up','dumbbell-row','cable-kickback','side-plank','suitcase-carry','leaning-cable-lateral']);
+// Dumbbell lifts done with ONE dumbbell (held in both hands, or one hand only) — the entered weight
+// moves once, not twice like a pair.
+const ONE_DB=new Set(['goblet-squat','dumbbell-pullover','overhead-tricep-extension','dumbbell-row','concentration-curl','single-leg-calf-raise','suitcase-carry']);
+// Cable lifts that use two stacks at once (one handle per hand) — the entered weight is PER STACK.
+const DUAL_STACK=new Set(['cable-crossover']);
 // Assist machines where LESS weight is harder: progression REDUCES the load and a PR is the lowest
 // assist, not the highest (#16). The engine flips the increment and the PR ranking for these ids.
 const INVERTED_LOAD=new Set(['assisted-pull-up','assisted-dip']);
@@ -723,7 +735,7 @@ function patLabel(p){return {hpush:'horizontal press',vpush:'overhead press',hpu
 function exampleFor(group,reg){const e=EXERCISES.find(x=>x.group===group&&x.reg===reg&&x.type===C)||EXERCISES.find(x=>x.group===group&&x.reg===reg);return e?e.name:null;}
 function hashId(s){let h=0;for(let i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))>>>0;return h;}
 
-IL.data={C,I,EXERCISES,EX,GROUPS,PRESETS,META,REGIONS,IDEAL_PATS,PAT_RANK,EQUIP_LOAD,MODES,MODE_ORDER,EQUIP_MODE,LONG_LENGTH,UNILATERAL,INVERTED_LOAD,TIME_METRIC,PUSH_PATS,PULL_PATS,LOWER_GROUPS,BW_FACTOR,GROUP_ICON,exIcon,regLabel,patLabel,exampleFor,hashId};
+IL.data={C,I,EXERCISES,EX,GROUPS,PRESETS,META,REGIONS,IDEAL_PATS,PAT_RANK,EQUIP_LOAD,MODES,MODE_ORDER,EQUIP_MODE,LONG_LENGTH,UNILATERAL,ONE_DB,DUAL_STACK,INVERTED_LOAD,TIME_METRIC,PUSH_PATS,PULL_PATS,LOWER_GROUPS,BW_FACTOR,GROUP_ICON,exIcon,regLabel,patLabel,exampleFor,hashId};
 
 })();
 
@@ -734,12 +746,32 @@ IL.data={C,I,EXERCISES,EX,GROUPS,PRESETS,META,REGIONS,IDEAL_PATS,PAT_RANK,EQUIP_
 // No DOM, no app state: everything takes the sessions array it should look at.
 var IL=globalThis.IL||(globalThis.IL={});
 if(typeof require==='function'&&!IL.data)require('../data/exercises.js');
-const {EX,BW_FACTOR,EQUIP_MODE,MODES,INVERTED_LOAD,TIME_METRIC}=IL.data;
+const {EX,BW_FACTOR,EQUIP_MODE,MODES,INVERTED_LOAD,TIME_METRIC,UNILATERAL,ONE_DB,DUAL_STACK}=IL.data;
 
 // The modality a logged exercise instance was performed with: its explicit `mode`, else derived
 // from the exercise's fixed equipment. Stable for any instance, so mode-less history (and every
 // existing test) resolves to a single consistent mode per exercise id — i.e. no behavior change.
 function modeOf(e){return (e&&e.mode)||EQUIP_MODE[EX[e&&e.id]&&EX[e.id].equip]||'barbell';}
+
+/* ---- per-side accounting ----
+   A set's volume is weight × reps × holds × sides:
+     sidesOf — 2 when the reps are done once PER SIDE (one arm / one leg at a time). Defaults from
+               UNILATERAL; `e.side` (boolean) is the user's override from the "⇆ Each side" chip,
+               stored only when it differs from the default.
+     holdsOf — 2 when two copies of the entered weight move at once: a pair of dumbbells (the field
+               is "per dumbbell"), or a two-stack cable lift. A dumbbell lift switched to one side
+               at a time is done with ONE dumbbell, so it holds 1 (volume stays equal: 1 × 2).
+   trackOf keeps a lift done "the other way" (a one-arm cable curl vs the two-hand bar) on its own
+   history — PRs, suggestions, trends and stall checks never compare the two. For an instance on its
+   default it is exactly modeOf(e), so all existing history resolves unchanged. */
+function sideDefault(id){return !!(UNILATERAL&&UNILATERAL.has(id));}
+function sidesOf(e){return (typeof(e&&e.side)==='boolean'?e.side:sideDefault(e&&e.id))?2:1;}
+function holdsOf(e){const m=modeOf(e),id=e&&e.id;
+  if(m==='dumbbell')return (ONE_DB&&ONE_DB.has(id))||(e.side===true&&!sideDefault(id))?1:2;
+  if(m==='cable'&&DUAL_STACK&&DUAL_STACK.has(id))return 2;
+  return 1;}
+function sideMult(e){return holdsOf(e)*sidesOf(e);}
+function trackOf(e){const m=modeOf(e);if(typeof(e&&e.side)!=='boolean'||e.side===sideDefault(e.id))return m;return m+(e.side?'|1side':'|2side');}
 
 const DAY=86400000;
 function startOfDay(ts){const d=new Date(ts);d.setHours(0,0,0,0);return d.getTime();}
@@ -758,8 +790,8 @@ function sessionVolume(s,bw){const b=sbw(s,bw);let v=0;s.exercises.forEach(e=>{
   // Assisted machines: the logged number is the ASSISTANCE, so the resistance actually moved is
   // bodyweight − assist (mirrors a weighted bodyweight lift, which is bodyweight + added). Needs a
   // bodyweight; without one it's unknowable and contributes 0 rather than counting the machine's help.
-  const inv=INVERTED_LOAD&&INVERTED_LOAD.has(e.id);
-  e.sets.forEach(st=>{if(isWorking(st)){const load=inv?Math.max(0,b-(+st.w||0)):setLoad(e.id,st.w,b);v+=load*(+st.r||0);}});
+  const inv=INVERTED_LOAD&&INVERTED_LOAD.has(e.id),mult=inv?1:sideMult(e);   // both sides / both dumbbells count (see sideMult)
+  e.sets.forEach(st=>{if(isWorking(st)){const load=inv?Math.max(0,b-(+st.w||0)):setLoad(e.id,st.w,b);v+=load*(+st.r||0)*mult;}});
 });return v;}
 function sessionSets(s){let n=0;s.exercises.forEach(e=>e.sets.forEach(st=>{if(isWorking(st))n++;}));return n;}
 // How long a finished workout took, in whole minutes. `date` is the start (set at newSession); a set
@@ -834,7 +866,7 @@ function lastPerf(sessions,exId,opts){
     // the same predicate, a session whose every working set is marked is skipped whole and the scan
     // falls through to the one before it — the fallback chain costs no extra code.
     const perfSet=st=>isWorking(st)&&(+st.r||0)>0&&!(opts.clean&&st.nc);
-    const e=s.exercises.find(x=>x.id===exId&&(!opts.mode||modeOf(x)===opts.mode)&&x.sets.some(perfSet));
+    const e=s.exercises.find(x=>x.id===exId&&(!opts.mode||trackOf(x)===opts.mode)&&x.sets.some(perfSet));
     if(e)return{date:s.date,mode:modeOf(e),sets:e.sets.filter(perfSet).map(st=>({w:+st.w||0,r:+st.r||0})),note:e.note||''};
   }
   return null;
@@ -866,7 +898,7 @@ function platesPerSide(total,bar,unit){
 function exerciseSeries(sessions,exId,opts){
   opts=opts||{};const bw=opts.bw||0,out=[],metric=scoreMetric(exId);
   for(const s of real(sessions)){
-    const e=s.exercises.find(x=>x.id===exId&&(!opts.mode||modeOf(x)===opts.mode));
+    const e=s.exercises.find(x=>x.id===exId&&(!opts.mode||trackOf(x)===opts.mode));
     if(!e)continue;
     // A set marked "doesn't count" (st.nc) must not define the trend line — otherwise a rep the user
     // has disowned reads as their level, and every honest session after it looks like a decline. But
@@ -893,7 +925,7 @@ function bestE1rmBefore(sessions,exId,opts){
   for(const s of real(sessions)){
     if(opts.excludeId&&s.id===opts.excludeId)continue;
     if(opts.beforeTs&&s.date>=opts.beforeTs)continue;
-    const e=s.exercises.find(x=>x.id===exId&&(!opts.mode||modeOf(x)===opts.mode));
+    const e=s.exercises.find(x=>x.id===exId&&(!opts.mode||trackOf(x)===opts.mode));
     if(!e)continue;
     const b=sbw(s,bw);   // each session scored by its own bodyweight (D-1)
     e.sets.forEach(st=>{if(st.nc||!isWorking(st))return;const est=e1rm(setLoad(exId,st.w,b),+st.r||0);if(est>best)best=est;});   // a disowned set is not a bar the next PR has to clear
@@ -910,6 +942,24 @@ function lastModeFor(sessions,exId){
     if(e)return e.mode||null;
   }
   return null;
+}
+// Same idea for the "⇆ Each side" choice: the override on the last REAL instance, or null (default).
+function lastSideFor(sessions,exId){
+  for(const s of sessions||[]){
+    if(s.completed===false||s.deload)continue;
+    const e=s.exercises.find(x=>x.id===exId);
+    if(e)return typeof e.side==='boolean'?e.side:null;
+  }
+  return null;
+}
+// The history track (equipment + side) the lift was last done on — what a trend chart should follow.
+function lastTrackFor(sessions,exId){
+  for(const s of sessions||[]){
+    if(s.completed===false||s.deload)continue;
+    const e=s.exercises.find(x=>x.id===exId);
+    if(e)return trackOf(e);
+  }
+  return undefined;
 }
 // The load step for one progression bump. A barbell adds 5 lb / 2.5 kg; a per-hand dumbbell or any
 // isolation move adds HALF that (2.5 lb / 1 kg) — a flat 5 lb was a 20–33% jump on a lateral raise or
@@ -1104,7 +1154,7 @@ function calcStreak(sessions,now){
   return n;
 }
 
-IL.prog={DAY,startOfDay,e1rm,isWorking,setLoad,sbw,sessionVolume,sessionSets,sessionDuration,MAX_SESSION_MIN,setTimeline,lastSetAt,staleness,STALE_AFTER_MIN,LONG_SESSION_MIN,STALE_CONFIRM_MIN,END_PAD_MIN,finalizeSets,parseWeightInput,fmtVol,modeOf,real,lastPerf,lastModeFor,exerciseSeries,setScore,scoreMetric,platesPerSide,bestE1rmBefore,setPattern,fmtPerf,repRange,nextSets,deloadSets,suggestion,unitIncrement,convertWeight,convertSessions,calcStreak,weekIndex,weekStart};
+IL.prog={DAY,startOfDay,e1rm,isWorking,setLoad,sbw,sessionVolume,sessionSets,sessionDuration,MAX_SESSION_MIN,setTimeline,lastSetAt,staleness,STALE_AFTER_MIN,LONG_SESSION_MIN,STALE_CONFIRM_MIN,END_PAD_MIN,finalizeSets,parseWeightInput,fmtVol,modeOf,real,lastPerf,lastModeFor,exerciseSeries,setScore,scoreMetric,platesPerSide,sidesOf,holdsOf,sideMult,trackOf,sideDefault,lastSideFor,lastTrackFor,bestE1rmBefore,setPattern,fmtPerf,repRange,nextSets,deloadSets,suggestion,unitIncrement,convertWeight,convertSessions,calcStreak,weekIndex,weekStart};
 if(typeof module!=='undefined')module.exports=IL.prog;
 
 })();
@@ -1147,7 +1197,7 @@ var IL=globalThis.IL||(globalThis.IL={});
 if(typeof require==='function'&&!IL.data)require('../data/exercises.js');
 if(typeof require==='function'&&!IL.prog)require('./progression.js');
 const {C,I,EXERCISES,EX,REGIONS,IDEAL_PATS,PAT_RANK,EQUIP_LOAD,LONG_LENGTH,INVERTED_LOAD,TIME_METRIC,regLabel,patLabel,hashId}=IL.data;
-const {lastPerf,lastModeFor,nextSets,deloadSets,repRange,modeOf,real,DAY,unitIncrement}=IL.prog;
+const {lastPerf,lastModeFor,lastSideFor,trackOf,nextSets,deloadSets,repRange,modeOf,real,DAY,unitIncrement}=IL.prog;
 
 // Working sets a movement deserves when you've never logged it: main lifts 4, other compounds 3,
 // isolation 3, finishers 2. Reps prefilled at the bottom of the target range.
@@ -1179,9 +1229,10 @@ function shapeStyle(sets,style,ex,unit){
 }
 function seedExercise(id,sessions,opts){
   opts=opts||{};const {excludeId,unit,deload,extraSet,goal,setStyle,push}=opts;   // goal/setStyle/push: profile levers
-  const ex=EX[id];const mode=lastModeFor(sessions,id);
-  const inst={id,name:ex?ex.name:id};if(mode)inst.mode=mode;
-  const lp=lastPerf(sessions||[],id,{excludeId,mode:mode||undefined,clean:true});   // real sessions only — a deload is never a baseline; `clean` so a set marked "doesn't count" is never prefilled back at you
+  const ex=EX[id];const mode=lastModeFor(sessions,id),side=lastSideFor(sessions,id);
+  const inst={id,name:ex?ex.name:id};if(mode)inst.mode=mode;if(side!=null)inst.side=side;   // remember "⇆ Each side" like the equipment choice
+  // An overridden side is its own history track — seed from THAT track, never the other way of doing it
+  const lp=lastPerf(sessions||[],id,{excludeId,mode:side!=null?trackOf(inst):(mode||undefined),clean:true});   // real sessions only — a deload is never a baseline; `clean` so a set marked "doesn't count" is never prefilled back at you
   const rr=goal?repRange(ex,goal):(ex?ex.rr:[8,12]);   // goal shifts the target range in one place
   let sets;
   // push:'quiet' — "just record": the rows mirror last time exactly, never a bump. Must agree with
@@ -1552,7 +1603,7 @@ function planWorkout(groups,sessions,seed,opts){
   // where you left off, but make NO structural change — you weren't stalled, you were away, and a
   // detrained first session back shouldn't get extra volume or a rotation.
   if(lapsed)return{ids:orderByFatigue(capHeavyAxial(ids,profile,sessions),groups[0]),mode:'continue',plan,rotation:null,streak:0,reactions,volumeBump,deload:false,lapsed:true};
-  const modeById={};plan.exercises.forEach(e=>{if(EX[e.id])modeById[e.id]=modeOf(e);});
+  const modeById={};plan.exercises.forEach(e=>{if(EX[e.id])modeById[e.id]=trackOf(e);});   // stall checks follow the same track (equipment + side)
   // Anchors are protected from rotation: the group's key tier-1 lift AND every other tier-1 lift in the
   // plan (a main deadlift/squat is not an "accessory" to be swapped out on a stall — #15).
   const anchors=new Set([...groups.map(g=>planAnchor(ids,g)).filter(Boolean).map(e=>e.id),...ids.filter(id=>EX[id]&&EX[id].tier===1)]);
@@ -1610,7 +1661,7 @@ var IL=globalThis.IL||(globalThis.IL={});
 if(typeof require==='function'&&!IL.data)require('../data/exercises.js');
 if(typeof require==='function'&&!IL.prog)require('./progression.js');
 const {EX,EXERCISES,REGIONS,IDEAL_PATS,LOWER_GROUPS,MODES,INVERTED_LOAD,TIME_METRIC,regLabel,patLabel,exampleFor,hashId}=IL.data;
-const {DAY,startOfDay,e1rm,isWorking,setLoad,setScore,sbw,sessionVolume,sessionSets,sessionDuration,setTimeline,modeOf,calcStreak,real,weekIndex,weekStart,lastPerf}=IL.prog;
+const {DAY,startOfDay,e1rm,isWorking,setLoad,setScore,sbw,sessionVolume,sessionSets,sessionDuration,setTimeline,modeOf,trackOf,holdsOf,sidesOf,calcStreak,real,weekIndex,weekStart,lastPerf}=IL.prog;
 
 // completed() INCLUDES deloads on purpose — volume/frequency/PR-window analysis wants everything the
 // user actually did. Progression-only scans use real() (completed AND not a deload) instead.
@@ -1658,7 +1709,7 @@ function progressionStat(sessions,now,bw){
   now=now||Date.now();
   const done=real(sessions).filter(s=>s.date>=now-28*DAY&&s.date<now).sort((x,y)=>x.date-y.date);
   const byEx={};
-  done.forEach(s=>{const b=sbw(s,bw);s.exercises.forEach(e=>{const best=Math.max(0,...e.sets.filter(st=>!st.nc&&isWorking(st)).map(st=>setScore(e.id,st,b)));if(best)(byEx[e.id]=byEx[e.id]||[]).push(best);});});
+  done.forEach(s=>{const b=sbw(s,bw);s.exercises.forEach(e=>{const best=Math.max(0,...e.sets.filter(st=>!st.nc&&isWorking(st)).map(st=>setScore(e.id,st,b)));const k=e.id+':'+trackOf(e);if(best)(byEx[k]=byEx[k]||[]).push(best);});});   // per lift AND track — Smith 100 → dumbbell 40 is not "going down"
   let n=0,up=0;Object.values(byEx).forEach(arr=>{if(arr.length>=2){n++;if(arr[arr.length-1]>arr[0])up++;}});
   return {n,up};
 }
@@ -1928,7 +1979,8 @@ function personalRecords(sessions,bw,limit){
   // Time-held: longest hold first, heavier load as the tiebreak — matches setScore (seconds) so the PR
   // card and the progress trend never disagree about the same lift (a weighted carry included).
   const beats=(c,b,inverted,time)=>inverted?(!b||c.load<b.load):time?(!b||c.r>b.r||(c.r===b.r&&c.load>b.load)):(!b||c.est>b.est);
-  real(sessions).forEach(s=>{const sb=sbw(s,bw);s.exercises.forEach(e=>{const mode=modeOf(e),key=e.id+':'+mode,ex=EX[e.id];
+  real(sessions).forEach(s=>{const sb=sbw(s,bw);s.exercises.forEach(e=>{const mode=modeOf(e),track=trackOf(e),key=e.id+':'+track,ex=EX[e.id];   // one record per lift per TRACK: a one-arm cable curl never competes with the two-hand bar
+    const holds=holdsOf(e),sides=sidesOf(e);
     const inverted=!!(ex&&INVERTED_LOAD&&INVERTED_LOAD.has(e.id));   // assist machine: the PR is the LEAST assist, and no 1RM estimate (#16)
     const time=!!(TIME_METRIC&&TIME_METRIC.has(e.id));   // time-held: "reps" are seconds → no 1RM; best = longest, then heaviest
     e.sets.forEach(st=>{
@@ -1944,7 +1996,7 @@ function personalRecords(sessions,bw,limit){
     // untouched everywhere else: it still counts for volume, sets-per-muscle, rest and history.
     if(st.nc){if(beats(cand,set_aside[key],inverted,time))set_aside[key]=cand;return;}
     const showEst=!!ex&&ex.type==='compound'&&!inverted&&!time&&!!(MODES[mode]&&MODES[mode].e1rm);
-    if(beats(cand,best[key],inverted,time))best[key]={id:e.id,mode,w:cand.w,load:w,r,est,name:ex?ex.name:e.name,date:s.date,compound:!!ex&&ex.type==='compound',showEst,inverted,time,bodyweight:mode==='bodyweight'};
+    if(beats(cand,best[key],inverted,time))best[key]={id:e.id,mode,track,holds,sides,w:cand.w,load:w,r,est,name:ex?ex.name:e.name,date:s.date,compound:!!ex&&ex.type==='compound',showEst,inverted,time,bodyweight:mode==='bodyweight'};
   })})});
   // Attach the set-aside set only where it WOULD have been the PR — marking an ordinary set says nothing
   Object.keys(best).forEach(k=>{const a=set_aside[k],b=best[k];
@@ -1975,7 +2027,7 @@ function deloadStats(sessions,now){
   allDl.forEach(s=>s.exercises.forEach(e=>{
     const ex=EX[e.id];if(!ex)return;
     const dTop=Math.max(0,...e.sets.filter(isWorking).map(st=>+st.w||0));
-    const rp=lastPerf(done,e.id,{mode:modeOf(e)});   // real only
+    const rp=lastPerf(done,e.id,{mode:trackOf(e)});   // real only; same track (equipment + side)
     if(!rp){onlyOnDeload.add(e.id);return;}
     const rTop=Math.max(0,...rp.sets.map(st=>st.w));
     if(dTop>0&&rTop>0)ratios.push(dTop/rTop*100);   // in percent, so averaging doesn't lose a half-point to float error
@@ -2134,7 +2186,7 @@ function sArr(v,max){return Array.isArray(v)?v.slice(0,max||MAX_ARR):[];}
 const rid=p=>p+Math.random().toString(36).slice(2,9);
 
 function cleanSet(st){st=st&&typeof st==='object'?st:{};const o={w:sNumBlank(st.w),r:sNumBlank(st.r),done:st.done!==false};if(st.warm)o.warm=true;if(st.nc)o.nc=true;const at=+st.at;if(Number.isFinite(at)&&at>0)o.at=at;return o;}   // missing done => done; `at` (check timestamp) kept if a real number; `nc` = "doesn't count as a record"
-function cleanExercise(e){e=e&&typeof e==='object'?e:{};const o={id:sId(e.id),name:sStr(e.name),sets:sArr(e.sets,MAX_SETS).map(cleanSet)};if(e.mode&&MODES[e.mode])o.mode=sId(e.mode);if(typeof e.note==='string'&&e.note.trim())o.note=sStr(e.note,500);return o;}   // drop an unknown mode (a bad import would white-screen Progress via MODES[mode].label)
+function cleanExercise(e){e=e&&typeof e==='object'?e:{};const o={id:sId(e.id),name:sStr(e.name),sets:sArr(e.sets,MAX_SETS).map(cleanSet)};if(e.mode&&MODES[e.mode])o.mode=sId(e.mode);if(typeof e.side==='boolean')o.side=e.side;if(typeof e.note==='string'&&e.note.trim())o.note=sStr(e.note,500);return o;}   // drop an unknown mode (a bad import would white-screen Progress via MODES[mode].label)
 function cleanSession(s){s=s&&typeof s==='object'?s:{};const o={id:sId(s.id)||rid('imp'),schema:sNum(s.schema)||1,date:sNum(s.date)||Date.now(),updatedAt:sNum(s.updatedAt)||sNum(s.date)||Date.now(),completed:s.completed!==false,exercises:sArr(s.exercises,MAX_EX).map(cleanExercise)};if(s.deload)o.deload=true;const b=sNum(s.bw);if(b>0)o.bw=Math.min(2000,b);/* per-session bodyweight snapshot (D-1) — preserve through cloud/import */if(typeof s.note==='string'&&s.note.trim())o.note=sStr(s.note,500);/* whole-workout note (D-4) */const end=+s.endedAt;if(Number.isFinite(end)&&end>0){o.endedAt=end;if(s.endEstimated===true)o.endEstimated=true;}
   if(s.kind==='cardio'){o.kind='cardio';o.exercises=[];o.cardio=cleanCardio(s.cardio);}   // cardio never carries exercises → every strength filter drops it
   return o;}
@@ -3177,6 +3229,8 @@ function topSuggestionHTML(){
 }
 function logExercise(s,e,ei,mode){
   const ex=EX[e.id];let sugg='',prLine='';const emode=modeOf(e);
+  // etrack = the history this instance belongs to (equipment + "each side"); emode stays for labels
+  const etrack=P.trackOf(e),holds=P.holdsOf(e),sides=P.sidesOf(e),wEa=holds===2?'/ea':'',rSide=sides===2?'/side':'';
   // No live PR line for assist machines or time-held lifts: an e1RM comparison is backwards for the
   // first (less weight = harder) and meaningless for the second (the "reps" are seconds), so it would
   // miss real improvements AND flash fake ones. The Progress PR list ranks both correctly.
@@ -3184,15 +3238,15 @@ function logExercise(s,e,ei,mode){
     // Live PR recognition: the session's best working set beating this lift's all-time best (same mode)
     // Memoized: the all-time best is a full-history scan, and the completed session isn't in `sessions`
     // yet, so it's identical for every set tick during a workout — compute it once per (lift, mode). (P2)
-    const histBest=memoStat('be1:'+e.id+':'+emode+':'+s.id,()=>P.bestE1rmBefore(state.sessions,e.id,{mode:emode,bw:bw(),excludeId:s.id}));
+    const histBest=memoStat('be1:'+e.id+':'+etrack+':'+s.id,()=>P.bestE1rmBefore(state.sessions,e.id,{mode:etrack,bw:bw(),excludeId:s.id}));
     if(histBest>0){let best=0,bs=null;e.sets.forEach(st=>{if(st.warm||st.nc||!P.isWorking(st))return;const est=P.e1rm(P.setLoad(e.id,st.w,bw()),+st.r||0);if((+st.r)&&est>best){best=est;bs=st;}});
-      if(bs&&best>histBest)prLine=`<div class="sugg" style="color:var(--good);background:var(--good-soft)"><span>★ New PR — ${bs.w}${U()}${MODES[emode]&&MODES[emode].perHand?'/ea':''} × ${bs.r} <span class="dim">est ${Math.round(best)}${U()}</span></span></div>`;}
+      if(bs&&best>histBest)prLine=`<div class="sugg" style="color:var(--good);background:var(--good-soft)"><span>★ New PR — ${bs.w}${U()}${wEa} × ${bs.r}${rSide} <span class="dim">est ${Math.round(best)}${U()}</span></span></div>`;}
   }
   if(mode==='active'&&s.deload){
     sugg=`<div class="sugg match" style="color:var(--good);background:var(--good-soft)"><span>🌿 Recovery set — easy load, full range</span></div>`;
   }else if(mode==='active'){
     const pf=state.settings.profile||{},sgRr=pf.goal?P.repRange(EX[e.id],pf.goal):undefined;
-    const sg=P.suggestion(state.sessions,e.id,{unit:U(),activeDate:s.date,activeId:s.id,mode:emode,push:pf.push,rr:sgRr});
+    const sg=P.suggestion(state.sessions,e.id,{unit:U(),activeDate:s.date,activeId:s.id,mode:etrack,push:pf.push,rr:sgRr});
     if(sg.lp){const w=sg.kind==='weight';
       // The prescription is already in the set rows; offer a one-tap revert until a set is done
       const canRevert=w&&!e.sets.some(st=>st.done);
@@ -3202,7 +3256,10 @@ function logExercise(s,e,ei,mode){
     if(sg.lp&&sg.lp.note)sugg+=`<div class="sugg match" style="color:var(--ink-2)"><span>📝 <span class="dim">${relDay(sg.lp.date)}:</span> ${esc(sg.lp.note)}</span></div>`;
   }
   const noteLine=e.note?`<button class="sugg match" data-note="${ei}" style="width:calc(100% - 24px);text-align:left;color:var(--ink-2)"><span>📝 ${esc(e.note)}</span></button>`:'';
-  const whdr=(U()==='kg'?'Kg':'Lb')+(MODES[emode]&&MODES[emode].perHand?' ea':'');
+  // Headers say exactly what to type: "Lb ea" = weight of ONE dumbbell / one stack; "/ side" = one side's reps
+  const whdr=(U()==='kg'?'Kg':'Lb')+(holds===2?' ea':''),rhdr=(D.TIME_METRIC.has(e.id)?'Sec':'Reps')+(sides===2?' / side':'');
+  // "⇆ Each side" only where doing it one-sided is realistic and changes the math
+  const sideOK=(emode==='cable'||emode==='dumbbell'||emode==='machine')&&!D.INVERTED_LOAD.has(e.id)&&!D.TIME_METRIC.has(e.id);
   return `<div class="card log-ex" data-ei="${ei}">
     <div class="log-ex-head">
       <div class="ex-ic">${exIcon(ex?ex.group:'Core')}</div>
@@ -3210,10 +3267,11 @@ function logExercise(s,e,ei,mode){
         <div class="ex-sub">${ex?ex.muscles.join(' · '):''} · target ${ex?ex.rr[0]+'–'+ex.rr[1]:'8–12'} ${D.TIME_METRIC.has(e.id)?'sec':'reps'}</div></button>
       <button class="sheet-x" data-delex="${ei}" aria-label="Remove exercise">✕</button>
     </div>
-    <button class="modechip" data-mode="${ei}" aria-label="Change equipment">${esc(MODES[emode]?MODES[emode].label:emode)} ▾</button>
+    <div class="chiprow"><button class="modechip" data-mode="${ei}" aria-label="Change equipment">${esc(MODES[emode]?MODES[emode].label:emode)} ▾</button>
+      ${sideOK?`<button class="modechip${sides===2?' on':''}" data-side="${ei}" aria-pressed="${sides===2}" aria-label="One side at a time">⇆ ${sides===2?'Each side':'Both sides'}</button>`:''}</div>
     ${prLine}${sugg}${noteLine}
     <div class="setgrid">
-      <div class="set-hdr"><div>Set</div><div>${whdr}</div><div>${D.TIME_METRIC.has(e.id)?'Sec':'Reps'}</div><div></div></div>
+      <div class="set-hdr"><div>Set</div><div>${whdr}</div><div>${rhdr}</div><div></div></div>
       ${e.sets.map((st,si)=>setRow(st,ei,si)).join('')}
     </div>
     <div class="set-actions">
@@ -3386,10 +3444,14 @@ function prList(){
   const arr=memoStat('prAll',()=>A.personalRecords(state.sessions,bw(),999)).slice(0,8);
   if(!arr.length)return`<div style="padding:22px;text-align:center" class="dim">Log a few sets and your PRs show up here.</div>`;
   const rsuf=p=>p.time?'s':'';   // time-held lifts show seconds, not reps
-  const setStr=p=>p.bodyweight?(p.w?'Bodyweight +'+p.w+U():'Bodyweight')+' × '+p.r+rsuf(p):p.w+U()+(MODES[p.mode]&&MODES[p.mode].perHand?'/hand':'')+' × '+p.r+rsuf(p);
+  const sideSuf=p=>p.sides===2?'/side':'';   // reps (or seconds) counted per side
+  const setStr=p=>p.bodyweight?(p.w?'Bodyweight +'+p.w+U():'Bodyweight')+' × '+p.r+rsuf(p)+sideSuf(p):p.w+U()+(p.holds===2?'/ea':'')+' × '+p.r+rsuf(p)+sideSuf(p);
   // show the modality only when it isn't the exercise's native equipment (so a Smith/cable variant
   // is distinguishable from the default; ordinary PRs stay uncluttered)
-  const modeTag=p=>{const ex=EX[p.id];const native=ex&&EQUIP_MODE[ex.equip];return p.mode&&p.mode!==native?` <span class="pill" style="font-size:10px;padding:1px 7px">${esc(MODES[p.mode].label)}</span>`:'';};
+  const pill=t=>` <span class="pill" style="font-size:10px;padding:1px 7px">${esc(t)}</span>`;
+  // …and tag a lift done the non-default way round ("Each side" / "Both sides"), since it keeps its own record
+  const modeTag=p=>{const ex=EX[p.id];const native=ex&&EQUIP_MODE[ex.equip];
+    return (p.mode&&p.mode!==native?pill(MODES[p.mode].label):'')+(p.track&&p.track.indexOf('|')>=0?pill(p.sides===2?'Each side':'Both sides'):'');};
   return arr.map(p=>`<div class="ex-row" data-openex="${p.id}" style="cursor:pointer"><div style="flex:1;min-width:0"><div class="ex-name">${esc(p.name)}${modeTag(p)}</div>
     <div class="ex-sub">Best set ${setStr(p)}</div>${p.adjusted?`<div class="ex-sub" style="color:var(--warn)">PR adjusted · ${setStr({...p,w:p.adjusted.w,r:p.adjusted.r})} on ${fmtDate(p.adjusted.date)} set aside</div>`:''}</div>
     <div style="text-align:right">${p.showEst?`<div class="mono" style="font-weight:700;font-size:16px">${p.est}<span class="dim" style="font-size:11px"> ${U()} e1RM</span></div>`:`<div class="mono dim" style="font-weight:600;font-size:13px">${p.load}${U()}</div>`}</div>${CHEV_R}</div>`).join('');
@@ -3497,7 +3559,7 @@ function muscleBreakdown(mo){
 /* ---------------- sheets ---------------- */
 // Compact SVG line of a lift's best-set estimated 1RM over its recent sessions, with the delta.
 function trendCard(id){
-  const dmode=P.lastModeFor(state.sessions,id)||undefined;
+  const dmode=P.lastTrackFor(state.sessions,id);   // follow the version (equipment + side) done most recently
   const series=P.exerciseSeries(state.sessions,id,{mode:dmode,bw:bw(),limit:10});
   if(series.length<2)return '';   // need at least two sessions to show a trend
   const vals=series.map(p=>p.est),min=Math.min(...vals),max=Math.max(...vals),range=max-min||1;
@@ -3531,13 +3593,17 @@ function trendCard(id){
    "That rep wasn't clean" sets aside the record shown here (that record's exact set); "Count it again"
    restores it. Both operate a set at a time; a lift trained in two modalities can be adjusted in each. */
 const markedSets=id=>{let n=0;state.sessions.forEach(s=>s.exercises.forEach(e=>{if(e.id===id)e.sets.forEach(st=>{if(st.nc)n++;});}));return n;};
+// The record a lift's adjust controls act on: the version (equipment + "each side") done most recently —
+// the same one the trend chart follows. A lift with two versions (one-arm vs two-hand) has two records.
+function prFor(id){const all=A.personalRecords(state.sessions,bw(),999).filter(x=>x.id===id),t=P.lastTrackFor(state.sessions,id);
+  return all.find(x=>x.track===t)||all[0];}
 function prAdjustCard(id){
-  const p=A.personalRecords(state.sessions,bw(),999).filter(x=>x.id===id)[0];
+  const p=prFor(id);
   const marked=markedSets(id);
   if(!p&&!marked)return '';
   // Format a w×r the same way the record itself reads: seconds for time-held lifts, "Bodyweight" moves,
   // per-hand dumbbells — so a set-aside plank shows "45s", not "0lb × 45".
-  const fmt=p?((w,r)=>p.bodyweight?(w?'Bodyweight +'+w+U():'Bodyweight')+' × '+r+(p.time?'s':''):w+U()+(MODES[p.mode]&&MODES[p.mode].perHand?'/ea':'')+' × '+r+(p.time?'s':'')):null;
+  const fmt=p?((w,r)=>p.bodyweight?(w?'Bodyweight +'+w+U():'Bodyweight')+' × '+r+(p.time?'s':''):w+U()+(p.holds===2?'/ea':'')+' × '+r+(p.time?'s':'')+(p.sides===2?'/side':'')):null;
   return `<div class="card" style="padding:12px 15px;margin:0 0 12px">
     <div class="row-between"><span class="eyebrow">Your best set</span>
       <span class="mono" style="font-weight:600">${p?esc(fmt(p.w,p.r)):'—'}</span></div>
@@ -3930,15 +3996,27 @@ function addExerciseToCur(id){
   if(todayScreen!=='edit'&&!state.active){S.setActive(newSession([]));}
   const t=cur();
   if(t.exercises.some(x=>x.id===id)){toast('Already added');return;}
-  {const pf=state.settings.profile||{};t.exercises.push(B.seedExercise(id,state.sessions,{excludeId:t.id,unit:U(),goal:pf.goal,setStyle:pf.sets,push:pf.push}));}
+  const pf=state.settings.profile||{},inst=B.seedExercise(id,state.sessions,{excludeId:t.id,unit:U(),goal:pf.goal,setStyle:pf.sets,push:pf.push});
+  const pos=slotFor(t,id);t.exercises.splice(pos,0,inst);
   persistCur();if(todayScreen!=='edit')todayScreen='active';
   if(currentTab!=='today')setTab('today');else render();
-  toast(EX[id].name+' added');
+  toast(EX[id].name+(pos<t.exercises.length-1?' added — slotted in as #'+(pos+1):' added'));
+}
+// The workout's focus muscle: the group with the most exercises (the Auto-order tiebreak).
+function focusGroup(exs){const counts={};exs.forEach(e=>{const g=EX[e.id]&&EX[e.id].group;if(g)counts[g]=(counts[g]||0)+1;});
+  return Object.keys(counts).sort((a,b)=>counts[b]-counts[a])[0];}
+// Where a newly added lift belongs: by the same big-lifts-first rule as Auto-order, but only among the
+// exercises you HAVEN'T started — anything with a ticked set stays exactly where it is, and the new lift
+// never jumps ahead of work already begun. Equal priority goes after (stable).
+function slotFor(t,id){
+  const exs=t.exercises;let after=-1;exs.forEach((e,i)=>{if(e.sets.some(s=>s.done))after=i;});
+  const focus=focusGroup(exs.concat([{id}])),p=B.perfPriority(EX[id],focus);
+  for(let i=after+1;i<exs.length;i++)if(p>B.perfPriority(EX[exs[i].id],focus))return i;
+  return exs.length;
 }
 function reorderCur(){
   const t=cur();if(!t||t.exercises.length<2)return;
-  const counts={};t.exercises.forEach(e=>{const g=EX[e.id]&&EX[e.id].group;if(g)counts[g]=(counts[g]||0)+1;});
-  const focus=Object.keys(counts).sort((a,b)=>counts[b]-counts[a])[0];
+  const focus=focusGroup(t.exercises);
   const map={};t.exercises.forEach(e=>map[e.id]=e);
   t.exercises=B.orderByFatigue(t.exercises.map(e=>e.id),focus).map(id=>map[id]);
   persistCur();render();toast('Ordered for best performance');
@@ -3971,9 +4049,9 @@ function workoutSummary(s){
     // time-held lift ("reps" are seconds) — it would both miss real improvements and invent fake ones.
     // The Progress PR list ranks those correctly; here we simply stay quiet rather than lie.
     if(D.INVERTED_LOAD.has(e.id)||D.TIME_METRIC.has(e.id))return;
-    const emode=modeOf(e);const histBest=P.bestE1rmBefore(state.sessions,e.id,{mode:emode,bw:bw(),excludeId:s.id});if(histBest<=0)return;
+    const etrack=P.trackOf(e);const histBest=P.bestE1rmBefore(state.sessions,e.id,{mode:etrack,bw:bw(),excludeId:s.id});if(histBest<=0)return;
     let best=0,bs=null;e.sets.forEach(st=>{if(st.warm||st.nc||!P.isWorking(st))return;const est=P.e1rm(P.setLoad(e.id,st.w,bw()),+st.r||0);if((+st.r)&&est>best){best=est;bs=st;}});
-    if(bs&&best>histBest)prs.push({id:e.id,name:EX[e.id]?EX[e.id].name:e.name,w:bs.w,r:bs.r,perHand:MODES[emode]&&MODES[emode].perHand});});
+    if(bs&&best>histBest)prs.push({id:e.id,name:EX[e.id]?EX[e.id].name:e.name,w:bs.w,r:bs.r,perHand:P.holdsOf(e)===2,perSide:P.sidesOf(e)===2});});
   return {sets:setsOf(s),vol:volOf(s),prs,deload:!!s.deload,dur:P.sessionDuration(s),estimated:!!s.endEstimated};
 }
 function showSummary(sm){
@@ -3985,7 +4063,7 @@ function showSummary(sm){
     body+=`<div class="card" style="padding:14px 15px;background:var(--good-soft);border:1px solid color-mix(in srgb,var(--good) 30%,transparent)"><div style="color:var(--good);font-weight:600;font-size:13.5px">🌿 Recovery in the bank</div><div class="dim" style="font-size:12.5px;margin-top:3px">Fatigue's clearing — ease back to full loads when you feel fresh. This won't affect your progression.</div></div>`;
   }else if(sm.prs.length){
     body+=`<div class="eyebrow" style="margin:2px 2px 8px">🎉 New personal record${sm.prs.length>1?'s':''}</div>
-      <div class="card list">${sm.prs.map(p=>`<div class="ex-row"><span style="color:var(--good);font-size:18px;flex-shrink:0">★</span><div style="flex:1;min-width:0"><div class="ex-name">${esc(p.name)}</div><div class="ex-sub">${p.w}${U()}${p.perHand?'/ea':''} × ${p.r}</div></div>
+      <div class="card list">${sm.prs.map(p=>`<div class="ex-row"><span style="color:var(--good);font-size:18px;flex-shrink:0">★</span><div style="flex:1;min-width:0"><div class="ex-name">${esc(p.name)}</div><div class="ex-sub">${p.w}${U()}${p.perHand?'/ea':''} × ${p.r}${p.perSide?'/side':''}</div></div>
         <button class="btn sm ghost" data-prmark="${p.id}" data-insummary="1" style="flex-shrink:0">Wasn’t clean</button></div>`).join('')}</div>`;
   }else{
     body+=`<div class="dim" style="font-size:13.5px;line-height:1.5;padding:0 2px">Logged and saved. Consistency is what moves the numbers — every session counts.</div>`;
@@ -4052,10 +4130,10 @@ function commitFinish(s,endedAt,estimated){
    place in History and its share of your volume; it just stops being the bar the app measures you
    against, and stops seeding the next workout. Re-openable both ways. */
 function markBestSet(id,btn){
-  const p=A.personalRecords(state.sessions,bw(),999).filter(x=>x.id===id)[0];
+  const p=prFor(id);
   if(!p){toast('No record to adjust');return;}
   const s=state.sessions.find(x=>x.date===p.date&&x.exercises.some(e=>e.id===id));
-  const e=s&&(s.exercises.find(x=>x.id===id&&modeOf(x)===p.mode)||s.exercises.find(x=>x.id===id));
+  const e=s&&(s.exercises.find(x=>x.id===id&&P.trackOf(x)===(p.track||p.mode))||s.exercises.find(x=>x.id===id));
   const st=e&&e.sets.find(x=>!x.nc&&P.isWorking(x)&&(+x.w||0)===p.w&&(+x.r||0)===p.r);
   if(!st){toast('Couldn’t find that set');return;}
   st.nc=true;s.updatedAt=Date.now();S.upsertSession(s,false);
@@ -4071,11 +4149,11 @@ function markBestSet(id,btn){
 // each. Fallback: if there's no beating-set on display but sets are still set aside (a lower one, or
 // one in another modality the card can't surface), clear whatever's left so nothing can strand.
 function unmarkSets(id){
-  const p=A.personalRecords(state.sessions,bw(),999).filter(x=>x.id===id)[0];
+  const p=prFor(id);
   let restored=0;
   if(p&&p.adjusted){
     const s=state.sessions.find(x=>x.date===p.adjusted.date&&x.exercises.some(e=>e.id===id));
-    const e=s&&(s.exercises.find(x=>x.id===id&&modeOf(x)===p.mode)||s.exercises.find(x=>x.id===id));
+    const e=s&&(s.exercises.find(x=>x.id===id&&P.trackOf(x)===(p.track||p.mode))||s.exercises.find(x=>x.id===id));
     const st=e&&e.sets.find(x=>x.nc&&(+x.w||0)===p.adjusted.w&&(+x.r||0)===p.adjusted.r);
     if(st){delete st.nc;s.updatedAt=Date.now();S.upsertSession(s,false);restored=1;}
   }
@@ -4383,9 +4461,14 @@ function bindLog(root){
       if(sets[idx].done)showConfirm('Remove last set?','That set is marked done — remove it anyway?','Remove',doRemove);else doRemove();return;}
     const del=e.target.closest('[data-delex]');if(del){const ei=+del.dataset.delex;const removed=t.exercises.splice(ei,1)[0];persistCur();render();
       toast(removed.name+' removed',{label:'Undo',fn:()=>{const c=cur();if(c){c.exercises.splice(ei,0,removed);persistCur();render();}}});return;}
-    const kw=e.target.closest('[data-keepw]');if(kw){const ei=+kw.dataset.keepw;const ex=t.exercises[ei];const lp=P.lastPerf(state.sessions,ex.id,{beforeTs:t.date,excludeId:t.id,mode:modeOf(ex)});
+    const kw=e.target.closest('[data-keepw]');if(kw){const ei=+kw.dataset.keepw;const ex=t.exercises[ei];const lp=P.lastPerf(state.sessions,ex.id,{beforeTs:t.date,excludeId:t.id,mode:P.trackOf(ex)});
       if(lp)ex.sets=lp.sets.map(s=>({w:s.w,r:s.r,done:false}));persistCur();render();toast('Using last time’s weights');return;}
     const mc=e.target.closest('[data-mode]');if(mc){openModePicker(+mc.dataset.mode);return;}
+    // "⇆ Each side": flip one-side-at-a-time. Stored only when it differs from the lift's default, so a
+    // lift on its default has no flag (and stays on its existing history track).
+    const sd=e.target.closest('[data-side]');if(sd){const ex=t.exercises[+sd.dataset.side];if(!ex)return;
+      const next=P.sidesOf(ex)!==2;if(next===P.sideDefault(ex.id))delete ex.side;else ex.side=next;
+      persistCur();render();toast(next?'One side at a time — reps per side':'Both sides at once');return;}
     const nt=e.target.closest('[data-note]');if(nt){openNote(+nt.dataset.note);return;}
     const oe=e.target.closest('[data-openex]');if(oe){if(EX[oe.dataset.openex])openSheet(EX[oe.dataset.openex].name,exerciseDetail(oe.dataset.openex));return;}
   });

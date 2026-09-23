@@ -2,6 +2,15 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.61.0 — 2026-09-22 · One arm at a time, logged accurately — and new exercises slot into place
+- **New "⇆ Each side" switch** on cable, dumbbell and machine exercises. Doing a cable curl one arm at a time? Tap it: the column changes to "Reps / side", you enter one side's reps, and both sides count. A one-arm version keeps its own PRs and progress, so a 20 lb one-arm curl never competes with (or looks like a drop from) a 45 lb two-hand bar. It's remembered for next time, like your equipment choice.
+- **The column headers now tell you exactly what to type.** "Lb ea" means the weight of one dumbbell (or one cable stack); "Reps / side" means one side's reps. Naturally one-sided moves (dumbbell row, split squats, single-leg curl) show "Reps / side" automatically.
+- **Volume now counts everything you actually lifted.** Before, dumbbell work and one-sided moves were counted for only one hand or side, so your totals were too low. Now a pair of 50 lb dumbbells × 10 counts as 1,000, a one-dumbbell goblet squat counts once, and dumbbell lunges count both dumbbells and both legs. Your whole history is recalculated the same way, so your charts stay comparable; your PRs don't change.
+- **Adding an exercise mid-workout puts it in the right spot.** It slots in by the same "big lifts first" rule as Auto-order, but only among exercises you haven't started, so nothing you've begun ever moves.
+- The coach's "lifts trending up" no longer mixes up a lift done on different equipment (Smith → dumbbells no longer reads as "going down").
+
+Not verified on-device.
+
 ## v0.60.0 — 2026-09-18 · Export your sessions as a CSV
 - **New "Export sessions (CSV)" button** in Settings → Your data. It saves one row per finished workout — date, day, type (Strength / Deload / Cardio), duration, total volume, working sets, exercises, bodyweight, and notes — ready for a spreadsheet or to feed into another health app.
 - Volume uses the bodyweight recorded on each workout (so bodyweight lifts are accurate), and cardio sessions include their type, intensity and distance.

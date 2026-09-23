@@ -2,12 +2,32 @@
 // No DOM, no app state: everything takes the sessions array it should look at.
 var IL=globalThis.IL||(globalThis.IL={});
 if(typeof require==='function'&&!IL.data)require('../data/exercises.js');
-const {EX,BW_FACTOR,EQUIP_MODE,MODES,INVERTED_LOAD,TIME_METRIC}=IL.data;
+const {EX,BW_FACTOR,EQUIP_MODE,MODES,INVERTED_LOAD,TIME_METRIC,UNILATERAL,ONE_DB,DUAL_STACK}=IL.data;
 
 // The modality a logged exercise instance was performed with: its explicit `mode`, else derived
 // from the exercise's fixed equipment. Stable for any instance, so mode-less history (and every
 // existing test) resolves to a single consistent mode per exercise id — i.e. no behavior change.
 function modeOf(e){return (e&&e.mode)||EQUIP_MODE[EX[e&&e.id]&&EX[e.id].equip]||'barbell';}
+
+/* ---- per-side accounting ----
+   A set's volume is weight × reps × holds × sides:
+     sidesOf — 2 when the reps are done once PER SIDE (one arm / one leg at a time). Defaults from
+               UNILATERAL; `e.side` (boolean) is the user's override from the "⇆ Each side" chip,
+               stored only when it differs from the default.
+     holdsOf — 2 when two copies of the entered weight move at once: a pair of dumbbells (the field
+               is "per dumbbell"), or a two-stack cable lift. A dumbbell lift switched to one side
+               at a time is done with ONE dumbbell, so it holds 1 (volume stays equal: 1 × 2).
+   trackOf keeps a lift done "the other way" (a one-arm cable curl vs the two-hand bar) on its own
+   history — PRs, suggestions, trends and stall checks never compare the two. For an instance on its
+   default it is exactly modeOf(e), so all existing history resolves unchanged. */
+function sideDefault(id){return !!(UNILATERAL&&UNILATERAL.has(id));}
+function sidesOf(e){return (typeof(e&&e.side)==='boolean'?e.side:sideDefault(e&&e.id))?2:1;}
+function holdsOf(e){const m=modeOf(e),id=e&&e.id;
+  if(m==='dumbbell')return (ONE_DB&&ONE_DB.has(id))||(e.side===true&&!sideDefault(id))?1:2;
+  if(m==='cable'&&DUAL_STACK&&DUAL_STACK.has(id))return 2;
+  return 1;}
+function sideMult(e){return holdsOf(e)*sidesOf(e);}
+function trackOf(e){const m=modeOf(e);if(typeof(e&&e.side)!=='boolean'||e.side===sideDefault(e.id))return m;return m+(e.side?'|1side':'|2side');}
 
 const DAY=86400000;
 function startOfDay(ts){const d=new Date(ts);d.setHours(0,0,0,0);return d.getTime();}
@@ -26,8 +46,8 @@ function sessionVolume(s,bw){const b=sbw(s,bw);let v=0;s.exercises.forEach(e=>{
   // Assisted machines: the logged number is the ASSISTANCE, so the resistance actually moved is
   // bodyweight − assist (mirrors a weighted bodyweight lift, which is bodyweight + added). Needs a
   // bodyweight; without one it's unknowable and contributes 0 rather than counting the machine's help.
-  const inv=INVERTED_LOAD&&INVERTED_LOAD.has(e.id);
-  e.sets.forEach(st=>{if(isWorking(st)){const load=inv?Math.max(0,b-(+st.w||0)):setLoad(e.id,st.w,b);v+=load*(+st.r||0);}});
+  const inv=INVERTED_LOAD&&INVERTED_LOAD.has(e.id),mult=inv?1:sideMult(e);   // both sides / both dumbbells count (see sideMult)
+  e.sets.forEach(st=>{if(isWorking(st)){const load=inv?Math.max(0,b-(+st.w||0)):setLoad(e.id,st.w,b);v+=load*(+st.r||0)*mult;}});
 });return v;}
 function sessionSets(s){let n=0;s.exercises.forEach(e=>e.sets.forEach(st=>{if(isWorking(st))n++;}));return n;}
 // How long a finished workout took, in whole minutes. `date` is the start (set at newSession); a set
@@ -102,7 +122,7 @@ function lastPerf(sessions,exId,opts){
     // the same predicate, a session whose every working set is marked is skipped whole and the scan
     // falls through to the one before it — the fallback chain costs no extra code.
     const perfSet=st=>isWorking(st)&&(+st.r||0)>0&&!(opts.clean&&st.nc);
-    const e=s.exercises.find(x=>x.id===exId&&(!opts.mode||modeOf(x)===opts.mode)&&x.sets.some(perfSet));
+    const e=s.exercises.find(x=>x.id===exId&&(!opts.mode||trackOf(x)===opts.mode)&&x.sets.some(perfSet));
     if(e)return{date:s.date,mode:modeOf(e),sets:e.sets.filter(perfSet).map(st=>({w:+st.w||0,r:+st.r||0})),note:e.note||''};
   }
   return null;
@@ -134,7 +154,7 @@ function platesPerSide(total,bar,unit){
 function exerciseSeries(sessions,exId,opts){
   opts=opts||{};const bw=opts.bw||0,out=[],metric=scoreMetric(exId);
   for(const s of real(sessions)){
-    const e=s.exercises.find(x=>x.id===exId&&(!opts.mode||modeOf(x)===opts.mode));
+    const e=s.exercises.find(x=>x.id===exId&&(!opts.mode||trackOf(x)===opts.mode));
     if(!e)continue;
     // A set marked "doesn't count" (st.nc) must not define the trend line — otherwise a rep the user
     // has disowned reads as their level, and every honest session after it looks like a decline. But
@@ -161,7 +181,7 @@ function bestE1rmBefore(sessions,exId,opts){
   for(const s of real(sessions)){
     if(opts.excludeId&&s.id===opts.excludeId)continue;
     if(opts.beforeTs&&s.date>=opts.beforeTs)continue;
-    const e=s.exercises.find(x=>x.id===exId&&(!opts.mode||modeOf(x)===opts.mode));
+    const e=s.exercises.find(x=>x.id===exId&&(!opts.mode||trackOf(x)===opts.mode));
     if(!e)continue;
     const b=sbw(s,bw);   // each session scored by its own bodyweight (D-1)
     e.sets.forEach(st=>{if(st.nc||!isWorking(st))return;const est=e1rm(setLoad(exId,st.w,b),+st.r||0);if(est>best)best=est;});   // a disowned set is not a bar the next PR has to clear
@@ -178,6 +198,24 @@ function lastModeFor(sessions,exId){
     if(e)return e.mode||null;
   }
   return null;
+}
+// Same idea for the "⇆ Each side" choice: the override on the last REAL instance, or null (default).
+function lastSideFor(sessions,exId){
+  for(const s of sessions||[]){
+    if(s.completed===false||s.deload)continue;
+    const e=s.exercises.find(x=>x.id===exId);
+    if(e)return typeof e.side==='boolean'?e.side:null;
+  }
+  return null;
+}
+// The history track (equipment + side) the lift was last done on — what a trend chart should follow.
+function lastTrackFor(sessions,exId){
+  for(const s of sessions||[]){
+    if(s.completed===false||s.deload)continue;
+    const e=s.exercises.find(x=>x.id===exId);
+    if(e)return trackOf(e);
+  }
+  return undefined;
 }
 // The load step for one progression bump. A barbell adds 5 lb / 2.5 kg; a per-hand dumbbell or any
 // isolation move adds HALF that (2.5 lb / 1 kg) — a flat 5 lb was a 20–33% jump on a lateral raise or
@@ -372,5 +410,5 @@ function calcStreak(sessions,now){
   return n;
 }
 
-IL.prog={DAY,startOfDay,e1rm,isWorking,setLoad,sbw,sessionVolume,sessionSets,sessionDuration,MAX_SESSION_MIN,setTimeline,lastSetAt,staleness,STALE_AFTER_MIN,LONG_SESSION_MIN,STALE_CONFIRM_MIN,END_PAD_MIN,finalizeSets,parseWeightInput,fmtVol,modeOf,real,lastPerf,lastModeFor,exerciseSeries,setScore,scoreMetric,platesPerSide,bestE1rmBefore,setPattern,fmtPerf,repRange,nextSets,deloadSets,suggestion,unitIncrement,convertWeight,convertSessions,calcStreak,weekIndex,weekStart};
+IL.prog={DAY,startOfDay,e1rm,isWorking,setLoad,sbw,sessionVolume,sessionSets,sessionDuration,MAX_SESSION_MIN,setTimeline,lastSetAt,staleness,STALE_AFTER_MIN,LONG_SESSION_MIN,STALE_CONFIRM_MIN,END_PAD_MIN,finalizeSets,parseWeightInput,fmtVol,modeOf,real,lastPerf,lastModeFor,exerciseSeries,setScore,scoreMetric,platesPerSide,sidesOf,holdsOf,sideMult,trackOf,sideDefault,lastSideFor,lastTrackFor,bestE1rmBefore,setPattern,fmtPerf,repRange,nextSets,deloadSets,suggestion,unitIncrement,convertWeight,convertSessions,calcStreak,weekIndex,weekStart};
 if(typeof module!=='undefined')module.exports=IL.prog;

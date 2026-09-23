@@ -7,15 +7,27 @@ function addExerciseToCur(id){
   if(todayScreen!=='edit'&&!state.active){S.setActive(newSession([]));}
   const t=cur();
   if(t.exercises.some(x=>x.id===id)){toast('Already added');return;}
-  {const pf=state.settings.profile||{};t.exercises.push(B.seedExercise(id,state.sessions,{excludeId:t.id,unit:U(),goal:pf.goal,setStyle:pf.sets,push:pf.push}));}
+  const pf=state.settings.profile||{},inst=B.seedExercise(id,state.sessions,{excludeId:t.id,unit:U(),goal:pf.goal,setStyle:pf.sets,push:pf.push});
+  const pos=slotFor(t,id);t.exercises.splice(pos,0,inst);
   persistCur();if(todayScreen!=='edit')todayScreen='active';
   if(currentTab!=='today')setTab('today');else render();
-  toast(EX[id].name+' added');
+  toast(EX[id].name+(pos<t.exercises.length-1?' added — slotted in as #'+(pos+1):' added'));
+}
+// The workout's focus muscle: the group with the most exercises (the Auto-order tiebreak).
+function focusGroup(exs){const counts={};exs.forEach(e=>{const g=EX[e.id]&&EX[e.id].group;if(g)counts[g]=(counts[g]||0)+1;});
+  return Object.keys(counts).sort((a,b)=>counts[b]-counts[a])[0];}
+// Where a newly added lift belongs: by the same big-lifts-first rule as Auto-order, but only among the
+// exercises you HAVEN'T started — anything with a ticked set stays exactly where it is, and the new lift
+// never jumps ahead of work already begun. Equal priority goes after (stable).
+function slotFor(t,id){
+  const exs=t.exercises;let after=-1;exs.forEach((e,i)=>{if(e.sets.some(s=>s.done))after=i;});
+  const focus=focusGroup(exs.concat([{id}])),p=B.perfPriority(EX[id],focus);
+  for(let i=after+1;i<exs.length;i++)if(p>B.perfPriority(EX[exs[i].id],focus))return i;
+  return exs.length;
 }
 function reorderCur(){
   const t=cur();if(!t||t.exercises.length<2)return;
-  const counts={};t.exercises.forEach(e=>{const g=EX[e.id]&&EX[e.id].group;if(g)counts[g]=(counts[g]||0)+1;});
-  const focus=Object.keys(counts).sort((a,b)=>counts[b]-counts[a])[0];
+  const focus=focusGroup(t.exercises);
   const map={};t.exercises.forEach(e=>map[e.id]=e);
   t.exercises=B.orderByFatigue(t.exercises.map(e=>e.id),focus).map(id=>map[id]);
   persistCur();render();toast('Ordered for best performance');
@@ -48,9 +60,9 @@ function workoutSummary(s){
     // time-held lift ("reps" are seconds) — it would both miss real improvements and invent fake ones.
     // The Progress PR list ranks those correctly; here we simply stay quiet rather than lie.
     if(D.INVERTED_LOAD.has(e.id)||D.TIME_METRIC.has(e.id))return;
-    const emode=modeOf(e);const histBest=P.bestE1rmBefore(state.sessions,e.id,{mode:emode,bw:bw(),excludeId:s.id});if(histBest<=0)return;
+    const etrack=P.trackOf(e);const histBest=P.bestE1rmBefore(state.sessions,e.id,{mode:etrack,bw:bw(),excludeId:s.id});if(histBest<=0)return;
     let best=0,bs=null;e.sets.forEach(st=>{if(st.warm||st.nc||!P.isWorking(st))return;const est=P.e1rm(P.setLoad(e.id,st.w,bw()),+st.r||0);if((+st.r)&&est>best){best=est;bs=st;}});
-    if(bs&&best>histBest)prs.push({id:e.id,name:EX[e.id]?EX[e.id].name:e.name,w:bs.w,r:bs.r,perHand:MODES[emode]&&MODES[emode].perHand});});
+    if(bs&&best>histBest)prs.push({id:e.id,name:EX[e.id]?EX[e.id].name:e.name,w:bs.w,r:bs.r,perHand:P.holdsOf(e)===2,perSide:P.sidesOf(e)===2});});
   return {sets:setsOf(s),vol:volOf(s),prs,deload:!!s.deload,dur:P.sessionDuration(s),estimated:!!s.endEstimated};
 }
 function showSummary(sm){
@@ -62,7 +74,7 @@ function showSummary(sm){
     body+=`<div class="card" style="padding:14px 15px;background:var(--good-soft);border:1px solid color-mix(in srgb,var(--good) 30%,transparent)"><div style="color:var(--good);font-weight:600;font-size:13.5px">🌿 Recovery in the bank</div><div class="dim" style="font-size:12.5px;margin-top:3px">Fatigue's clearing — ease back to full loads when you feel fresh. This won't affect your progression.</div></div>`;
   }else if(sm.prs.length){
     body+=`<div class="eyebrow" style="margin:2px 2px 8px">🎉 New personal record${sm.prs.length>1?'s':''}</div>
-      <div class="card list">${sm.prs.map(p=>`<div class="ex-row"><span style="color:var(--good);font-size:18px;flex-shrink:0">★</span><div style="flex:1;min-width:0"><div class="ex-name">${esc(p.name)}</div><div class="ex-sub">${p.w}${U()}${p.perHand?'/ea':''} × ${p.r}</div></div>
+      <div class="card list">${sm.prs.map(p=>`<div class="ex-row"><span style="color:var(--good);font-size:18px;flex-shrink:0">★</span><div style="flex:1;min-width:0"><div class="ex-name">${esc(p.name)}</div><div class="ex-sub">${p.w}${U()}${p.perHand?'/ea':''} × ${p.r}${p.perSide?'/side':''}</div></div>
         <button class="btn sm ghost" data-prmark="${p.id}" data-insummary="1" style="flex-shrink:0">Wasn’t clean</button></div>`).join('')}</div>`;
   }else{
     body+=`<div class="dim" style="font-size:13.5px;line-height:1.5;padding:0 2px">Logged and saved. Consistency is what moves the numbers — every session counts.</div>`;
@@ -129,10 +141,10 @@ function commitFinish(s,endedAt,estimated){
    place in History and its share of your volume; it just stops being the bar the app measures you
    against, and stops seeding the next workout. Re-openable both ways. */
 function markBestSet(id,btn){
-  const p=A.personalRecords(state.sessions,bw(),999).filter(x=>x.id===id)[0];
+  const p=prFor(id);
   if(!p){toast('No record to adjust');return;}
   const s=state.sessions.find(x=>x.date===p.date&&x.exercises.some(e=>e.id===id));
-  const e=s&&(s.exercises.find(x=>x.id===id&&modeOf(x)===p.mode)||s.exercises.find(x=>x.id===id));
+  const e=s&&(s.exercises.find(x=>x.id===id&&P.trackOf(x)===(p.track||p.mode))||s.exercises.find(x=>x.id===id));
   const st=e&&e.sets.find(x=>!x.nc&&P.isWorking(x)&&(+x.w||0)===p.w&&(+x.r||0)===p.r);
   if(!st){toast('Couldn’t find that set');return;}
   st.nc=true;s.updatedAt=Date.now();S.upsertSession(s,false);
@@ -148,11 +160,11 @@ function markBestSet(id,btn){
 // each. Fallback: if there's no beating-set on display but sets are still set aside (a lower one, or
 // one in another modality the card can't surface), clear whatever's left so nothing can strand.
 function unmarkSets(id){
-  const p=A.personalRecords(state.sessions,bw(),999).filter(x=>x.id===id)[0];
+  const p=prFor(id);
   let restored=0;
   if(p&&p.adjusted){
     const s=state.sessions.find(x=>x.date===p.adjusted.date&&x.exercises.some(e=>e.id===id));
-    const e=s&&(s.exercises.find(x=>x.id===id&&modeOf(x)===p.mode)||s.exercises.find(x=>x.id===id));
+    const e=s&&(s.exercises.find(x=>x.id===id&&P.trackOf(x)===(p.track||p.mode))||s.exercises.find(x=>x.id===id));
     const st=e&&e.sets.find(x=>x.nc&&(+x.w||0)===p.adjusted.w&&(+x.r||0)===p.adjusted.r);
     if(st){delete st.nc;s.updatedAt=Date.now();S.upsertSession(s,false);restored=1;}
   }
@@ -460,9 +472,14 @@ function bindLog(root){
       if(sets[idx].done)showConfirm('Remove last set?','That set is marked done — remove it anyway?','Remove',doRemove);else doRemove();return;}
     const del=e.target.closest('[data-delex]');if(del){const ei=+del.dataset.delex;const removed=t.exercises.splice(ei,1)[0];persistCur();render();
       toast(removed.name+' removed',{label:'Undo',fn:()=>{const c=cur();if(c){c.exercises.splice(ei,0,removed);persistCur();render();}}});return;}
-    const kw=e.target.closest('[data-keepw]');if(kw){const ei=+kw.dataset.keepw;const ex=t.exercises[ei];const lp=P.lastPerf(state.sessions,ex.id,{beforeTs:t.date,excludeId:t.id,mode:modeOf(ex)});
+    const kw=e.target.closest('[data-keepw]');if(kw){const ei=+kw.dataset.keepw;const ex=t.exercises[ei];const lp=P.lastPerf(state.sessions,ex.id,{beforeTs:t.date,excludeId:t.id,mode:P.trackOf(ex)});
       if(lp)ex.sets=lp.sets.map(s=>({w:s.w,r:s.r,done:false}));persistCur();render();toast('Using last time’s weights');return;}
     const mc=e.target.closest('[data-mode]');if(mc){openModePicker(+mc.dataset.mode);return;}
+    // "⇆ Each side": flip one-side-at-a-time. Stored only when it differs from the lift's default, so a
+    // lift on its default has no flag (and stays on its existing history track).
+    const sd=e.target.closest('[data-side]');if(sd){const ex=t.exercises[+sd.dataset.side];if(!ex)return;
+      const next=P.sidesOf(ex)!==2;if(next===P.sideDefault(ex.id))delete ex.side;else ex.side=next;
+      persistCur();render();toast(next?'One side at a time — reps per side':'Both sides at once');return;}
     const nt=e.target.closest('[data-note]');if(nt){openNote(+nt.dataset.note);return;}
     const oe=e.target.closest('[data-openex]');if(oe){if(EX[oe.dataset.openex])openSheet(EX[oe.dataset.openex].name,exerciseDetail(oe.dataset.openex));return;}
   });

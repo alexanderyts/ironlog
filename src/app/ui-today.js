@@ -402,6 +402,8 @@ function topSuggestionHTML(){
 }
 function logExercise(s,e,ei,mode){
   const ex=EX[e.id];let sugg='',prLine='';const emode=modeOf(e);
+  // etrack = the history this instance belongs to (equipment + "each side"); emode stays for labels
+  const etrack=P.trackOf(e),holds=P.holdsOf(e),sides=P.sidesOf(e),wEa=holds===2?'/ea':'',rSide=sides===2?'/side':'';
   // No live PR line for assist machines or time-held lifts: an e1RM comparison is backwards for the
   // first (less weight = harder) and meaningless for the second (the "reps" are seconds), so it would
   // miss real improvements AND flash fake ones. The Progress PR list ranks both correctly.
@@ -409,15 +411,15 @@ function logExercise(s,e,ei,mode){
     // Live PR recognition: the session's best working set beating this lift's all-time best (same mode)
     // Memoized: the all-time best is a full-history scan, and the completed session isn't in `sessions`
     // yet, so it's identical for every set tick during a workout — compute it once per (lift, mode). (P2)
-    const histBest=memoStat('be1:'+e.id+':'+emode+':'+s.id,()=>P.bestE1rmBefore(state.sessions,e.id,{mode:emode,bw:bw(),excludeId:s.id}));
+    const histBest=memoStat('be1:'+e.id+':'+etrack+':'+s.id,()=>P.bestE1rmBefore(state.sessions,e.id,{mode:etrack,bw:bw(),excludeId:s.id}));
     if(histBest>0){let best=0,bs=null;e.sets.forEach(st=>{if(st.warm||st.nc||!P.isWorking(st))return;const est=P.e1rm(P.setLoad(e.id,st.w,bw()),+st.r||0);if((+st.r)&&est>best){best=est;bs=st;}});
-      if(bs&&best>histBest)prLine=`<div class="sugg" style="color:var(--good);background:var(--good-soft)"><span>★ New PR — ${bs.w}${U()}${MODES[emode]&&MODES[emode].perHand?'/ea':''} × ${bs.r} <span class="dim">est ${Math.round(best)}${U()}</span></span></div>`;}
+      if(bs&&best>histBest)prLine=`<div class="sugg" style="color:var(--good);background:var(--good-soft)"><span>★ New PR — ${bs.w}${U()}${wEa} × ${bs.r}${rSide} <span class="dim">est ${Math.round(best)}${U()}</span></span></div>`;}
   }
   if(mode==='active'&&s.deload){
     sugg=`<div class="sugg match" style="color:var(--good);background:var(--good-soft)"><span>🌿 Recovery set — easy load, full range</span></div>`;
   }else if(mode==='active'){
     const pf=state.settings.profile||{},sgRr=pf.goal?P.repRange(EX[e.id],pf.goal):undefined;
-    const sg=P.suggestion(state.sessions,e.id,{unit:U(),activeDate:s.date,activeId:s.id,mode:emode,push:pf.push,rr:sgRr});
+    const sg=P.suggestion(state.sessions,e.id,{unit:U(),activeDate:s.date,activeId:s.id,mode:etrack,push:pf.push,rr:sgRr});
     if(sg.lp){const w=sg.kind==='weight';
       // The prescription is already in the set rows; offer a one-tap revert until a set is done
       const canRevert=w&&!e.sets.some(st=>st.done);
@@ -427,7 +429,10 @@ function logExercise(s,e,ei,mode){
     if(sg.lp&&sg.lp.note)sugg+=`<div class="sugg match" style="color:var(--ink-2)"><span>📝 <span class="dim">${relDay(sg.lp.date)}:</span> ${esc(sg.lp.note)}</span></div>`;
   }
   const noteLine=e.note?`<button class="sugg match" data-note="${ei}" style="width:calc(100% - 24px);text-align:left;color:var(--ink-2)"><span>📝 ${esc(e.note)}</span></button>`:'';
-  const whdr=(U()==='kg'?'Kg':'Lb')+(MODES[emode]&&MODES[emode].perHand?' ea':'');
+  // Headers say exactly what to type: "Lb ea" = weight of ONE dumbbell / one stack; "/ side" = one side's reps
+  const whdr=(U()==='kg'?'Kg':'Lb')+(holds===2?' ea':''),rhdr=(D.TIME_METRIC.has(e.id)?'Sec':'Reps')+(sides===2?' / side':'');
+  // "⇆ Each side" only where doing it one-sided is realistic and changes the math
+  const sideOK=(emode==='cable'||emode==='dumbbell'||emode==='machine')&&!D.INVERTED_LOAD.has(e.id)&&!D.TIME_METRIC.has(e.id);
   return `<div class="card log-ex" data-ei="${ei}">
     <div class="log-ex-head">
       <div class="ex-ic">${exIcon(ex?ex.group:'Core')}</div>
@@ -435,10 +440,11 @@ function logExercise(s,e,ei,mode){
         <div class="ex-sub">${ex?ex.muscles.join(' · '):''} · target ${ex?ex.rr[0]+'–'+ex.rr[1]:'8–12'} ${D.TIME_METRIC.has(e.id)?'sec':'reps'}</div></button>
       <button class="sheet-x" data-delex="${ei}" aria-label="Remove exercise">✕</button>
     </div>
-    <button class="modechip" data-mode="${ei}" aria-label="Change equipment">${esc(MODES[emode]?MODES[emode].label:emode)} ▾</button>
+    <div class="chiprow"><button class="modechip" data-mode="${ei}" aria-label="Change equipment">${esc(MODES[emode]?MODES[emode].label:emode)} ▾</button>
+      ${sideOK?`<button class="modechip${sides===2?' on':''}" data-side="${ei}" aria-pressed="${sides===2}" aria-label="One side at a time">⇆ ${sides===2?'Each side':'Both sides'}</button>`:''}</div>
     ${prLine}${sugg}${noteLine}
     <div class="setgrid">
-      <div class="set-hdr"><div>Set</div><div>${whdr}</div><div>${D.TIME_METRIC.has(e.id)?'Sec':'Reps'}</div><div></div></div>
+      <div class="set-hdr"><div>Set</div><div>${whdr}</div><div>${rhdr}</div><div></div></div>
       ${e.sets.map((st,si)=>setRow(st,ei,si)).join('')}
     </div>
     <div class="set-actions">

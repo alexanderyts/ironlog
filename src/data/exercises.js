@@ -190,8 +190,16 @@ const META={
 // small preference so a plan tends to include a stretch-biased option per muscle. Existing lifts that
 // already load the stretch are tagged here too.
 const LONG_LENGTH=new Set(['incline-dumbbell-fly','dumbbell-pullover','cable-pullover','bayesian-cable-curl','incline-dumbbell-curl','cable-overhead-extension','overhead-tricep-extension','leaning-cable-lateral','sissy-squat','romanian-deadlift','stiff-leg-deadlift','seated-leg-curl']);
-// Single-limb movements (for future per-side volume handling and to diversify rotation families).
-const UNILATERAL=new Set(['single-arm-cable-row','concentration-curl','single-arm-pushdown','reverse-lunge','single-leg-curl','single-leg-hip-thrust','single-leg-calf-raise','bulgarian-split-squat','walking-lunge','step-up','dumbbell-row','cable-kickback','side-plank','suitcase-carry']);
+// Per-side accounting. A set's volume = weight × reps × how many times that weight moves:
+//   holds — copies of the entered weight in motion at once (two dumbbells, two cable stacks) → ×2
+//   sides — the entered reps are done once per side (one arm / one leg at a time)            → ×2
+// UNILATERAL = done one side at a time by default: reps are PER SIDE (the column says so).
+const UNILATERAL=new Set(['single-arm-cable-row','concentration-curl','single-arm-pushdown','reverse-lunge','single-leg-curl','single-leg-hip-thrust','single-leg-calf-raise','bulgarian-split-squat','walking-lunge','step-up','dumbbell-row','cable-kickback','side-plank','suitcase-carry','leaning-cable-lateral']);
+// Dumbbell lifts done with ONE dumbbell (held in both hands, or one hand only) — the entered weight
+// moves once, not twice like a pair.
+const ONE_DB=new Set(['goblet-squat','dumbbell-pullover','overhead-tricep-extension','dumbbell-row','concentration-curl','single-leg-calf-raise','suitcase-carry']);
+// Cable lifts that use two stacks at once (one handle per hand) — the entered weight is PER STACK.
+const DUAL_STACK=new Set(['cable-crossover']);
 // Assist machines where LESS weight is harder: progression REDUCES the load and a PR is the lowest
 // assist, not the highest (#16). The engine flips the increment and the PR ranking for these ids.
 const INVERTED_LOAD=new Set(['assisted-pull-up','assisted-dip']);
@@ -273,4 +281,4 @@ function patLabel(p){return {hpush:'horizontal press',vpush:'overhead press',hpu
 function exampleFor(group,reg){const e=EXERCISES.find(x=>x.group===group&&x.reg===reg&&x.type===C)||EXERCISES.find(x=>x.group===group&&x.reg===reg);return e?e.name:null;}
 function hashId(s){let h=0;for(let i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))>>>0;return h;}
 
-IL.data={C,I,EXERCISES,EX,GROUPS,PRESETS,META,REGIONS,IDEAL_PATS,PAT_RANK,EQUIP_LOAD,MODES,MODE_ORDER,EQUIP_MODE,LONG_LENGTH,UNILATERAL,INVERTED_LOAD,TIME_METRIC,PUSH_PATS,PULL_PATS,LOWER_GROUPS,BW_FACTOR,GROUP_ICON,exIcon,regLabel,patLabel,exampleFor,hashId};
+IL.data={C,I,EXERCISES,EX,GROUPS,PRESETS,META,REGIONS,IDEAL_PATS,PAT_RANK,EQUIP_LOAD,MODES,MODE_ORDER,EQUIP_MODE,LONG_LENGTH,UNILATERAL,ONE_DB,DUAL_STACK,INVERTED_LOAD,TIME_METRIC,PUSH_PATS,PULL_PATS,LOWER_GROUPS,BW_FACTOR,GROUP_ICON,exIcon,regLabel,patLabel,exampleFor,hashId};

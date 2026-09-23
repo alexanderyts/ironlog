@@ -141,10 +141,14 @@ function prList(){
   const arr=memoStat('prAll',()=>A.personalRecords(state.sessions,bw(),999)).slice(0,8);
   if(!arr.length)return`<div style="padding:22px;text-align:center" class="dim">Log a few sets and your PRs show up here.</div>`;
   const rsuf=p=>p.time?'s':'';   // time-held lifts show seconds, not reps
-  const setStr=p=>p.bodyweight?(p.w?'Bodyweight +'+p.w+U():'Bodyweight')+' × '+p.r+rsuf(p):p.w+U()+(MODES[p.mode]&&MODES[p.mode].perHand?'/hand':'')+' × '+p.r+rsuf(p);
+  const sideSuf=p=>p.sides===2?'/side':'';   // reps (or seconds) counted per side
+  const setStr=p=>p.bodyweight?(p.w?'Bodyweight +'+p.w+U():'Bodyweight')+' × '+p.r+rsuf(p)+sideSuf(p):p.w+U()+(p.holds===2?'/ea':'')+' × '+p.r+rsuf(p)+sideSuf(p);
   // show the modality only when it isn't the exercise's native equipment (so a Smith/cable variant
   // is distinguishable from the default; ordinary PRs stay uncluttered)
-  const modeTag=p=>{const ex=EX[p.id];const native=ex&&EQUIP_MODE[ex.equip];return p.mode&&p.mode!==native?` <span class="pill" style="font-size:10px;padding:1px 7px">${esc(MODES[p.mode].label)}</span>`:'';};
+  const pill=t=>` <span class="pill" style="font-size:10px;padding:1px 7px">${esc(t)}</span>`;
+  // …and tag a lift done the non-default way round ("Each side" / "Both sides"), since it keeps its own record
+  const modeTag=p=>{const ex=EX[p.id];const native=ex&&EQUIP_MODE[ex.equip];
+    return (p.mode&&p.mode!==native?pill(MODES[p.mode].label):'')+(p.track&&p.track.indexOf('|')>=0?pill(p.sides===2?'Each side':'Both sides'):'');};
   return arr.map(p=>`<div class="ex-row" data-openex="${p.id}" style="cursor:pointer"><div style="flex:1;min-width:0"><div class="ex-name">${esc(p.name)}${modeTag(p)}</div>
     <div class="ex-sub">Best set ${setStr(p)}</div>${p.adjusted?`<div class="ex-sub" style="color:var(--warn)">PR adjusted · ${setStr({...p,w:p.adjusted.w,r:p.adjusted.r})} on ${fmtDate(p.adjusted.date)} set aside</div>`:''}</div>
     <div style="text-align:right">${p.showEst?`<div class="mono" style="font-weight:700;font-size:16px">${p.est}<span class="dim" style="font-size:11px"> ${U()} e1RM</span></div>`:`<div class="mono dim" style="font-weight:600;font-size:13px">${p.load}${U()}</div>`}</div>${CHEV_R}</div>`).join('');
@@ -252,7 +256,7 @@ function muscleBreakdown(mo){
 /* ---------------- sheets ---------------- */
 // Compact SVG line of a lift's best-set estimated 1RM over its recent sessions, with the delta.
 function trendCard(id){
-  const dmode=P.lastModeFor(state.sessions,id)||undefined;
+  const dmode=P.lastTrackFor(state.sessions,id);   // follow the version (equipment + side) done most recently
   const series=P.exerciseSeries(state.sessions,id,{mode:dmode,bw:bw(),limit:10});
   if(series.length<2)return '';   // need at least two sessions to show a trend
   const vals=series.map(p=>p.est),min=Math.min(...vals),max=Math.max(...vals),range=max-min||1;
@@ -286,13 +290,17 @@ function trendCard(id){
    "That rep wasn't clean" sets aside the record shown here (that record's exact set); "Count it again"
    restores it. Both operate a set at a time; a lift trained in two modalities can be adjusted in each. */
 const markedSets=id=>{let n=0;state.sessions.forEach(s=>s.exercises.forEach(e=>{if(e.id===id)e.sets.forEach(st=>{if(st.nc)n++;});}));return n;};
+// The record a lift's adjust controls act on: the version (equipment + "each side") done most recently —
+// the same one the trend chart follows. A lift with two versions (one-arm vs two-hand) has two records.
+function prFor(id){const all=A.personalRecords(state.sessions,bw(),999).filter(x=>x.id===id),t=P.lastTrackFor(state.sessions,id);
+  return all.find(x=>x.track===t)||all[0];}
 function prAdjustCard(id){
-  const p=A.personalRecords(state.sessions,bw(),999).filter(x=>x.id===id)[0];
+  const p=prFor(id);
   const marked=markedSets(id);
   if(!p&&!marked)return '';
   // Format a w×r the same way the record itself reads: seconds for time-held lifts, "Bodyweight" moves,
   // per-hand dumbbells — so a set-aside plank shows "45s", not "0lb × 45".
-  const fmt=p?((w,r)=>p.bodyweight?(w?'Bodyweight +'+w+U():'Bodyweight')+' × '+r+(p.time?'s':''):w+U()+(MODES[p.mode]&&MODES[p.mode].perHand?'/ea':'')+' × '+r+(p.time?'s':'')):null;
+  const fmt=p?((w,r)=>p.bodyweight?(w?'Bodyweight +'+w+U():'Bodyweight')+' × '+r+(p.time?'s':''):w+U()+(p.holds===2?'/ea':'')+' × '+r+(p.time?'s':'')+(p.sides===2?'/side':'')):null;
   return `<div class="card" style="padding:12px 15px;margin:0 0 12px">
     <div class="row-between"><span class="eyebrow">Your best set</span>
       <span class="mono" style="font-weight:600">${p?esc(fmt(p.w,p.r)):'—'}</span></div>

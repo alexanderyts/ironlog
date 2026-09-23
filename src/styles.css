@@ -205,6 +205,10 @@ html.kb-open .tabbar{display:none}
 .modechip{margin:0 12px 10px;padding:4px 11px;border-radius:9px;background:var(--surface-2);color:var(--ink-2);font-size:12px;font-weight:600;display:inline-flex;align-items:center;gap:4px;position:relative}
 .modechip::after{content:"";position:absolute;inset:-10px -8px}   /* hit-slop → ≥44pt target (#27) */
 .modechip:active{background:var(--accent-soft);color:var(--accent)}
+.chiprow{display:flex;flex-wrap:wrap;gap:10px;margin:0 12px 10px}
+.chiprow .modechip{margin:0}
+.chiprow .modechip::after{inset:-10px -5px}   /* keep the two chips' hit-slop from overlapping */
+.modechip.on{background:var(--accent-soft);color:var(--accent)}
 .modelist{display:flex;flex-direction:column;gap:2px}
 .modeopt{display:flex;align-items:center;gap:10px;text-align:left;padding:12px 12px;border-radius:12px}
 .modeopt.on{background:var(--accent-soft)}

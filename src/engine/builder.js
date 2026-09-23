@@ -4,7 +4,7 @@ var IL=globalThis.IL||(globalThis.IL={});
 if(typeof require==='function'&&!IL.data)require('../data/exercises.js');
 if(typeof require==='function'&&!IL.prog)require('./progression.js');
 const {C,I,EXERCISES,EX,REGIONS,IDEAL_PATS,PAT_RANK,EQUIP_LOAD,LONG_LENGTH,INVERTED_LOAD,TIME_METRIC,regLabel,patLabel,hashId}=IL.data;
-const {lastPerf,lastModeFor,nextSets,deloadSets,repRange,modeOf,real,DAY,unitIncrement}=IL.prog;
+const {lastPerf,lastModeFor,lastSideFor,trackOf,nextSets,deloadSets,repRange,modeOf,real,DAY,unitIncrement}=IL.prog;
 
 // Working sets a movement deserves when you've never logged it: main lifts 4, other compounds 3,
 // isolation 3, finishers 2. Reps prefilled at the bottom of the target range.
@@ -36,9 +36,10 @@ function shapeStyle(sets,style,ex,unit){
 }
 function seedExercise(id,sessions,opts){
   opts=opts||{};const {excludeId,unit,deload,extraSet,goal,setStyle,push}=opts;   // goal/setStyle/push: profile levers
-  const ex=EX[id];const mode=lastModeFor(sessions,id);
-  const inst={id,name:ex?ex.name:id};if(mode)inst.mode=mode;
-  const lp=lastPerf(sessions||[],id,{excludeId,mode:mode||undefined,clean:true});   // real sessions only — a deload is never a baseline; `clean` so a set marked "doesn't count" is never prefilled back at you
+  const ex=EX[id];const mode=lastModeFor(sessions,id),side=lastSideFor(sessions,id);
+  const inst={id,name:ex?ex.name:id};if(mode)inst.mode=mode;if(side!=null)inst.side=side;   // remember "⇆ Each side" like the equipment choice
+  // An overridden side is its own history track — seed from THAT track, never the other way of doing it
+  const lp=lastPerf(sessions||[],id,{excludeId,mode:side!=null?trackOf(inst):(mode||undefined),clean:true});   // real sessions only — a deload is never a baseline; `clean` so a set marked "doesn't count" is never prefilled back at you
   const rr=goal?repRange(ex,goal):(ex?ex.rr:[8,12]);   // goal shifts the target range in one place
   let sets;
   // push:'quiet' — "just record": the rows mirror last time exactly, never a bump. Must agree with
@@ -409,7 +410,7 @@ function planWorkout(groups,sessions,seed,opts){
   // where you left off, but make NO structural change — you weren't stalled, you were away, and a
   // detrained first session back shouldn't get extra volume or a rotation.
   if(lapsed)return{ids:orderByFatigue(capHeavyAxial(ids,profile,sessions),groups[0]),mode:'continue',plan,rotation:null,streak:0,reactions,volumeBump,deload:false,lapsed:true};
-  const modeById={};plan.exercises.forEach(e=>{if(EX[e.id])modeById[e.id]=modeOf(e);});
+  const modeById={};plan.exercises.forEach(e=>{if(EX[e.id])modeById[e.id]=trackOf(e);});   // stall checks follow the same track (equipment + side)
   // Anchors are protected from rotation: the group's key tier-1 lift AND every other tier-1 lift in the
   // plan (a main deadlift/squat is not an "accessory" to be swapped out on a stall — #15).
   const anchors=new Set([...groups.map(g=>planAnchor(ids,g)).filter(Boolean).map(e=>e.id),...ids.filter(id=>EX[id]&&EX[id].tier===1)]);
