@@ -2,6 +2,11 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.75.1 — 2026-09-23 · Push-ups: what goes in the weight box
+- **Bodyweight moves** (push-ups, pull-ups, dips, planks…): the weight column is now headed **Added lb** and an empty box reads **BW**. A line underneath explains it: leave it blank for just your bodyweight, and only enter extra weight from a vest or plate. A saved 0 also shows as BW.
+- **Assist machines:** the column is headed **Assist lb**, since the number is the help, not the load.
+- Not verified on-device.
+
 ## v0.75.0 — 2026-09-23 · First run & Home
 Batch 5b from the overnight review: an easier first week and a friendlier Home.
 - **"Where do you train?"** One tap on Home replaces the training-profile intro card. Pick Planet Fitness, LA Fitness, Anytime Fitness, Crunch, YMCA or 24 Hour Fitness. "Somewhere else…" offers Big gym, Mostly machines, Apartment / hotel gym and Home. Planet Fitness means machines, the Smith machine and dumbbells, with no barbell rack. You can change it in Settings → Training profile.

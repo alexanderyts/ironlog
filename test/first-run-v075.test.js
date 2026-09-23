@@ -92,3 +92,21 @@ test('UI: name in the greeting; a fresh week opens on last week’s recap, not �
     assert.match(h.text('#homeSummary'),/^Last week: 2 workouts · 4 sets/);
   }finally{h.teardown();}
 });
+
+test('UI: push-ups — the weight box is "Added lb", blank reads BW, with a one-line explainer; assist says "Assist"',()=>{
+  const h=launch();
+  try{
+    h.S.setActive({id:'pu',schema:1,date:Date.now(),updatedAt:1,completed:false,exercises:[
+      {id:'push-up',name:'Push-Up',sets:[{w:0,r:10,done:false},{w:'',r:10,done:false}]},
+      {id:'assisted-pull-up',name:'Assisted Pull-Up',sets:[{w:40,r:8,done:false}]},
+      {id:'barbell-bench-press',name:'Bench',sets:[{w:135,r:8,done:false}]}]});
+    h.IL.ui.render();h.click('[data-action="resume"]');
+    const hdr=h.$$('.set-hdr').map(x=>x.textContent.replace(/\s+/g,' '));
+    assert.match(hdr[0],/Added Lb/);assert.match(hdr[1],/Assist Lb/);assert.doesNotMatch(hdr[2],/Added|Assist/);
+    const w=h.$$('input[data-f="w"][data-ei="0"]');
+    assert.equal(w[0].value,'','a 0 shows as blank…');assert.equal(w[0].placeholder,'BW','…reading BW');
+    assert.match(h.text('.bwhint'),/just your bodyweight/);
+    assert.equal(h.$('input[data-f="w"][data-ei="2"]').placeholder,'0','loaded lifts unchanged');
+    h.click('[data-check="0"][data-s="0"]');assert.equal(h.state.active.exercises[0].sets[0].done,true,'ticks with BW blank');
+  }finally{h.teardown();}
+});

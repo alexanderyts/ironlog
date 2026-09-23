@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-um7sHgMJS00iRYQ63wREi70KRnOgIlqfkGttHtORaGM=' 'sha256-WPBob/luB2k1aalTWXpi6zk3SrIbj8GlZV7AlFdG7oA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-zABVmg4YuBbTyRBstoCeUbzAVt1xhSUCgO1rX/qgick=' 'sha256-WPBob/luB2k1aalTWXpi6zk3SrIbj8GlZV7AlFdG7oA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Ironlog</title>
@@ -456,8 +456,8 @@ html.kb-open .tabbar{display:none}
 </div>
 
 <script>
-/* Ironlog v0.75.0 · site build */
-var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.75.0",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
+/* Ironlog v0.75.1 · site build */
+var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.75.1",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
 
 /* ===== src/data/exercises.js ===== */
 (function(){'use strict';
@@ -4132,7 +4132,10 @@ function logExercise(s,e,ei,mode){
   if(mode==='active'&&e.offer&&EX[e.offer.to])sugg+=`<div class="sugg match offer"><span>Hasn’t improved in a few weeks — try <b>${esc(EX[e.offer.to].name)}</b> instead?</span><span style="display:flex;gap:6px;flex-shrink:0"><button class="apply" data-offerswap="${ei}">Swap</button><button class="apply ghost" data-offerkeep="${ei}">Keep</button></span></div>`;
   const noteLine=e.note?`<button class="sugg match" data-note="${ei}" style="width:calc(100% - 24px);text-align:left;color:var(--ink-2)"><span>📝 ${esc(e.note)}</span></button>`:'';
   // Headers say exactly what to type: "Lb ea" = weight of ONE dumbbell / one stack; "/ side" = one side's reps
-  const whdr=(U()==='kg'?'Kg':'Lb')+(holds===2?' ea':''),rhdr=(D.TIME_METRIC.has(e.id)?'Sec':'Reps')+(sides===2?' / side':'');
+  // A bodyweight move's weight box is EXTRA load (vest, plate, belt) — blank reads "BW", just you. An
+  // assist machine's number is the HELP, so its header says so. (Owner: "what goes in the lb column?")
+  const bwMove=!!ex&&ex.equip==='Bodyweight'&&emode==='bodyweight',assistMove=D.isAssist(e.id);
+  const whdr=(bwMove?'Added ':assistMove?'Assist ':'')+(U()==='kg'?'Kg':'Lb')+(holds===2?' ea':''),rhdr=(D.TIME_METRIC.has(e.id)?'Sec':'Reps')+(sides===2?' / side':'');
   // "⇆ Each side" only where doing it one-sided is realistic and changes the math
   const sideOK=(emode==='cable'||emode==='dumbbell'||emode==='machine')&&!D.isAssist(e.id)&&!D.TIME_METRIC.has(e.id);
   return `<div class="card log-ex" data-ei="${ei}">
@@ -4148,8 +4151,9 @@ function logExercise(s,e,ei,mode){
     ${prLine}${sugg}${noteLine}
     <div class="setgrid">
       <div class="set-hdr"><div>Set</div><div>${whdr}</div><div>${rhdr}</div><div></div></div>
-      ${e.sets.map((st,si)=>setRow(st,ei,si,e.sets.slice(0,si).filter(x=>!x.warm).length+1)).join('')}
+      ${e.sets.map((st,si)=>setRow(st,ei,si,e.sets.slice(0,si).filter(x=>!x.warm).length+1,bwMove)).join('')}
     </div>
+    ${bwMove&&mode!=='view'&&!e.sets.some(st=>+st.w>0)?'<div class="hint bwhint">BW = just your bodyweight, so leave it blank. Wearing a vest or holding a plate? Enter only the extra weight.</div>':''}
     <div class="set-actions">
       <button class="linkbtn" data-addset="${ei}">＋ Add set</button>
       ${mode!=='view'&&!e.sets.some(st=>st.warm)?`<button class="linkbtn dim" data-addwarm="${ei}">＋ Warm-up</button>`:''}
@@ -4160,11 +4164,12 @@ function logExercise(s,e,ei,mode){
     ${ei===0&&state.sessions.length<3?'<div class="hint">Tip: tap a set number to mark it a warm-up (kept out of PRs and volume).</div>':''}
   </div>`;
 }
-function setRow(st,ei,si,no){   // no = the working-set number (warm-ups don't count: W, 1, 2, 3)
+function setRow(st,ei,si,no,bwMove){   // no = the working-set number (warm-ups don't count: W, 1, 2, 3); bwMove: weight = extra load, blank shows "BW"
+  const wv=st.w!==''&&st.w!=null&&!(bwMove&&+st.w===0)?st.w:'';
   return `<div class="set-row ${st.done?'done':''}" data-si="${si}">
     <button class="set-no ${st.warm?'warm':''}" data-warm="${ei}" data-s="${si}" aria-label="Toggle warm-up">${st.warm?'W':no}</button>
     <div class="numwrap"><button data-step="w" data-d="-1" data-ei="${ei}" data-s="${si}" aria-label="Less weight">−</button>
-      <input inputmode="decimal" data-f="w" data-ei="${ei}" data-s="${si}" value="${st.w!==''&&st.w!=null?st.w:''}" placeholder="0" aria-label="Weight">
+      <input inputmode="decimal" data-f="w" data-ei="${ei}" data-s="${si}" value="${wv}" placeholder="${bwMove?'BW':'0'}" aria-label="${bwMove?'Added weight (blank = just bodyweight)':'Weight'}">
       <button data-step="w" data-d="1" data-ei="${ei}" data-s="${si}" aria-label="More weight">+</button></div>
     <div class="numwrap"><button data-step="r" data-d="-1" data-ei="${ei}" data-s="${si}" aria-label="Fewer reps">−</button>
       <input inputmode="numeric" data-f="r" data-ei="${ei}" data-s="${si}" value="${st.r!==''&&st.r!=null?st.r:''}" placeholder="0" aria-label="Reps">
