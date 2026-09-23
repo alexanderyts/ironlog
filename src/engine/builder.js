@@ -4,7 +4,7 @@ var IL=globalThis.IL||(globalThis.IL={});
 if(typeof require==='function'&&!IL.data)require('../data/exercises.js');
 if(typeof require==='function'&&!IL.prog)require('./progression.js');
 const {C,I,EXERCISES,EX,REGIONS,IDEAL_PATS,PAT_RANK,EQUIP_LOAD,LONG_LENGTH,INVERTED_LOAD,TIME_METRIC,UNILATERAL,regLabel,patLabel,hashId}=IL.data;
-const {lastPerf,lastModeFor,lastSideFor,trackOf,sidesOf,nextSets,deloadSets,repRange,modeOf,real,DAY,unitIncrement}=IL.prog;
+const {lastPerf,lastModeFor,lastSideFor,trackOf,sidesOf,scoreSet,sbw,nextSets,deloadSets,repRange,modeOf,real,DAY,unitIncrement}=IL.prog;
 
 // Working sets a movement deserves when you've never logged it: main lifts 4, other compounds 3,
 // isolation 3, finishers 2. Reps prefilled at the bottom of the target range.
@@ -21,7 +21,10 @@ function prescribedSets(ex){if(!ex)return 3;if(ex.type===C&&!(TIME_METRIC&&TIME_
 // brand-new lift with no load yet is left as-is; reps are carried from the prescription.
 function shapeStyle(sets,style,ex,unit){
   if(!sets.length)return sets;
-  const w=Math.max(...sets.map(s=>+s.w||0));
+  // the "top" set is the hardest one — for an assist machine that's the LEAST assist (full review 4.3:
+  // straight sets spread the most-assisted, i.e. easiest, set across every set)
+  const inv=!!(ex&&INVERTED_LOAD&&INVERTED_LOAD.has(ex.id));
+  const w=(inv?Math.min:Math.max)(...sets.map(s=>+s.w||0));
   if(w<=0)return sets;
   // straight = every set at the top weight AND the top set's reps. Carrying each set's own reps would
   // put a back-off set's reps on the top weight (200×5/180×8/180×8 → 200×8) — the v0.39.1 ramp bug's twin (#18).
@@ -52,7 +55,8 @@ function seedExercise(id,sessions,opts){
   // push:'quiet' — "just record": the rows mirror last time exactly, never a bump. Must agree with
   // suggestion(), which shows neutral text under quiet; a bumped row next to "Recorded" would lie.
   if(lp&&lp.sets.length)sets=(deload?deloadSets(lp.sets,ex,unit):push==='quiet'?lp.sets.map(s=>({w:+s.w||0,r:+s.r||0})):nextSets(lp.sets,ex,unit,goal?rr:undefined).sets).map(s=>({w:s.w,r:s.r,done:false}));
-  else{const n=prescribedSets(ex),r=ex?(deload?rr[1]:rr[0]):'';sets=Array.from({length:n},()=>({w:'',r:r,done:false}));}
+  // (a deload with no history: top of the range — except a timed hold, whose top is its HARDEST option)
+  else{const n=prescribedSets(ex),timed=!!(ex&&TIME_METRIC&&TIME_METRIC.has(id)),r=ex?(deload&&!timed?rr[1]:rr[0]):'';sets=Array.from({length:n},()=>({w:'',r:r,done:false}));}
   if(!deload&&setStyle)sets=shapeStyle(sets,setStyle,ex,unit);   // never reshape a deload — recovery has its own prescription
   if(deload&&sets.length>DELOAD_MAX_SETS)sets=sets.slice(0,DELOAD_MAX_SETS);   // a deload cuts volume as well as load
   if(extraSet&&!deload&&sets.length&&sets.length<MAX_SETS_PER_EX){const last=sets[sets.length-1];sets.push({w:last.w,r:last.r,done:false});}
@@ -402,7 +406,11 @@ function recentPerfs(sessions,exId,opts){
     let top,topR,score;
     if(inv){const minA=Math.min(...lp.sets.map(s=>+s.w||0));top=-minA;score=-minA;topR=Math.max(...lp.sets.filter(s=>(+s.w||0)===minA).map(s=>+s.r||0));}
     else if(time){const maxS=Math.max(...lp.sets.map(s=>+s.r||0));top=maxS;score=maxS;topR=maxS;}
-    else{top=Math.max(...lp.sets.map(s=>+s.w||0));topR=Math.max(...lp.sets.filter(s=>(+s.w||0)===top).map(s=>+s.r||0));score=Math.max(...lp.sets.map(s=>s.w>0?e1rm(s.w,s.r):s.r));}
+    // score = the ONE judge with that session's bodyweight: a pull-up at +10×6 is no longer "equal" to a
+    // bodyweight ×12 (the raw-weight maths ignored the bodyweight). With no bodyweight known it may fall
+    // back to reps — fine here, since a stall only ever compares a lift with itself (full review 4.1).
+    else{const b=sbw({bw:lp.bw},opts.bw);top=Math.max(...lp.sets.map(s=>+s.w||0));topR=Math.max(...lp.sets.filter(s=>(+s.w||0)===top).map(s=>+s.r||0));
+      score=Math.max(...lp.sets.map(s=>{const x=scoreSet(exId,s,b,{repsFallback:true});return x?x.score:0;}));}
     out.push({date:lp.date,score,top,topR});
     before=lp.date;
   }

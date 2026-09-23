@@ -54,12 +54,12 @@ test('P2: changing the data busts the memo — stats recompute and reflect the c
 test('P2: the live editor computes each card’s all-time PR once, not per set tick',()=>{
   const h=launch();
   try{
-    // seed history so bestE1rmBefore has something to scan, then start a fresh bench workout
+    // seed history so bestSetBefore has something to scan, then start a fresh bench workout
     const now=Date.now();
     h.state.sessions=[sess('h1',now-5*DAY,[[135,5]]),sess('h2',now-9*DAY,[[130,5]])];
     h.click('[data-action="startFlow"]');h.click('[data-action="blank"]');
     h.click('#btnAddEx');h.click(h.$$('#addResults [data-quickadd]').find(x=>x.dataset.quickadd==='barbell-bench-press'));
-    const be=countCalls(h.IL.prog,"bestE1rmBefore");
+    const be=countCalls(h.IL.prog,"bestSetBefore");   // the live PR now uses the one judge's bestSetBefore (memoized)
     // tick a set, untick, re-tick — several editor re-renders, same unchanged history
     const card=h.$$('#view .log-ex')[0];
     const wi=card.querySelector('input[data-f="w"]');wi.value='140';wi.dispatchEvent(new h.win.Event('input',{bubbles:true}));

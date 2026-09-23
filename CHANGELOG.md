@@ -2,6 +2,18 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.65.0 — 2026-09-22 · One way to judge progress
+Before this update, the progress chart, the PR list, the "New PR" banner, the coach's "trending up" note and the stall check each had their own rules for a good set, so they sometimes disagreed. They now all use the same rules.
+- **Assist machines (assisted pull-up / dip) count properly.** Less assist is progress. 40 lb assist × 12 is no longer replaced as your record by a later 40 × 5. The chart now goes up as the assist drops, even if you haven't entered your bodyweight. The "New PR" banner now shows for these too.
+- **Assist machines are planned around your hardest sets.** If you did 50 / 40 / 40 assist, the next plan goes by the 40s. The wording now says "earns 5 lb less assist" instead of "+5 lb".
+- **Moves you only count reps for** (hanging leg raises and similar) now get a PR, a progress chart in reps, and count toward "trending up".
+- **Timed holds (plank etc.)** say seconds ("hold a little longer", "45s"), never "add a rep". A recovery day uses the short end of the time range. They also get the "New PR" banner and show up in the workout summary.
+- **The stall check includes bodyweight.** A pull-up at bodyweight × 12 is no longer treated the same as +10 lb × 6.
+- **A set logged with 0 reps can't become a record.**
+- When two sets are equally good, the heavier one counts as the best. Your Barbell Curl chart now shows 50×6 instead of 40×15 for the same point.
+
+Not verified on-device.
+
 ## v0.64.0 — 2026-09-22 · Faster to change the plan mid-workout
 Logging a set was already one tap. This update makes *changing* the plan quick too.
 - **Change one set and the ones below follow.** Type 135 in set 1 and the sets that had the same number move with it. A ramp (80 / 90 / 100) or a pyramid keeps its shape, and ticked sets never change. The ± buttons work the same way.

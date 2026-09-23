@@ -486,20 +486,28 @@ function topSuggestionHTML(){
     <span class="ex-add" style="background:var(--accent-soft);flex-shrink:0">＋</span>
     <span style="text-align:left;min-width:0"><span style="font-weight:700;display:block">Suggested: ${esc(EX[s.id].name)}</span><span class="dim" style="font-size:12.5px">${esc(s.why)}</span></span></button>`;
 }
+// How a PR set reads, for any kind of lift (live banner + finish summary).
+function prText(e,st,kind){
+  const w=+st.w||0,r=+st.r||0,u=U(),ea=P.holdsOf(e)===2?'/ea':'',side=P.sidesOf(e)===2?'/side':'';
+  if(kind==='time')return (w?w+u+ea+' · ':'')+r+'s hold'+side;
+  if(kind==='resist'||kind==='assist')return (w?w+u+' assist':'unassisted')+' × '+r+side;
+  if(kind==='reps')return r+' reps'+side;
+  return w+u+ea+' × '+r+side;
+}
 function logExercise(s,e,ei,mode){
   const ex=EX[e.id];let sugg='',prLine='';const emode=modeOf(e);
   // etrack = the history this instance belongs to (equipment + "each side"); emode stays for labels
   const etrack=P.trackOf(e),holds=P.holdsOf(e),sides=P.sidesOf(e),wEa=holds===2?'/ea':'',rSide=sides===2?'/side':'';
-  // No live PR line for assist machines or time-held lifts: an e1RM comparison is backwards for the
-  // first (less weight = harder) and meaningless for the second (the "reps" are seconds), so it would
-  // miss real improvements AND flash fake ones. The Progress PR list ranks both correctly.
-  if(mode==='active'&&!s.deload&&!D.INVERTED_LOAD.has(e.id)&&!D.TIME_METRIC.has(e.id)){
-    // Live PR recognition: the session's best working set beating this lift's all-time best (same mode)
-    // Memoized: the all-time best is a full-history scan, and the completed session isn't in `sessions`
-    // yet, so it's identical for every set tick during a workout — compute it once per (lift, mode). (P2)
-    const histBest=memoStat('be1:'+e.id+':'+etrack+':'+s.id,()=>P.bestE1rmBefore(state.sessions,e.id,{mode:etrack,bw:bw(),excludeId:s.id}));
-    if(histBest>0){let best=0,bs=null;e.sets.forEach(st=>{if(st.warm||st.nc||!P.isWorking(st))return;const est=P.e1rm(P.setLoad(e.id,st.w,bw()),+st.r||0);if((+st.r)&&est>best){best=est;bs=st;}});
-      if(bs&&best>histBest)prLine=`<div class="sugg" style="color:var(--good);background:var(--good-soft)"><span>★ New PR — ${bs.w}${U()}${wEa} × ${bs.r}${rSide} <span class="dim">est ${Math.round(best)}${U()}</span></span></div>`;}
+  // Live PR line for EVERY kind of lift now — the one judge scores assist machines (less assist, then
+  // more reps), timed holds (seconds) and rep-only moves correctly; the old e1RM-only maths couldn't, so
+  // they used to be switched off here. Never on a deload.
+  if(mode==='active'&&!s.deload){
+    // Live PR recognition — the ONE judge (P.sessionPR), shared with the finish summary. Memoized: the
+    // all-time best is a full-history scan, and the in-progress session isn't in `sessions` yet, so it's
+    // identical for every set tick — computed once per (lift, track). (P2)
+    const hist=memoStat('be1:'+e.id+':'+etrack+':'+s.id,()=>P.bestSetBefore(state.sessions,e.id,{mode:etrack,bw:bw(),excludeId:s.id}));
+    const pr=P.sessionPR(state.sessions,e,s,bw(),hist);
+    if(pr)prLine=`<div class="sugg" style="color:var(--good);background:var(--good-soft)"><span>★ New PR — ${esc(prText(e,pr.set,pr.kind))}${pr.kind==='e1rm'?` <span class="dim">est ${Math.round(pr.score)}${U()}</span>`:''}</span></div>`;
   }
   if(mode==='active'&&s.deload){
     sugg=`<div class="sugg match" style="color:var(--good);background:var(--good-soft)"><span>🌿 Recovery set — easy load, full range</span></div>`;

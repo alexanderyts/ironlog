@@ -267,18 +267,22 @@ function trendCard(id){
   // The y-value's meaning depends on the lift: estimated 1RM for normal lifts, effective resistance
   // (bodyweight − assist) for assist machines, seconds for time-held lifts — so the label and unit
   // adapt, never printing "60 lb e1RM" for a plank.
-  const metric=series[0].metric||'e1rm';
-  const unit=metric==='time'?'s':U();
-  const label=metric==='time'?'Progress · hold':metric==='resist'?'Progress · resistance':'Progress · est. 1RM';
+  // (from the one judge: 'reps' for rep-only bodyweight moves; 'assist' for an assist machine with no
+  // bodyweight entered — its score is −assist, so it's shown as the assist, with "less" as progress)
+  const metric=series[series.length-1].metric||'e1rm';
+  const unit=metric==='time'?'s':metric==='reps'?' reps':U();
+  const label=metric==='time'?'Progress · hold':metric==='resist'?'Progress · resistance':metric==='assist'?'Progress · less assist':metric==='reps'?'Progress · reps':'Progress · est. 1RM';
   // A dip caused by the user setting their own record aside is not a decline, and must not be painted
   // like one. When the latest point is adjusted, the delta goes neutral and says why — that is the
   // whole point of the flag: going lighter on purpose should never read as losing ground.
   const adjusted=!!series[series.length-1].adj, anyAdj=series.some(p=>p.adj);
   const col=adjusted?'var(--ink-3)':delta>0?'var(--good)':delta<0?'var(--warn)':'var(--ink-3)';
-  const arrow=delta>0?'▲ +'+delta+unit:delta<0?'▼ '+Math.abs(delta)+unit:'— flat';
+  const asst=metric==='assist';   // shown as the assist itself; progress = LESS of it
+  const arrow=delta>0?(asst?'▲ '+delta+unit+' less':'▲ +'+delta+unit):delta<0?(asst?'▼ '+Math.abs(delta)+unit+' more':'▼ '+Math.abs(delta)+unit):'— flat';
+  const shown=asst?Math.abs(vals[vals.length-1])+unit+' assist':vals[vals.length-1]+unit;
   return `<div class="card" style="padding:14px 15px;margin:0 0 12px">
     <div class="row-between" style="margin-bottom:9px"><span class="eyebrow">${label}</span>
-      <span class="mono" style="font-weight:700;color:${col}">${vals[vals.length-1]}${unit} <span style="font-size:12px">${arrow}</span></span></div>
+      <span class="mono" style="font-weight:700;color:${col}">${shown} <span style="font-size:12px">${arrow}</span></span></div>
     <svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" preserveAspectRatio="none" style="display:block;overflow:visible">
       <path d="${d}" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
       <circle cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="3.5" fill="${adjusted?'var(--ink-3)':'var(--accent)'}"/></svg>

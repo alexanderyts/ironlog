@@ -61,14 +61,10 @@ function confirmUnchecked(s,commit){
 // Recap of a just-finished session, computed BEFORE it's saved (so history = prior sessions).
 function workoutSummary(s){
   const prs=[];
-  s.exercises.forEach(e=>{
-    // An e1RM comparison is meaningless for an assist machine (less weight = harder) and for a
-    // time-held lift ("reps" are seconds) — it would both miss real improvements and invent fake ones.
-    // The Progress PR list ranks those correctly; here we simply stay quiet rather than lie.
-    if(D.INVERTED_LOAD.has(e.id)||D.TIME_METRIC.has(e.id))return;
-    const etrack=P.trackOf(e);const histBest=P.bestE1rmBefore(state.sessions,e.id,{mode:etrack,bw:bw(),excludeId:s.id});if(histBest<=0)return;
-    let best=0,bs=null;e.sets.forEach(st=>{if(st.warm||st.nc||!P.isWorking(st))return;const est=P.e1rm(P.setLoad(e.id,st.w,bw()),+st.r||0);if((+st.r)&&est>best){best=est;bs=st;}});
-    if(bs&&best>histBest)prs.push({id:e.id,name:EX[e.id]?EX[e.id].name:e.name,w:bs.w,r:bs.r,perHand:P.holdsOf(e)===2,perSide:P.sidesOf(e)===2});});
+  // The ONE judge (P.sessionPR) — the same check as the live banner, for every kind of lift (assist
+  // machines, holds and rep-only moves were switched off here under the old e1RM-only maths)
+  s.exercises.forEach(e=>{const pr=P.sessionPR(state.sessions,e,s,bw());
+    if(pr)prs.push({id:e.id,name:EX[e.id]?EX[e.id].name:e.name,text:prText(e,pr.set,pr.kind)});});
   return {sets:setsOf(s),vol:volOf(s),prs,deload:!!s.deload,dur:P.sessionDuration(s),estimated:!!s.endEstimated};
 }
 function showSummary(sm){
@@ -80,7 +76,7 @@ function showSummary(sm){
     body+=`<div class="card" style="padding:14px 15px;background:var(--good-soft);border:1px solid color-mix(in srgb,var(--good) 30%,transparent)"><div style="color:var(--good);font-weight:600;font-size:13.5px">🌿 Recovery in the bank</div><div class="dim" style="font-size:12.5px;margin-top:3px">Fatigue's clearing — ease back to full loads when you feel fresh. This won't affect your progression.</div></div>`;
   }else if(sm.prs.length){
     body+=`<div class="eyebrow" style="margin:2px 2px 8px">🎉 New personal record${sm.prs.length>1?'s':''}</div>
-      <div class="card list">${sm.prs.map(p=>`<div class="ex-row"><span style="color:var(--good);font-size:18px;flex-shrink:0">★</span><div style="flex:1;min-width:0"><div class="ex-name">${esc(p.name)}</div><div class="ex-sub">${p.w}${U()}${p.perHand?'/ea':''} × ${p.r}${p.perSide?'/side':''}</div></div>
+      <div class="card list">${sm.prs.map(p=>`<div class="ex-row"><span style="color:var(--good);font-size:18px;flex-shrink:0">★</span><div style="flex:1;min-width:0"><div class="ex-name">${esc(p.name)}</div><div class="ex-sub">${esc(p.text)}</div></div>
         <button class="btn sm ghost" data-prmark="${p.id}" data-insummary="1" style="flex-shrink:0">Wasn’t clean</button></div>`).join('')}</div>`;
   }else{
     body+=`<div class="dim" style="font-size:13.5px;line-height:1.5;padding:0 2px">Logged and saved. Consistency is what moves the numbers — every session counts.</div>`;

@@ -127,7 +127,7 @@ function lastPerf(sessions,exId,opts){
     // falls through to the one before it — the fallback chain costs no extra code.
     const perfSet=st=>isWorking(st)&&(+st.r||0)>0&&!(opts.clean&&st.nc);
     const e=s.exercises.find(x=>x.id===exId&&(!opts.mode||trackOf(x)===opts.mode)&&x.sets.some(perfSet));
-    if(e)return{date:s.date,mode:modeOf(e),sets:e.sets.filter(perfSet).map(st=>({w:+st.w||0,r:+st.r||0})),note:e.note||''};
+    if(e)return{date:s.date,mode:modeOf(e),sets:e.sets.filter(perfSet).map(st=>({w:+st.w||0,r:+st.r||0})),note:e.note||'',bw:s.bw};   // bw: that session's bodyweight, for scoring it
   }
   return null;
 }
@@ -135,13 +135,44 @@ function lastPerf(sessions,exId,opts){
 // line, a stall check, or "lifts trending up" can compare sessions without special-casing at each call
 // site. Assist machines (INVERTED_LOAD): effective resistance = bodyweight − assist (needs bw; 0 until
 // set). Time-held lifts (TIME_METRIC): seconds held. Everything else: estimated 1RM.
-function setScore(exId,st,bw){
-  const w=+st.w||0,r=+st.r||0;
-  if(INVERTED_LOAD&&INVERTED_LOAD.has(exId))return Math.max(0,(+bw||0)-w);
-  if(TIME_METRIC&&TIME_METRIC.has(exId))return r;
-  return e1rm(setLoad(exId,w,bw),r);
+/* ── ONE JUDGE (full review 4.1) ─────────────────────────────────────────────────────────────────
+   Every feature that asks "was this set better?" — the progress chart, the PR board, the live "New PR"
+   banner, the coach's "trending up" and the stall check — asks HERE. They used to carry five separate
+   rulebooks and contradicted each other (and the bugs lived in the gaps). scoreSet returns
+   {score, tie, kind} where a HIGHER score is BETTER for that kind of lift, the tiebreak decides equal
+   scores, or null when the set is no evidence of anything (no reps; a loaded lift with no load).
+     e1rm   — a loaded lift: estimated 1RM of (weight + any bodyweight share). Tie: the load.
+     resist — assist machine: effective resistance, bodyweight − assist. Tie: MORE reps (40 lb assist
+              ×12 beats 40×5 — it used to be a coin flip).
+     assist — the same machine with no bodyweight known: −assist, so less assist still reads as up.
+     time   — timed hold / carry: seconds. Tie: load.
+     reps   — a bodyweight move with no bodyweight share to compute (hanging leg raise, Nordic, ab
+              wheel…): reps, when no weight is added (with added weight it's judged like a loaded lift).
+   A bodyweight-share lift (pull-up, dip, push-up) with no bodyweight entered can't be scored as a load:
+   it's null (no fake PR) unless opts.repsFallback — the stall check, which only compares a lift with
+   ITSELF, may fall back to reps. */
+function liftKind(exId){
+  if(INVERTED_LOAD&&INVERTED_LOAD.has(exId))return 'resist';
+  if(TIME_METRIC&&TIME_METRIC.has(exId))return 'time';
+  const ex=EX[exId];
+  if(ex&&ex.equip==='Bodyweight'&&!(BW_FACTOR&&BW_FACTOR[exId]))return 'reps';
+  return 'e1rm';
 }
-function scoreMetric(exId){return (INVERTED_LOAD&&INVERTED_LOAD.has(exId))?'resist':(TIME_METRIC&&TIME_METRIC.has(exId))?'time':'e1rm';}
+function scoreSet(exId,st,bw,opts){
+  const w=+st.w||0,r=+st.r||0;if(r<=0)return null;
+  const kind=liftKind(exId);
+  if(kind==='resist'){const b=+bw||0;return b>0?{score:Math.max(0,b-w),tie:r,kind:'resist'}:{score:-w,tie:r,kind:'assist'};}
+  if(kind==='time')return{score:r,tie:w,kind};
+  if(kind==='reps'&&w<=0)return{score:r,tie:0,kind};
+  const load=setLoad(exId,w,bw);
+  if(load<=0)return opts&&opts.repsFallback?{score:r,tie:0,kind:'reps'}:null;
+  return{score:e1rm(load,r),tie:load,kind:'e1rm'};
+}
+// a beats b: a higher score, or an equal score with the better tiebreak. (b null = nothing to beat.)
+function beatsScore(a,b){return !!a&&(!b||a.score>b.score||(a.score===b.score&&a.tie>b.tie));}
+// Kept for callers that want just the number (0 for a set that isn't evidence).
+function setScore(exId,st,bw){const s=scoreSet(exId,st,bw);return s?s.score:0;}
+function scoreMetric(exId){return liftKind(exId);}
 // Which plates go on EACH side of the bar to reach `total`, greedily from the largest standard plate.
 // `leftover` is any per-side amount that no standard plate can make (an odd micro-amount).
 const PLATES={lb:[45,35,25,10,5,2.5],kg:[25,20,15,10,5,2.5,1.25]};
@@ -156,7 +187,7 @@ function platesPerSide(total,bar,unit){
 // y-value is setScore (e1RM for normal lifts, effective resistance for assist machines, seconds for
 // holds), so the line always rises with real progress. opts: {mode, bw, limit}
 function exerciseSeries(sessions,exId,opts){
-  opts=opts||{};const bw=opts.bw||0,out=[],metric=scoreMetric(exId);
+  opts=opts||{};const bw=opts.bw||0,out=[];
   for(const s of real(sessions)){
     const e=s.exercises.find(x=>x.id===exId&&(!opts.mode||trackOf(x)===opts.mode));
     if(!e)continue;
@@ -165,32 +196,49 @@ function exerciseSeries(sessions,exId,opts){
     // the point is never DROPPED: if that session has no clean set at all it still plots, flagged, so
     // the history stays visible. `adj` tells the view to mark the point "PR adjusted".
     const b=sbw(s,bw);   // score each session by ITS bodyweight (D-1)
-    let best=-1,w=0,r=0,ncBest=-1,ncW=0,ncR=0;   // -1 so a legitimate score of 0 (e.g. assist == bodyweight) still plots
+    // the one judge (scoreSet): junk sets are null and don't plot; an unassisted rep, a bodyweight hold
+    // and a rep-only bodyweight move all DO
+    let best=null,bs=null,nc=null,ncs=null;
     e.sets.forEach(st=>{if(!isWorking(st))return;
-      const r0=+st.r||0,load=setLoad(exId,st.w,b);
-      if(!r0||(!load&&metric!=='time'&&metric!=='resist'))return;   // same "real set" gate as personalRecords — junk (0-rep / no-load non-time) sets don't plot; but an assist machine at load 0 is an unassisted rep and DOES plot
-      const sc=setScore(exId,st,b);
-      if(st.nc){if(sc>ncBest){ncBest=sc;ncW=+st.w||0;ncR=+st.r||0;}return;}
-      if(sc>best){best=sc;w=+st.w||0;r=+st.r||0;}});
-    if(best>=0)out.push({date:s.date,est:best,w,r,metric,adj:ncBest>best||undefined});
-    else if(ncBest>=0)out.push({date:s.date,est:ncBest,w:ncW,r:ncR,metric,adj:true});
+      const sc=scoreSet(exId,st,b);if(!sc)return;
+      if(st.nc){if(beatsScore(sc,nc)){nc=sc;ncs=st;}return;}
+      if(beatsScore(sc,best)){best=sc;bs=st;}});
+    if(best)out.push({date:s.date,est:best.score,w:+bs.w||0,r:+bs.r||0,metric:best.kind,adj:(nc&&beatsScore(nc,best))||undefined});
+    else if(nc)out.push({date:s.date,est:nc.score,w:+ncs.w||0,r:+ncs.r||0,metric:nc.kind,adj:true});
   }
   out.sort((a,b)=>a.date-b.date);
   return opts.limit?out.slice(-opts.limit):out;
 }
 // Best estimated 1RM for an exercise+mode across real sessions strictly before beforeTs (for live PR
 // detection). opts: {mode, bw, beforeTs, excludeId}
-function bestE1rmBefore(sessions,exId,opts){
-  opts=opts||{};const bw=opts.bw||0;let best=0;
+// The best set ever done on this lift (same track), judged by the one scorer: {score,tie,kind} or null
+// if there's no history. Real sessions only (a deload is never the bar); a disowned set (st.nc) is not
+// a bar the next PR has to clear; a 0-rep junk set no longer counts (225×0 used to read as a 225 best).
+function bestSetBefore(sessions,exId,opts){
+  opts=opts||{};const bw=opts.bw||0;let best=null;
   for(const s of real(sessions)){
     if(opts.excludeId&&s.id===opts.excludeId)continue;
     if(opts.beforeTs&&s.date>=opts.beforeTs)continue;
     const e=s.exercises.find(x=>x.id===exId&&(!opts.mode||trackOf(x)===opts.mode));
     if(!e)continue;
     const b=sbw(s,bw);   // each session scored by its own bodyweight (D-1)
-    e.sets.forEach(st=>{if(st.nc||!isWorking(st))return;const est=e1rm(setLoad(exId,st.w,b),+st.r||0);if(est>best)best=est;});   // a disowned set is not a bar the next PR has to clear
+    e.sets.forEach(st=>{if(st.nc||!isWorking(st))return;const sc=scoreSet(exId,st,b);if(beatsScore(sc,best))best=sc;});
   }
   return best;
+}
+// The number only (kept for callers/tests that want it): the best score, 0 with no history.
+function bestE1rmBefore(sessions,exId,opts){const b=bestSetBefore(sessions,exId,opts);return b?b.score:0;}
+// The live "New PR": this exercise's best set IN THIS SESSION, if it beats every earlier session on the
+// same track. Shared by the editor banner and the finish summary (it used to be copy-pasted in both, and
+// switched off for assist machines and holds because the old maths couldn't judge them). Warm-ups and
+// disowned sets never count; a first-ever time isn't a "PR" (nothing to beat). `hist` lets a caller pass
+// a memoized bestSetBefore. Returns {set, score, kind} or null.
+function sessionPR(sessions,e,session,bw,hist){
+  const h=hist!==undefined?hist:bestSetBefore(sessions,e.id,{mode:trackOf(e),bw,excludeId:session&&session.id});
+  if(!h)return null;
+  const b=sbw(session,bw);let best=null,bs=null;
+  e.sets.forEach(st=>{if(st.warm||st.nc||!isWorking(st))return;const sc=scoreSet(e.id,st,b);if(beatsScore(sc,best)){best=sc;bs=st;}});
+  return best&&beatsScore(best,h)?{set:bs,score:best.score,kind:best.kind}:null;
 }
 // The modality used the last time this exercise was logged (for "remembering" the user's choice);
 // null if it's never been logged or was logged in its default mode. Intentionally NOT real(): a
@@ -263,10 +311,13 @@ const sameW=(a,b)=>Math.abs((+a||0)-(+b||0))<1e-6;
 function roundTo(w,grid){return Math.round(w/grid)*grid;}
 
 // Classifies working sets. Returns {pattern, anchor:[indices], top:maxWeight}
-function setPattern(sets){
+// `inverted` (assist machines): the HARDEST set is the one with the LEAST assist, so that's the "top"
+// the plan is built around. Anchoring on the heaviest number meant anchoring on the EASIEST set —
+// 50×12 / 40×8 / 40×8 took assist off the 40s though they missed the range (full review 4.3).
+function setPattern(sets,inverted){
   const w=sets.map(s=>+s.w||0);
   if(!w.length)return{pattern:'flat',anchor:[],top:0};
-  const top=Math.max(...w);
+  const top=inverted?Math.min(...w):Math.max(...w);
   const anchor=w.map((x,i)=>sameW(x,top)?i:-1).filter(i=>i>=0);
   if(anchor.length===w.length)return{pattern:'flat',anchor,top};
   let up=true,down=true;
@@ -303,7 +354,7 @@ function nextSets(last,ex,unit,rr){
   const lo=rr?rr[0]:(ex?ex.rr[0]:8),hi=rr?rr[1]:(ex?ex.rr[1]:12),baseInc=unitIncrement(unit||'lb',ex);
   const resetR=(hi-lo>=4)?lo+1:lo;   // on a wide range, resetting to the very bottom drops too many reps — start one above (#11)
   const inverted=!!(ex&&INVERTED_LOAD&&INVERTED_LOAD.has(ex.id)),inc=inverted?-baseInc:baseInc;   // assist machines: LESS weight is harder, so a bump REDUCES load (#16)
-  const p=setPattern(last);
+  const p=setPattern(last,inverted);   // an assist machine is anchored on its HARDEST (least-assist) sets
   const anchorSets=p.anchor.map(i=>last[i]);
   const short=anchorSets.reduce((n,s)=>n+Math.max(0,hi-(+s.r||0)),0);
   const under=anchorSets.some(s=>(+s.r||0)<lo);
@@ -330,7 +381,11 @@ function nextSets(last,ex,unit,rr){
    Bodyweight moves stay bodyweight (just do easy, controlled reps). Because lastPerf skips deloads,
    this pulls from the last REAL session, and the deload itself never becomes a progression anchor. */
 function deloadSets(last,ex,unit){
-  const hi=ex?ex.rr[1]:12,inc=unitIncrement(unit||'lb',ex);
+  // A recovery set is lighter load at the TOP of the rep range — but for a timed hold the top of the
+  // range is the HARDEST option (a 60 s plank on a "recovery" day). Timed work deloads to the bottom
+  // of its range instead (full review 4.7).
+  const timed=!!(ex&&TIME_METRIC&&TIME_METRIC.has(ex.id));
+  const hi=ex?(timed?ex.rr[0]:ex.rr[1]):12,inc=unitIncrement(unit||'lb',ex);
   // On an assist machine (#16) less weight is HARDER, so a deload must ADD assist, not cut it —
   // otherwise "recovery" prescribes a harder set than last time. ~40% MORE assist, on the grid.
   const inverted=!!(ex&&INVERTED_LOAD&&INVERTED_LOAD.has(ex.id));
@@ -348,12 +403,14 @@ function suggestion(sessions,exId,opts){
   const scope={beforeTs:opts.activeDate,excludeId:opts.activeId,mode:opts.mode,clean:true};   // never suggest off a set the user disowned
   const lp=lastPerf(sessions,exId,scope);
   const ex=EX[exId];
+  // timed holds talk in seconds ("2×60s/60s", "hold longer"), not reps (full review 4.7)
+  const timed=!!(TIME_METRIC&&TIME_METRIC.has(exId)),rsuf=timed?'s':'',unitWord=n=>timed?(n===1?'second':'seconds'):(n===1?'rep':'reps');
   if(!lp||!lp.sets.length){
     const dl=lastPerf(sessions,exId,Object.assign({},scope,{includeDeload:true}));
-    if(dl)return{lp:null,kind:'new',text:'No full session yet — your last deload here was '+fmtPerf(dl.sets,unit)+'. Set your baseline.',next:null,deloadRef:dl};
+    if(dl)return{lp:null,kind:'new',text:'No full session yet — your last deload here was '+fmtPerf(dl.sets,unit,rsuf)+'. Set your baseline.',next:null,deloadRef:dl};
     return{lp:null,kind:'new',text:'First time logging this — set your baseline.',next:null};
   }
-  const setsStr=fmtPerf(lp.sets,unit),inc=unitIncrement(unit,ex);
+  const setsStr=fmtPerf(lp.sets,unit,rsuf),inc=unitIncrement(unit,ex);
   // push:'quiet' (Profile P2) — the user asked the app to just record, never suggest heavier. Mirror
   // last time as-is: no bump, neutral wording. The prescription still carries last time's numbers so
   // they aren't retyped; the coach simply stops nudging.
@@ -365,16 +422,18 @@ function suggestion(sessions,exId,opts){
   if(n.bumped){
     // the REAL bump can differ from `inc` when the last top was off-grid (after a unit conversion) and
     // got snapped before adding — so report newTop − lastTop, not inc, or the label lies (#11/#29)
-    const lastTop=Math.max(...lp.sets.map(s=>+s.w||0)),bump=+(n.newTop-lastTop).toFixed(2);
+    const lastTop=(inverted?Math.min:Math.max)(...lp.sets.map(s=>+s.w||0)),bump=+(n.newTop-lastTop).toFixed(2);   // assist: measured from the hardest (least-assist) set
     const text=inverted?(n.newTop>0?`Hit top reps — prefilled ${+(lastTop-n.newTop).toFixed(2)}${unit} less assist`:'Hit top reps with no assist — try an unassisted rep next')
               :ramp?`${n.pattern==='descending'?'Opener':'Top set'} hit the range — ${topLbl} prefilled at ${n.newTop}${unit}, the rest shifted up`
                    :`Hit top reps last time — prefilled +${bump}${unit}`;
     return{lp,kind:'weight',pattern:n.pattern,text,setsStr,next:n.sets};
   }
-  if(!n.weighted)return{lp,kind:n.short===0?'reps':'match',pattern:n.pattern,text:n.short===0?'Hit top reps — add a rep or some load':'Beat last time',setsStr,next:n.sets};
-  if(n.under)return{lp,kind:'match',pattern:n.pattern,text:`Fell under the range on the ${ramp?topLbl:'work sets'} — stay at ${Math.max(...lp.sets.map(s=>s.w))}${unit} and own it`,setsStr,next:n.sets};
+  if(!n.weighted)return{lp,kind:n.short===0?'reps':'match',pattern:n.pattern,text:n.short===0?(timed?'Hit the top of your hold range — hold a little longer or add some load':'Hit top reps — add a rep or some load'):'Beat last time',setsStr,next:n.sets};
+  // an assist machine's working weight is its LEAST assist, and its progress is LESS assist (full review 4.3)
+  const workW=inverted?Math.min(...lp.sets.map(s=>+s.w||0)):Math.max(...lp.sets.map(s=>+s.w||0));
+  if(n.under)return{lp,kind:'match',pattern:n.pattern,text:`Fell under the range on the ${ramp?topLbl:'work sets'} — stay at ${workW}${unit}${inverted?' assist':''} and own it`,setsStr,next:n.sets};
   const where=ramp?` on your ${topLbl}`:'';
-  return{lp,kind:'match',pattern:n.pattern,text:`${n.short} more rep${n.short===1?'':'s'}${where} earns +${inc}${unit}`,setsStr,next:n.sets};
+  return{lp,kind:'match',pattern:n.pattern,text:`${n.short} more ${unitWord(n.short)}${where} earns ${inverted?inc+unit+' less assist':'+'+inc+unit}`,setsStr,next:n.sets};
 }
 
 // lb <-> kg. kg keeps 0.1 resolution and lb 0.25, so any lb value on a quarter-pound grid
@@ -425,5 +484,5 @@ function calcStreak(sessions,now){
   return n;
 }
 
-IL.prog={DAY,startOfDay,e1rm,isWorking,setLoad,sbw,sessionVolume,sessionSets,sessionDuration,MAX_SESSION_MIN,setTimeline,lastSetAt,staleness,STALE_AFTER_MIN,LONG_SESSION_MIN,STALE_CONFIRM_MIN,END_PAD_MIN,finalizeSets,parseWeightInput,fmtVol,modeOf,real,lastPerf,lastModeFor,exerciseSeries,setScore,scoreMetric,platesPerSide,sidesOf,holdsOf,sideMult,trackOf,sideDefault,lastSideFor,lastTrackFor,bestE1rmBefore,setPattern,fmtPerf,repRange,nextSets,deloadSets,suggestion,unitIncrement,setWeightSteps,convertWeight,convertSessions,calcStreak,weekIndex,weekStart};
+IL.prog={DAY,startOfDay,e1rm,isWorking,setLoad,sbw,sessionVolume,sessionSets,sessionDuration,MAX_SESSION_MIN,setTimeline,lastSetAt,staleness,STALE_AFTER_MIN,LONG_SESSION_MIN,STALE_CONFIRM_MIN,END_PAD_MIN,finalizeSets,parseWeightInput,fmtVol,modeOf,real,lastPerf,lastModeFor,exerciseSeries,setScore,scoreMetric,liftKind,scoreSet,beatsScore,bestSetBefore,sessionPR,platesPerSide,sidesOf,holdsOf,sideMult,trackOf,sideDefault,lastSideFor,lastTrackFor,bestE1rmBefore,setPattern,fmtPerf,repRange,nextSets,deloadSets,suggestion,unitIncrement,setWeightSteps,convertWeight,convertSessions,calcStreak,weekIndex,weekStart};
 if(typeof module!=='undefined')module.exports=IL.prog;

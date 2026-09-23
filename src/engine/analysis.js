@@ -3,7 +3,7 @@ var IL=globalThis.IL||(globalThis.IL={});
 if(typeof require==='function'&&!IL.data)require('../data/exercises.js');
 if(typeof require==='function'&&!IL.prog)require('./progression.js');
 const {EX,EXERCISES,REGIONS,IDEAL_PATS,LOWER_GROUPS,MODES,INVERTED_LOAD,TIME_METRIC,regLabel,patLabel,exampleFor,hashId}=IL.data;
-const {DAY,startOfDay,e1rm,isWorking,setLoad,setScore,sbw,sessionVolume,sessionSets,sessionDuration,setTimeline,modeOf,trackOf,holdsOf,sidesOf,calcStreak,real,weekIndex,weekStart,lastPerf}=IL.prog;
+const {DAY,startOfDay,e1rm,isWorking,setLoad,setScore,scoreSet,beatsScore,sbw,sessionVolume,sessionSets,sessionDuration,setTimeline,modeOf,trackOf,holdsOf,sidesOf,calcStreak,real,weekIndex,weekStart,lastPerf}=IL.prog;
 
 // completed() INCLUDES deloads on purpose — volume/frequency/PR-window analysis wants everything the
 // user actually did. Progression-only scans use real() (completed AND not a deload) instead.
@@ -51,8 +51,12 @@ function progressionStat(sessions,now,bw){
   now=now||Date.now();
   const done=real(sessions).filter(s=>s.date>=now-28*DAY&&s.date<now).sort((x,y)=>x.date-y.date);
   const byEx={};
-  done.forEach(s=>{const b=sbw(s,bw);s.exercises.forEach(e=>{const best=Math.max(0,...e.sets.filter(st=>!st.nc&&isWorking(st)).map(st=>setScore(e.id,st,b)));const k=e.id+':'+trackOf(e);if(best)(byEx[k]=byEx[k]||[]).push(best);});});   // per lift AND track — Smith 100 → dumbbell 40 is not "going down"
-  let n=0,up=0;Object.values(byEx).forEach(arr=>{if(arr.length>=2){n++;if(arr[arr.length-1]>arr[0])up++;}});
+  // the one judge (scoreSet): a leg raise adding reps, a plank held longer, an assist machine with less
+  // assist all count as improving (they used to be invisible here); per lift AND track (Smith ≠ dumbbells)
+  done.forEach(s=>{const b=sbw(s,bw);s.exercises.forEach(e=>{let best=null;
+    e.sets.forEach(st=>{if(st.nc||!isWorking(st))return;const sc=scoreSet(e.id,st,b);if(beatsScore(sc,best))best=sc;});
+    const k=e.id+':'+trackOf(e);if(best)(byEx[k]=byEx[k]||[]).push(best);});});
+  let n=0,up=0;Object.values(byEx).forEach(arr=>{if(arr.length>=2){n++;if(beatsScore(arr[arr.length-1],arr[0]))up++;}});
   return {n,up};
 }
 function gapPrio(g,r){return {'Shoulders:rear':5,'Chest:upper':4,'Hamstrings:overall':4,'Back:lats':3,'Chest:lower':2,'Triceps:long':2}[g+':'+r]||1;}
@@ -317,32 +321,31 @@ function buildHints(sessions,now,bw,profile){
 // is meaningful (barbell/smith/bodyweight) — cable/machine stacks show load instead of a bogus 1RM.
 function personalRecords(sessions,bw,limit){
   const best={},set_aside={};
-  // Ranking rule for a key, shared by the live best and the set-aside best so they can't drift apart
-  // Time-held: longest hold first, heavier load as the tiebreak — matches setScore (seconds) so the PR
-  // card and the progress trend never disagree about the same lift (a weighted carry included).
-  const beats=(c,b,inverted,time)=>inverted?(!b||c.load<b.load):time?(!b||c.r>b.r||(c.r===b.r&&c.load>b.load)):(!b||c.est>b.est);
+  // Ranking = the ONE judge (progression.scoreSet/beatsScore) — the same rule as the progress chart,
+  // the live "New PR" and the coach, so the PR board can never contradict them (full review 4.1).
+  // Assist machines: least assist, then MORE reps (40×12 beats a later 40×5 — 4.4). Timed: longest,
+  // then heaviest. Rep-only bodyweight moves (leg raise, Nordic…): most reps — they had no PR at all (4.5).
+  // A pull-up with no bodyweight set is still not a record (it can't be scored — analysis.test.js:112).
+  const beats=(c,b)=>beatsScore(c,b);
   real(sessions).forEach(s=>{const sb=sbw(s,bw);s.exercises.forEach(e=>{const mode=modeOf(e),track=trackOf(e),key=e.id+':'+track,ex=EX[e.id];   // one record per lift per TRACK: a one-arm cable curl never competes with the two-hand bar
     const holds=holdsOf(e),sides=sidesOf(e);
-    const inverted=!!(ex&&INVERTED_LOAD&&INVERTED_LOAD.has(e.id));   // assist machine: the PR is the LEAST assist, and no 1RM estimate (#16)
-    const time=!!(TIME_METRIC&&TIME_METRIC.has(e.id));   // time-held: "reps" are seconds → no 1RM; best = longest, then heaviest
+    const inverted=!!(ex&&INVERTED_LOAD&&INVERTED_LOAD.has(e.id));   // assist machine: no 1RM estimate (#16)
+    const time=!!(TIME_METRIC&&TIME_METRIC.has(e.id));   // time-held: "reps" are seconds → no 1RM
     e.sets.forEach(st=>{
     if(!isWorking(st))return;const w=setLoad(e.id,st.w,sb),r=+st.r||0;   // sb = this session's bodyweight (D-1)
-    // A time-held lift is a real record at load 0 (a bodyweight plank), and an assist machine at load 0
-    // is an UNASSISTED rep — the strongest possible, so it must qualify too. Only an ordinary lift needs
-    // a real load (a pull-up with no bodyweight set stays out — analysis.test.js:112).
-    if(!r||(!w&&!time&&!inverted))return;
+    const sc=scoreSet(e.id,st,sb);if(!sc)return;   // not evidence of anything (0 reps / no load)
     const est=e1rm(w,r);
-    const cand={w:+st.w||0,load:w,r,est,date:s.date};
+    const cand={w:+st.w||0,load:w,r,est,score:sc.score,tie:sc.tie,kind:sc.kind,date:s.date};
     // "Doesn't count as a record" (#PR-adjust): the user has disowned this rep, so it can never BE the
     // PR — but it is remembered here so the row can show what was set aside. The set itself is
     // untouched everywhere else: it still counts for volume, sets-per-muscle, rest and history.
-    if(st.nc){if(beats(cand,set_aside[key],inverted,time))set_aside[key]=cand;return;}
-    const showEst=!!ex&&ex.type==='compound'&&!inverted&&!time&&!!(MODES[mode]&&MODES[mode].e1rm);
-    if(beats(cand,best[key],inverted,time))best[key]={id:e.id,mode,track,holds,sides,w:cand.w,load:w,r,est,name:ex?ex.name:e.name,date:s.date,compound:!!ex&&ex.type==='compound',showEst,inverted,time,bodyweight:mode==='bodyweight'};
+    if(st.nc){if(beats(cand,set_aside[key]))set_aside[key]=cand;return;}
+    const showEst=!!ex&&ex.type==='compound'&&!inverted&&!time&&sc.kind==='e1rm'&&!!(MODES[mode]&&MODES[mode].e1rm);
+    if(beats(cand,best[key]))best[key]={id:e.id,mode,track,holds,sides,w:cand.w,load:w,r,est,score:sc.score,tie:sc.tie,kind:sc.kind,name:ex?ex.name:e.name,date:s.date,compound:!!ex&&ex.type==='compound',showEst,inverted,time,bodyweight:mode==='bodyweight'};
   })})});
   // Attach the set-aside set only where it WOULD have been the PR — marking an ordinary set says nothing
   Object.keys(best).forEach(k=>{const a=set_aside[k],b=best[k];
-    if(a&&beats(a,b,b.inverted,b.time))b.adjusted={w:a.w,r:a.r,date:a.date};});
+    if(a&&beats(a,b))b.adjusted={w:a.w,r:a.r,date:a.date};});
   // e1RM-comparable lifts first (by e1RM); the rest after, by load
   return Object.values(best).sort((a,b)=>(b.showEst-a.showEst)||(a.showEst?b.est-a.est:b.load-a.load)).slice(0,limit||8);
 }
