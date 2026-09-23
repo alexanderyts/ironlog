@@ -2,6 +2,17 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.69.0 — 2026-09-22 · Pick your own record
+Instead of "That rep wasn't clean" and "Count it again", every lift now has **Your record** with a **Change** button.
+- **Change** lists your best set from each recent workout of that lift, newest first. Your best is ticked by default. Tap another one and it becomes your record.
+- **What that does:** sets better than your pick stop counting as records and stop setting your next weights. They stay in your history and your volume. Beat your pick later and that becomes your new record as usual.
+- **Your case, e.g. face pulls:** seated at 75, standing at 25. Pick the standing 25 × 15 and your next workout starts near 25. The chart also stops showing a fake crash from 75 to 25, because workouts done a different way are left off the trend line.
+- The record then reads "Your pick · best logged 75 lb × 12", with **Use best** to switch back.
+- **Finish screen:** a new PR has a **Don't count this** button, which keeps your previous record. The first time you see a PR, there's one line explaining that PR means personal record.
+- **For first-time users:** the record card has a short one-time explanation of what a record is and when to change it.
+
+Not verified on-device.
+
 ## v0.68.0 — 2026-09-22 · A clearer Progress tab and coach
 The Progress tab now answers three questions, in this order: am I getting stronger, what should I work on, and is each muscle getting enough?
 - **Your lifts (new, at the top).** Every lift from the last 4 weeks has one status: ★ New PR, ▲ Improving, ⏸ Stuck, → Holding, or First time. Each row shows your latest set and what it was before ("155 lb × 8 · was 145 × 8"). "Stuck" uses the same test the workout builder uses. Tap a row to see its chart.

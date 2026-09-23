@@ -136,7 +136,7 @@ function prTip(){
   if(seenFlag('prAdjustTip'))return '';
   if(!memoStat('prAll',()=>A.personalRecords(state.sessions,bw(),999)).length)return '';   // nothing to tap yet — don't tell a new user to tap a record
   return `<div class="card" style="padding:11px 14px;margin:0 0 9px;background:var(--surface-2);border:none;display:flex;gap:10px;align-items:center">
-    <div class="dim" style="font-size:12.5px;line-height:1.45;flex:1">Tap a record for its trend — or set it aside if the form wasn’t there.</div>
+    <div class="dim" style="font-size:12.5px;line-height:1.45;flex:1">Tap a lift for its trend, or to change which set counts as your record.</div>
     <button class="linkbtn dim" data-seentip="prAdjustTip" style="font-size:12px;padding:2px 4px;flex-shrink:0">Got it</button></div>`;
 }
 const CHEV_R='<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color:var(--ink-3)"><path d="M9 6l6 6-6 6"/></svg>';
@@ -155,7 +155,7 @@ function prList(){
   const modeTag=p=>{const ex=EX[p.id];const native=ex&&EQUIP_MODE[ex.equip];
     return (p.mode&&p.mode!==native?pill(MODES[p.mode].label):'')+(p.track&&p.track.indexOf('|')>=0?pill(p.sides===2?'Each side':'Both sides'):'');};
   return arr.map(p=>`<div class="ex-row" data-openex="${p.id}" style="cursor:pointer"><div style="flex:1;min-width:0"><div class="ex-name">${esc(p.name)}${modeTag(p)}</div>
-    <div class="ex-sub">Best set ${setStr(p)}</div>${p.adjusted?`<div class="ex-sub" style="color:var(--warn)">PR adjusted · ${setStr({...p,w:p.adjusted.w,r:p.adjusted.r})} on ${fmtDate(p.adjusted.date)} set aside</div>`:''}</div>
+    <div class="ex-sub">Record ${setStr(p)}</div>${p.adjusted?`<div class="ex-sub">Your pick · best logged ${setStr({...p,w:p.adjusted.w,r:p.adjusted.r})}</div>`:''}</div>
     <div style="text-align:right">${p.showEst?`<div class="mono" style="font-weight:700;font-size:16px">${p.est}<span class="dim" style="font-size:11px"> ${U()} e1RM</span></div>`:`<div class="mono dim" style="font-weight:600;font-size:13px">${p.load}${U()}</div>`}</div>${CHEV_R}</div>`).join('');
 }
 // How much longer until Coach's Notes will show program-level verdicts (push/pull balance, legs
@@ -338,33 +338,47 @@ function trendCard(id){
     <svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" preserveAspectRatio="none" style="display:block;overflow:visible">
       <path d="${d}" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
       <circle cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="3.5" fill="${adjusted?'var(--ink-3)':'var(--accent)'}"/></svg>
-    <div class="dim" style="font-size:11.5px;margin-top:7px">Best set each session · last ${series.length}${anyAdj?' · <span style="color:var(--warn)">PR adjusted</span> — a set you set aside isn’t counted here':''}</div></div>`;
+    <div class="dim" style="font-size:11.5px;margin-top:7px">Best set each session · last ${series.length}${anyAdj?' · sets better than your chosen record aren’t counted here':''}</div></div>`;
 }
-/* Your best set on this lift, with the one-tap escape hatch for a rep you don't want to be held to.
-   Marking DELETES NOTHING: the set stays in History and keeps counting toward your volume — it just
-   stops being the bar, both here and in what the app prefills next time (see lastPerf's `clean`).
-   "That rep wasn't clean" sets aside the record shown here (that record's exact set); "Count it again"
-   restores it. Both operate a set at a time; a lift trained in two modalities can be adjusted in each. */
-const markedSets=id=>{let n=0;state.sessions.forEach(s=>s.exercises.forEach(e=>{if(e.id===id)e.sets.forEach(st=>{if(st.nc)n++;});}));return n;};
-// The record a lift's adjust controls act on: the version (equipment + "each side") done most recently —
+/* "Your record" (v0.69.0). Your record is the set you pick — by default your best. "Change" lists your
+   best set from each recent workout of this lift; picking one makes every BETTER set not count as a
+   record or seed your next weights (P.pickRecord → the per-set `nc` flag). Nothing is deleted: those
+   sets stay in History and in your volume. One idea covers a rep with broken form and a lift done a
+   different way that day (seated face pulls at 75 vs standing at 25). */
+// The record a lift's card acts on: the version (equipment + "each side") done most recently —
 // the same one the trend chart follows. A lift with two versions (one-arm vs two-hand) has two records.
 function prFor(id){const all=A.personalRecords(state.sessions,bw(),999).filter(x=>x.id===id),t=P.lastTrackFor(state.sessions,id);
   return all.find(x=>x.track===t)||all[0];}
-function prAdjustCard(id){
-  const p=prFor(id);
-  const marked=markedSets(id);
-  if(!p&&!marked)return '';
-  // Format a w×r the same way the record itself reads: seconds for time-held lifts, "Bodyweight" moves,
-  // per-hand dumbbells — so a set-aside plank shows "45s", not "0lb × 45".
-  const fmt=p?((w,r)=>prSetText(p,w,r)):null;
+// How to write a set of this lift (seconds, assist, bodyweight, per-dumbbell, per-side) — from its record.
+function recFlags(id,p){const ex=EX[id]||{};
+  return {time:D.TIME_METRIC.has(id),assist:D.isAssist(id),bodyweight:p?!!p.bodyweight:ex.equip==='Bodyweight',holds:p?p.holds:1,sides:p?p.sides:1};}
+function recordCard(id){
+  const p=prFor(id);if(!p)return '';
+  const f=recFlags(id,p),txt=(w,r)=>esc(liftSetText(f,{w,r}));
   return `<div class="card" style="padding:12px 15px;margin:0 0 12px">
-    <div class="row-between"><span class="eyebrow">Your best set</span>
-      <span class="mono" style="font-weight:600">${p?esc(fmt(p.w,p.r)):'—'}</span></div>
-    ${p&&p.adjusted?`<div class="dim" style="font-size:12px;margin-top:7px;line-height:1.45"><b style="color:var(--warn)">PR adjusted.</b> ${esc(fmt(p.adjusted.w,p.adjusted.r))} on ${fmtDate(p.adjusted.date)} is set aside — still in your history and still counted in your volume.</div>`:''}
-    <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
-      ${p?`<button class="btn sm ghost" data-prmark="${id}">That rep wasn’t clean</button>`:''}
-      ${marked?`<button class="btn sm ghost" data-prunmark="${id}">Count it again</button>`:''}
-    </div></div>`;
+    <div class="row-between"><div><div class="eyebrow">Your record</div>
+      <div class="mono" style="font-weight:700;font-size:16px;margin-top:3px">${txt(p.w,p.r)}</div>
+      <div class="dim" style="font-size:12px;margin-top:1px">${fmtDate(p.date)}</div></div>
+      <button class="btn sm ghost" data-recchange="${id}" style="flex-shrink:0">Change</button></div>
+    ${p.adjusted?`<div class="dim" style="font-size:12px;margin-top:9px;line-height:1.45">Your pick · best logged ${txt(p.adjusted.w,p.adjusted.r)} on ${fmtDate(p.adjusted.date)}
+      <button class="linkbtn" data-recbest="${id}" style="font-size:12px;font-weight:600;padding:0 0 0 4px">Use best</button></div>`:''}
+    ${seenFlag('recordTip')?'':`<div class="dim" style="font-size:12px;margin-top:9px;padding-top:9px;border-top:1px solid var(--line);line-height:1.45;display:flex;gap:10px;align-items:flex-start">
+      <span style="flex:1">Your record is the best set you’ve logged here — the bar Ironlog measures you against. Tap <b>Change</b> if a set shouldn’t count.</span>
+      <button class="linkbtn dim" data-seentip="recordTip" style="font-size:12px;padding:0;flex-shrink:0">Got it</button></div>`}
+  </div>`;
+}
+function openRecordPicker(id){
+  const p=prFor(id),track=p?p.track:P.lastTrackFor(state.sessions,id),f=recFlags(id,p);
+  const ch=P.recordChoices(state.sessions,id,track,bw(),8);if(!ch.length){toast('Nothing logged for this lift yet');return;}
+  const isRec=c=>p&&c.date===p.date&&c.w===p.w&&c.r===p.r;
+  openSheet('Which set is your record?',`<div class="dim" style="font-size:13px;margin:-4px 2px 14px;line-height:1.5">Pick the set that should count — for example if your form slipped, or you did it a different way that day.</div>
+    <div class="card list" role="radiogroup" aria-label="Your record">${ch.map((c,i)=>`<button class="ex-row" data-recpick="${i}" style="width:100%" role="radio" aria-checked="${isRec(c)}">
+      <span aria-hidden="true" style="width:20px;font-size:17px;color:${isRec(c)?'var(--accent)':'var(--ink-3)'};flex-shrink:0">${isRec(c)?'◉':'○'}</span>
+      <div style="flex:1;min-width:0;text-align:left"><div class="ex-name mono">${esc(liftSetText(f,c))}</div><div class="ex-sub">${fmtDate(c.date)}${c.bestLogged?' · best logged':''}</div></div>
+      ${isRec(c)?'<span style="font-size:11.5px;font-weight:700;color:var(--accent);flex-shrink:0">Your record</span>':''}</button>`).join('')}</div>
+    <div class="dim" style="font-size:12px;margin:12px 2px 0;line-height:1.5">Sets better than your pick won’t count as records or set your next weights. They stay in your history and your volume.</div>`);
+  $('#sheetBody').querySelectorAll('[data-recpick]').forEach(b=>b.addEventListener('click',()=>{const c=ch[+b.dataset.recpick];
+    setRecord(id,track,c.bestLogged?null:{score:c.score,tie:c.tie},'Your record: '+liftSetText(f,c));}));
 }
 // The last few notes ever left on this lift (deloads included — a note is a note), newest first.
 function notesCard(id){
@@ -386,7 +400,7 @@ function exerciseDetail(id){
       <div class="chips" style="margin-top:6px">${e.muscles.map(m=>`<span class="pill">${m}</span>`).join('')}</div></div></div>
     <p class="instr">${esc(e.instr)}</p>
     ${trendCard(id)}
-    ${prAdjustCard(id)}
+    ${recordCard(id)}
     ${notesCard(id)}
     <div class="card" style="padding:12px 15px;margin:16px 0">
       <div class="row-between"><span class="eyebrow">Target rep range</span><span class="mono" style="font-weight:600">${e.rr[0]}–${e.rr[1]}</span></div>

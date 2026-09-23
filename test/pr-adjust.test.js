@@ -83,13 +83,12 @@ test('the trend keeps the point but stops letting a disowned rep define the line
   assert.equal(latest.w,90,'the clean set defines the point');
   assert.equal(latest.adj,true,'and it is flagged as adjusted');
 
-  // every set marked: the point survives, flagged, rather than vanishing
-  const only=P.exerciseSeries(history(
-    session(1,[['barbell-row',[set(120,10,{nc:true})]]]),
-    session(8,[['barbell-row',[set(100,10)]]])),'barbell-row',{});
-  assert.equal(only.length,2);
-  assert.equal(only[1].w,120);
-  assert.equal(only[1].adj,true);
+  // every set marked: v0.69.0 leaves that session OFF the line (it was done a different way — the
+  // seated-vs-standing face pull); plotting it drew a fake crash. It is still in History.
+  const h2=history(session(1,[['barbell-row',[set(120,10,{nc:true})]]]),session(8,[['barbell-row',[set(100,10)]]]));
+  const only=P.exerciseSeries(h2,'barbell-row',{});
+  assert.equal(only.length,1);assert.equal(only[0].w,100);
+  assert.equal(h2.length,2,'the session itself is untouched');
 });
 
 test('the mark survives a backup round-trip',()=>{
@@ -107,30 +106,7 @@ const {launch}=require('./ui-harness.js');
 // v0.68.0: the all-time records list is a folded section under "Your lifts" — open it like a reader would
 function openProgress(h){h.click('.tab[data-tab="progress"]');const hd=h.$('[data-collapse="records"]');if(hd&&hd.getAttribute('aria-expanded')!=='true')h.click(hd);}
 
-test('UI: the exercise sheet adjusts a PR and puts it back',()=>{
-  const h=launch();
-  try{
-    // same shape as the real history: a 110x10 top set over a previous best of 100x10
-    rows(false).forEach(s=>h.S.upsertSession(JSON.parse(JSON.stringify(s)),false));
-    h.state.settings.bodyweight=216;
-    openProgress(h);
-    const row=h.$$('#prCard [data-openex]').find(r=>r.dataset.openex==='barbell-row');
-    assert.ok(row,'barbell row has a PR row');
-    h.click(row);
-    assert.ok(h.text('#sheetBody').indexOf('110')>=0,'the sheet opens on the 110 record');
-
-    h.click('#sheetBody [data-prmark]');
-    const after=h.text('#sheetBody');
-    assert.ok(after.indexOf('PR adjusted')>=0,'the sheet reports the adjustment');
-    assert.ok(after.indexOf('100')>=0,'and shows the reverted best');
-    assert.ok(h.text('#prCard').indexOf('PR adjusted')>=0,'the Progress list shows it too');
-
-    h.click('#sheetBody [data-prunmark]');
-    assert.equal(h.text('#sheetBody').indexOf('PR adjusted'),-1,'putting it back clears the marker');
-    assert.ok(h.text('#prCard').indexOf('110')>=0,'and the 110 is the record again');
-  }finally{h.teardown();}
-});
-
+// (v0.69.0: replaced by test/record-pick.test.js — the "Your record" picker)
 test('UI: opening a sheet while a field has focus drops the keyboard first',()=>{
   // the "I tapped Add exercise and nothing happened" fix — a focused input must not survive into the
   // sheet, or iOS leaves the sheet parked below the visible area
@@ -171,67 +147,9 @@ test('UI: the tip and the chevron make the retroactive path findable, and the ti
   }finally{h.teardown();}
 });
 
-test('UI: marking from the post-workout summary stays in the summary',()=>{
-  // it used to redraw the exercise sheet over the summary, throwing away "Done" mid-flow
-  const h=launch();
-  try{
-    h.S.upsertSession({id:'old',schema:1,date:Date.now()-8*86400000,updatedAt:1,completed:true,
-      exercises:[{id:'barbell-row',name:'Barbell Row',sets:[{w:100,r:10,done:true}]}]},false);
-    h.click('[data-action="startFlow"]');h.click('[data-action="blank"]');
-    h.click('#btnAddEx');
-    h.click(h.$$('#addResults [data-quickadd]').find(x=>x.dataset.quickadd==='barbell-row'));
-    h.type('input[data-f="w"]','110');h.type('input[data-f="r"]','10');
-    h.click('[data-check]');
-    h.click(h.$$('button').find(b=>b.textContent.trim()==='Finish'));
-    assert.equal(h.text('#sheetTitle'),'New PR! 💪');
-
-    h.click('#sheetBody [data-prmark]');
-    assert.equal(h.text('#sheetTitle'),'New PR! 💪','still on the summary');
-    assert.ok(h.has('#sumDone'),'the Done button survives');
-    assert.ok(h.text('#sheetBody').indexOf('Set aside')>=0,'the row ticks in place');
-    assert.ok(h.state.sessions.some(s=>s.exercises.some(e=>e.sets.some(t=>t.nc))),'and the set really is marked');
-  }finally{h.teardown();}
-});
-
-/* ---- review fixes (v0.49.2) ---- */
-
-test('UI: "Count it again" restores the shown record one tap at a time, not all at once',()=>{
-  const h=launch();
-  try{
-    [ session(2,[['barbell-row',[set(120,10)]]]),
-      session(9,[['barbell-row',[set(110,10)]]]),
-      session(16,[['barbell-row',[set(100,10)]]]) ]
-      .forEach(s=>h.S.upsertSession(JSON.parse(JSON.stringify(s)),false));
-    h.state.settings.bodyweight=216;
-    openProgress(h);
-    const open=()=>h.click(h.$$('#prCard [data-openex]').find(r=>r.dataset.openex==='barbell-row'));
-    open();
-    h.click('#sheetBody [data-prmark]');   // set aside 120 -> record 110
-    h.click('#sheetBody [data-prmark]');   // set aside 110 -> record 100
-    assert.ok(h.text('#prCard').indexOf('100')>=0,'record walked down to 100');
-    const markedNow=()=>h.state.sessions.reduce((n,s)=>n+s.exercises.reduce((m,e)=>m+e.sets.filter(t=>t.nc).length,0),0);
-    assert.equal(markedNow(),2,'both top sets are set aside');
-    h.click('#sheetBody [data-prunmark]');   // one tap
-    assert.ok(h.text('#prCard').indexOf('120')>=0,'the 120 (the shown adjusted set) came back');
-    assert.equal(markedNow(),1,'exactly one restored — the 110 is still set aside');
-  }finally{h.teardown();}
-});
-
-test('UI: adjusting a timed lift reads in seconds, never "0lb"/bare reps',()=>{
-  const h=launch();
-  try{
-    [ session(2,[['farmers-carry',[set(50,45)]]]),
-      session(9,[['farmers-carry',[set(50,30)]]]) ]
-      .forEach(s=>h.S.upsertSession(JSON.parse(JSON.stringify(s)),false));
-    openProgress(h);
-    h.click(h.$$('#prCard [data-openex]').find(r=>r.dataset.openex==='farmers-carry'));
-    h.click('#sheetBody [data-prmark]');   // set aside the 45s
-    const t=h.text('#sheetBody');
-    assert.ok(t.indexOf('45s')>=0,'the set-aside carry shows seconds');
-    assert.equal(t.indexOf('45 on'),-1,'not bare reps ("× 45 on <date>") — the old missing-suffix bug');
-  }finally{h.teardown();}
-});
-
+// (v0.69.0: replaced by test/record-pick.test.js — the "Your record" picker)
+// (v0.69.0: replaced by test/record-pick.test.js — the "Your record" picker)
+// (v0.69.0: replaced by test/record-pick.test.js — the "Your record" picker)
 test('UI: the PR tip stays hidden until there is a record to tap',()=>{
   const h=launch();
   try{

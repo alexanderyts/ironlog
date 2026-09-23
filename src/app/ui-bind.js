@@ -65,7 +65,7 @@ function workoutSummary(s){
   // machines, holds and rep-only moves were switched off here under the old e1RM-only maths)
   s.exercises.forEach(e=>{const pr=P.sessionPR(state.sessions,e,s,bw());
     if(pr)prs.push({id:e.id,name:EX[e.id]?EX[e.id].name:e.name,text:prText(e,pr.set,pr.kind)});});
-  return {sets:setsOf(s),vol:volOf(s),prs,deload:!!s.deload,dur:P.sessionDuration(s),estimated:!!s.endEstimated};
+  return {sid:s.id,sets:setsOf(s),vol:volOf(s),prs,deload:!!s.deload,dur:P.sessionDuration(s),estimated:!!s.endEstimated};
 }
 function showSummary(sm){
   let body=`<div class="statgrid" style="margin:2px 0 14px">
@@ -77,7 +77,9 @@ function showSummary(sm){
   }else if(sm.prs.length){
     body+=`<div class="eyebrow" style="margin:2px 2px 8px">🎉 New personal record${sm.prs.length>1?'s':''}</div>
       <div class="card list">${sm.prs.map(p=>`<div class="ex-row"><span style="color:var(--good);font-size:18px;flex-shrink:0">★</span><div style="flex:1;min-width:0"><div class="ex-name">${esc(p.name)}</div><div class="ex-sub">${esc(p.text)}</div></div>
-        <button class="btn sm ghost" data-prmark="${p.id}" data-insummary="1" style="flex-shrink:0">Wasn’t clean</button></div>`).join('')}</div>`;
+        <button class="btn sm ghost" data-nocount="${p.id}" data-sid="${sm.sid}" style="flex-shrink:0">Don’t count this</button></div>`).join('')}</div>
+      ${seenFlag('prWord')?'':'<div class="dim" style="font-size:12px;margin:8px 2px 0">PR = personal record: your best set on a lift. If one shouldn’t count — form slipped, or you did it differently — tap “Don’t count this”.</div>'}`;
+    if(!seenFlag('prWord'))markSeen('prWord');   // explained once, the first time a beginner sees a PR
   }else{
     body+=`<div class="dim" style="font-size:13.5px;line-height:1.5;padding:0 2px">Logged and saved. Consistency is what moves the numbers — every session counts.</div>`;
   }
@@ -138,46 +140,20 @@ function commitFinish(s,endedAt,estimated){
   state.active=null;S.persistActive();todayScreen='home';
   render();showSummary(sm);
 }
-/* "That rep wasn't clean" — set the current record aside. Finds the exact set behind the PR (same
-   session, same modality, same weight × reps) and flags it `nc`. Nothing is deleted: the set keeps its
-   place in History and its share of your volume; it just stops being the bar the app measures you
-   against, and stops seeding the next workout. Re-openable both ways. */
-function markBestSet(id,btn){
-  const p=prFor(id);
-  if(!p){toast('No record to adjust');return;}
-  const s=state.sessions.find(x=>x.date===p.date&&x.exercises.some(e=>e.id===id));
-  const e=s&&(s.exercises.find(x=>x.id===id&&P.trackOf(x)===(p.track||p.mode))||s.exercises.find(x=>x.id===id));
-  const st=e&&e.sets.find(x=>!x.nc&&P.isWorking(x)&&(+x.w||0)===p.w&&(+x.r||0)===p.r);
-  if(!st){toast('Couldn’t find that set');return;}
-  st.nc=true;s.updatedAt=Date.now();S.upsertSession(s,false);
-  render();
-  // From the post-workout summary, stay in the summary: redrawing the exercise sheet over it threw
-  // away the "Done" button and the trip back to History mid-flow. Tick the row in place instead.
-  if(btn&&btn.dataset.insummary){btn.outerHTML='<span class="dim" style="font-size:12.5px;flex-shrink:0">Set aside ✓</span>';}
-  else openSheet(EX[id]?EX[id].name:id,exerciseDetail(id));
-  toast('Set aside — it still counts toward your volume');
+/* Record changes (v0.69.0) — both paths are P.pickRecord, then save + sync the sessions it touched. */
+function setRecord(id,track,target,msg){
+  P.pickRecord(state.sessions,id,track,bw(),target).forEach(s=>{s.updatedAt=Date.now();S.upsertSession(s,false);});
+  render();openSheet(EX[id]?EX[id].name:id,exerciseDetail(id));toast(msg||(target?'Record updated':'Your best set is your record again'));
 }
-// The mirror of markBestSet: restore the single set the card is showing as "PR adjusted" (the disowned
-// set that currently beats the record, in that record's modality). Walking back several is one tap
-// each. Fallback: if there's no beating-set on display but sets are still set aside (a lower one, or
-// one in another modality the card can't surface), clear whatever's left so nothing can strand.
-function unmarkSets(id){
-  const p=prFor(id);
-  let restored=0;
-  if(p&&p.adjusted){
-    const s=state.sessions.find(x=>x.date===p.adjusted.date&&x.exercises.some(e=>e.id===id));
-    const e=s&&(s.exercises.find(x=>x.id===id&&P.trackOf(x)===(p.track||p.mode))||s.exercises.find(x=>x.id===id));
-    const st=e&&e.sets.find(x=>x.nc&&(+x.w||0)===p.adjusted.w&&(+x.r||0)===p.adjusted.r);
-    if(st){delete st.nc;s.updatedAt=Date.now();S.upsertSession(s,false);restored=1;}
-  }
-  if(!restored){   // nothing on display to restore — clear any remaining set-aside sets for this lift
-    state.sessions.forEach(s=>{let hit=false;
-      s.exercises.forEach(e=>{if(e.id!==id)return;e.sets.forEach(st=>{if(st.nc){delete st.nc;hit=true;restored++;}});});
-      if(hit){s.updatedAt=Date.now();S.upsertSession(s,false);}});
-  }
-  if(!restored){toast('Nothing was set aside');return;}
-  render();openSheet(EX[id]?EX[id].name:id,exerciseDetail(id));
-  toast('Counting it again');
+// "Don't count this" on the finish screen: keep the record you had before this workout. Stays on the
+// summary (redrawing the exercise sheet over it used to throw away "Done" mid-flow) and ticks in place.
+function dontCount(id,sid,btn){
+  const s=state.sessions.find(x=>x.id===sid),e=s&&s.exercises.find(x=>x.id===id);if(!e)return;
+  const track=P.trackOf(e),prev=P.bestSetBefore(state.sessions,id,{mode:track,bw:bw(),excludeId:sid});
+  if(!prev)return;
+  P.pickRecord(state.sessions,id,track,bw(),prev).forEach(x=>{x.updatedAt=Date.now();S.upsertSession(x,false);});
+  render();if(btn)btn.outerHTML='<span class="dim" style="font-size:12.5px;flex-shrink:0">Not counted ✓</span>';
+  toast('Kept your previous record — this set stays in your history');
 }
 function discardActive(){showConfirm('Discard workout?','Nothing from this session will be saved.','Discard',()=>{
   stopRest();stopSw();stopElapsed();const copy=state.active;state.active=null;S.persistActive();todayScreen='home';render();
@@ -608,8 +584,10 @@ function boot(){
   $('#cdCancel').addEventListener('click',closeConfirm);$('#cscrim').addEventListener('click',closeConfirm);
   $('#cdOk').addEventListener('click',()=>{const cb=_confirmCb;closeConfirm();if(cb)cb();});
   $('#sheetBody').addEventListener('click',e=>{const a=e.target.closest('[data-addto]');if(a){addExerciseToCur(a.dataset.addto);closeSheet();return;}
-    const pm=e.target.closest('[data-prmark]');if(pm){markBestSet(pm.dataset.prmark,pm);return;}
-    const pu=e.target.closest('[data-prunmark]');if(pu){unmarkSets(pu.dataset.prunmark);return;}});
+    const nc=e.target.closest('[data-nocount]');if(nc){dontCount(nc.dataset.nocount,nc.dataset.sid,nc);return;}
+    const rc=e.target.closest('[data-recchange]');if(rc){openRecordPicker(rc.dataset.recchange);return;}
+    const rb=e.target.closest('[data-recbest]');if(rb){const p=prFor(rb.dataset.recbest);setRecord(rb.dataset.recbest,p?p.track:P.lastTrackFor(state.sessions,rb.dataset.recbest),null);return;}
+    const tip=e.target.closest('[data-seentip]');if(tip){markSeen(tip.dataset.seentip);if(tip.parentElement)tip.parentElement.remove();return;}});   // one-time tips inside a sheet
   $('#btnSettings').addEventListener('click',openSettings);
   // the header badge explains itself on tap, so "Storage full" can always be read again (review 7.3)
   const cs=$('#cloudStatus');const csWhy=()=>toast(state.storageError?'Storage is full — new changes aren’t being saved on this phone. Export a backup in Settings, then delete old data.':($('#cloudText').textContent||'')+(state.cloudError?' — '+state.cloudError:''));

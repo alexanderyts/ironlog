@@ -197,19 +197,19 @@ function exerciseSeries(sessions,exId,opts){
     const e=s.exercises.find(x=>x.id===exId&&(!opts.mode||trackOf(x)===opts.mode));
     if(!e)continue;
     // A set marked "doesn't count" (st.nc) must not define the trend line — otherwise a rep the user
-    // has disowned reads as their level, and every honest session after it looks like a decline. But
-    // the point is never DROPPED: if that session has no clean set at all it still plots, flagged, so
-    // the history stays visible. `adj` tells the view to mark the point "PR adjusted".
+    // has disowned reads as their level, and every honest session after it looks like a decline. A
+    // session where EVERY set is set aside (v0.69.0: you picked a lower record — e.g. those were the
+    // seated face pulls) is left off the line entirely: it was done a different way, so plotting it made
+    // the chart crash from 75 to 25. It stays in History. `adj` marks a point with a set-aside set.
     const b=sbw(s,bw);   // score each session by ITS bodyweight (D-1)
     // the one judge (scoreSet): junk sets are null and don't plot; an unassisted rep, a bodyweight hold
     // and a rep-only bodyweight move all DO
-    let best=null,bs=null,nc=null,ncs=null;
+    let best=null,bs=null,nc=null;
     e.sets.forEach(st=>{if(!isWorking(st))return;
       const sc=scoreSet(exId,st,b);if(!sc)return;
-      if(st.nc){if(beatsScore(sc,nc)){nc=sc;ncs=st;}return;}
+      if(st.nc){if(beatsScore(sc,nc))nc=sc;return;}
       if(beatsScore(sc,best)){best=sc;bs=st;}});
     if(best)out.push({date:s.date,est:best.score,w:+bs.w||0,r:+bs.r||0,metric:best.kind,adj:(nc&&beatsScore(nc,best))||undefined});
-    else if(nc)out.push({date:s.date,est:nc.score,w:+ncs.w||0,r:+ncs.r||0,metric:nc.kind,adj:true});
   }
   out.sort((a,b)=>a.date-b.date);
   return opts.limit?out.slice(-opts.limit):out;
@@ -230,6 +230,37 @@ function bestSetBefore(sessions,exId,opts){
     e.sets.forEach(st=>{if(st.nc||!isWorking(st))return;const sc=scoreSet(exId,st,b);if(beatsScore(sc,best))best=sc;});
   }
   return best;
+}
+/* "Your record" picker (v0.69.0). You choose which set counts as your record; everything BETTER than
+   your pick is flagged `nc` (doesn't count as a record or seed next weights), everything else is
+   unflagged. So the whole feature is one recompute over the existing per-set flag — no new stored
+   field, nothing extra to sync. Covers a rep with broken form AND a different way of doing it (seated
+   face pulls at 75 vs standing at 25). Scoped to one lift + track (a one-arm curl keeps its own). */
+// Recent workouts of this lift (newest first, up to n): each workout's best working set, INCLUDING
+// sets already set aside — the picker has to show them to let you choose them again.
+function recordChoices(sessions,exId,track,bw,n){
+  const out=[];
+  for(const s of real(sessions)){
+    const e=s.exercises.find(x=>x.id===exId&&trackOf(x)===track);if(!e)continue;
+    const b=sbw(s,bw);let best=null,bs=null;
+    e.sets.forEach(st=>{if(!isWorking(st))return;const sc=scoreSet(exId,st,b);if(beatsScore(sc,best)){best=sc;bs=st;}});
+    if(best)out.push({sid:s.id,date:s.date,w:+bs.w||0,r:+bs.r||0,score:best.score,tie:best.tie,kind:best.kind});
+  }
+  const top=out.reduce((a,c)=>beatsScore(c,a)?c:a,null);if(top)top.bestLogged=true;
+  const recent=out.slice(0,n||8);if(top&&recent.indexOf(top)<0)recent.push(top);   // your best is always choosable
+  return recent;
+}
+// Make `target` ({score,tie}) the record: flag every set that beats it, unflag the rest. target=null →
+// use your best (clear every flag). Returns the sessions it changed (the caller saves + syncs them).
+function pickRecord(sessions,exId,track,bw,target){
+  const changed=[];
+  real(sessions).forEach(s=>{let hit=false;const b=sbw(s,bw);
+    s.exercises.forEach(e=>{if(e.id!==exId||trackOf(e)!==track)return;
+      e.sets.forEach(st=>{if(!isWorking(st))return;const sc=scoreSet(exId,st,b);
+        const nc=!!(target&&sc&&beatsScore(sc,target));
+        if(nc&&!st.nc){st.nc=true;hit=true;}else if(!nc&&st.nc){delete st.nc;hit=true;}});});
+    if(hit)changed.push(s);});
+  return changed;
 }
 // The number only (kept for callers/tests that want it): the best score, 0 with no history.
 function bestE1rmBefore(sessions,exId,opts){const b=bestSetBefore(sessions,exId,opts);return b?b.score:0;}
@@ -489,5 +520,5 @@ function calcStreak(sessions,now){
   return n;
 }
 
-IL.prog={liftSessions,DAY,startOfDay,e1rm,isWorking,setLoad,sbw,sessionVolume,sessionSets,sessionDuration,MAX_SESSION_MIN,setTimeline,lastSetAt,staleness,STALE_AFTER_MIN,STALE_CONFIRM_MIN,END_PAD_MIN,finalizeSets,parseWeightInput,fmtVol,modeOf,real,lastPerf,lastModeFor,exerciseSeries,setScore,scoreMetric,liftKind,scoreSet,beatsScore,bestSetBefore,sessionPR,platesPerSide,sidesOf,holdsOf,sideMult,trackOf,sideDefault,lastSideFor,lastTrackFor,bestE1rmBefore,setPattern,fmtPerf,repRange,nextSets,deloadSets,suggestion,unitIncrement,setWeightSteps,convertWeight,convertSessions,calcStreak,weekIndex,weekStart};
+IL.prog={recordChoices,pickRecord,liftSessions,DAY,startOfDay,e1rm,isWorking,setLoad,sbw,sessionVolume,sessionSets,sessionDuration,MAX_SESSION_MIN,setTimeline,lastSetAt,staleness,STALE_AFTER_MIN,STALE_CONFIRM_MIN,END_PAD_MIN,finalizeSets,parseWeightInput,fmtVol,modeOf,real,lastPerf,lastModeFor,exerciseSeries,setScore,scoreMetric,liftKind,scoreSet,beatsScore,bestSetBefore,sessionPR,platesPerSide,sidesOf,holdsOf,sideMult,trackOf,sideDefault,lastSideFor,lastTrackFor,bestE1rmBefore,setPattern,fmtPerf,repRange,nextSets,deloadSets,suggestion,unitIncrement,setWeightSteps,convertWeight,convertSessions,calcStreak,weekIndex,weekStart};
 if(typeof module!=='undefined')module.exports=IL.prog;
