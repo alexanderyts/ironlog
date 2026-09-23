@@ -77,7 +77,7 @@ test('⋯ menu: Replace swaps in place (same spot), with the builder’s best sw
     assert.ok(!h.state.active.exercises.some(e=>e.id==='leg-press'),'the old one is gone');
   }finally{h.teardown();}
 });
-test('⋯ menu: Replace asks first when sets are already logged',()=>{
+test('⋯ menu: Replace keeps the sets already logged and adds the new exercise below (v0.73: no confirm, nothing deleted)',()=>{
   const h=launch();
   try{
     startWith(h,['leg-press']);
@@ -85,8 +85,12 @@ test('⋯ menu: Replace asks first when sets are already logged',()=>{
     cardOf(h,'leg-press').querySelector('[data-exmenu]').dispatchEvent(new h.win.MouseEvent('click',{bubbles:true}));
     h.click('#sheetBody [data-exact="replace"]');
     h.$$('#sheetBody [data-replacewith]')[0].dispatchEvent(new h.win.MouseEvent('click',{bubbles:true}));
-    assert.ok(h.$('#cdialog').classList.contains('on'),'confirm shown');
-    assert.equal(h.state.active.exercises[0].id,'leg-press','nothing replaced until confirmed');
+    assert.ok(!h.$('#cdialog').classList.contains('on'),'no confirm needed — nothing is lost');
+    const ex0=h.state.active.exercises;
+    assert.equal(ex0[0].id,'leg-press','the logged lift stays');assert.equal(ex0[0].sets.length,1,'with only its done set');assert.ok(ex0[0].sets[0].done);
+    assert.notEqual(ex0[1].id,'leg-press','the replacement sits right below it');
+    h.click('#toastAct');   // Undo
+    assert.equal(h.state.active.exercises.length,1);assert.ok(h.state.active.exercises[0].sets.length>1,'undo restores the planned sets too');
   }finally{h.teardown();}
 });
 test('⋯ menu: Remove removes, with Undo',()=>{

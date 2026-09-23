@@ -381,8 +381,15 @@ function openReplace(ei){
     ${others.length?`<div class="eyebrow" style="margin:16px 2px 8px">Other ${ex.group.toLowerCase()} exercises</div><div class="card list">${others.map(row).join('')}</div>`:''}`);
   $('#sheetBody').querySelectorAll('[data-replacewith]').forEach(b=>b.addEventListener('click',()=>doReplace(ei,b.dataset.replacewith)));
 }
+// Replace keeps what you already did (batch 4): with sets ticked, the old exercise stays with ONLY those
+// sets and the new one goes right below it — machine taken after set 2 no longer deletes sets 1–2.
 function doReplace(ei,id){
   const t=cur(),old=t&&t.exercises[ei];if(!old||!EX[id])return;const logged=old.sets.filter(s=>s.done).length;
+  if(logged){const c=liveSession(t),o=liveExercise(t,old,ei);if(!c||!o){closeSheet();staleToast();return;}
+    const pf=state.settings.profile||{},before=o.sets.slice(),inst=B.seedExercise(id,state.sessions,{excludeId:c.id,unit:U(),goal:pf.goal,setStyle:pf.sets,push:pushMode(),gym:pf.gym});
+    o.sets=o.sets.filter(s=>s.done);delete o.offer;const at=c.exercises.indexOf(o)+1;c.exercises.splice(at,0,inst);persistCur();closeSheet();render();
+    toast('Kept your '+logged+' set'+(logged!==1?'s':'')+' · '+EX[id].name+' added below',{label:'Undo',fn:()=>{const x=cur();if(!x)return;const k=x.exercises.indexOf(inst);if(k>=0)x.exercises.splice(k,1);o.sets=before;persistCur();render();}});
+    return;}
   const go=()=>{const pf=state.settings.profile||{},c=liveSession(t),o=liveExercise(t,old,ei);if(!c||!o){closeSheet();staleToast();return;}
     const inst=B.seedExercise(id,state.sessions,{excludeId:c.id,unit:U(),goal:pf.goal,setStyle:pf.sets,push:pushMode(),gym:pf.gym});
     ei=c.exercises.indexOf(o);c.exercises.splice(ei,1,inst);persistCur();closeSheet();render();
@@ -567,10 +574,11 @@ function logExercise(s,e,ei,mode){
     ${prLine}${sugg}${noteLine}
     <div class="setgrid">
       <div class="set-hdr"><div>Set</div><div>${whdr}</div><div>${rhdr}</div><div></div></div>
-      ${e.sets.map((st,si)=>setRow(st,ei,si)).join('')}
+      ${e.sets.map((st,si)=>setRow(st,ei,si,e.sets.slice(0,si).filter(x=>!x.warm).length+1)).join('')}
     </div>
     <div class="set-actions">
       <button class="linkbtn" data-addset="${ei}">＋ Add set</button>
+      ${mode!=='view'&&!e.sets.some(st=>st.warm)?`<button class="linkbtn dim" data-addwarm="${ei}">＋ Warm-up</button>`:''}
       ${e.sets.length>1?`<button class="linkbtn" data-delset="${ei}">－ Remove set</button>`:''}
       ${D.TIME_METRIC.has(e.id)&&todayScreen==='active'?`<button class="linkbtn" data-stopwatch="${ei}">⏱ Stopwatch</button>`:''}
       ${(emode==='barbell'||emode==='smith')?`<button class="linkbtn" data-plates="${ei}">🏋 Plates</button>`:''}
@@ -578,9 +586,9 @@ function logExercise(s,e,ei,mode){
     ${ei===0&&state.sessions.length<3?'<div class="hint">Tip: tap a set number to mark it a warm-up (kept out of PRs and volume).</div>':''}
   </div>`;
 }
-function setRow(st,ei,si){
+function setRow(st,ei,si,no){   // no = the working-set number (warm-ups don't count: W, 1, 2, 3)
   return `<div class="set-row ${st.done?'done':''}" data-si="${si}">
-    <button class="set-no ${st.warm?'warm':''}" data-warm="${ei}" data-s="${si}" aria-label="Toggle warm-up">${st.warm?'W':si+1}</button>
+    <button class="set-no ${st.warm?'warm':''}" data-warm="${ei}" data-s="${si}" aria-label="Toggle warm-up">${st.warm?'W':no}</button>
     <div class="numwrap"><button data-step="w" data-d="-1" data-ei="${ei}" data-s="${si}" aria-label="Less weight">−</button>
       <input inputmode="decimal" data-f="w" data-ei="${ei}" data-s="${si}" value="${st.w!==''&&st.w!=null?st.w:''}" placeholder="0" aria-label="Weight">
       <button data-step="w" data-d="1" data-ei="${ei}" data-s="${si}" aria-label="More weight">+</button></div>

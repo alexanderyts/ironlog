@@ -42,14 +42,14 @@ function shapeStyle(sets,style,ex,unit){
   return sets;
 }
 function seedExercise(id,sessions,opts){
-  opts=opts||{};const {excludeId,unit,deload,extraSet,goal,setStyle,push,gym}=opts;   // goal/setStyle/push/gym: profile levers
+  opts=opts||{};const {excludeId,unit,deload,extraSet,goal,setStyle,push,gym,beforeTs}=opts;   // goal/setStyle/push/gym: profile levers; beforeTs: adding to a PAST workout seeds from history before it
   const ex=EX[id];const mode=lastModeFor(sessions,id),side=lastSideFor(sessions,id);
   const inst={id,name:ex?ex.name:id};if(mode)inst.mode=mode;if(side!=null)inst.side=side;   // remember "⇆ Each side" like the equipment choice
   // A machine gym has no free barbell: a Smith-friendly barbell lift starts in Smith mode (so its
   // history, PRs and the plate loader's Smith bar all line up). An explicit earlier choice still wins.
   if(!inst.mode&&gym==='machine'&&ex&&ex.equip==='Barbell'&&SMITH_OK.has(id))inst.mode='smith';
   // An overridden side / auto-Smith is its own history track — seed from THAT track, never another one
-  const lp=lastPerf(sessions||[],id,{excludeId,mode:side!=null||(inst.mode||null)!==(mode||null)?trackOf(inst):(mode||undefined),clean:true});   // real sessions only — a deload is never a baseline; `clean` so a set marked "doesn't count" is never prefilled back at you
+  const lp=lastPerf(sessions||[],id,{excludeId,beforeTs,mode:side!=null||(inst.mode||null)!==(mode||null)?trackOf(inst):(mode||undefined),clean:true});   // real sessions only — a deload is never a baseline; `clean` so a set marked "doesn't count" is never prefilled back at you
   const rr=goal?repRange(ex,goal):(ex?ex.rr:[8,12]);   // goal shifts the target range in one place
   let sets;
   // push:'quiet' — "just record": the rows mirror last time exactly, never a bump. Must agree with
@@ -63,7 +63,19 @@ function seedExercise(id,sessions,opts){
   if(!deload&&setStyle)sets=shapeStyle(sets,setStyle,ex,unit);   // never reshape a deload — recovery has its own prescription
   if(deload&&sets.length>DELOAD_MAX_SETS)sets=sets.slice(0,DELOAD_MAX_SETS);   // a deload cuts volume as well as load
   if(extraSet&&!deload&&sets.length&&sets.length<MAX_SETS_PER_EX){const last=sets[sets.length-1];sets.push({w:last.w,r:last.r,done:false});}
+  // Warm-ups are remembered (batch 4): last time's warm-up rows come back on top, so a lifter who ramps
+  // up doesn't re-add them every session. Never on a deload (it has its own light prescription).
+  if(!deload&&lp&&sets.length){const w=lastWarmups(sessions,id,{excludeId,beforeTs,track:trackOf(inst)});if(w.length)sets=w.concat(sets);}
   inst.sets=sets;return inst;
+}
+// The warm-up rows of this lift's most recent real workout (same version), as fresh unticked rows.
+function lastWarmups(sessions,id,o){
+  for(const s of real(sessions||[])){
+    if(o.excludeId&&s.id===o.excludeId)continue;if(o.beforeTs&&s.date>=o.beforeTs)continue;
+    const e=s.exercises.find(x=>x.id===id&&trackOf(x)===o.track);if(!e)continue;
+    return e.sets.filter(st=>st.warm&&st.done!==false&&(+st.r||0)>0).slice(0,4).map(st=>({w:+st.w||0,r:+st.r||0,warm:true,done:false}));
+  }
+  return [];
 }
 // Exercise ids from the most recent completed session that trained this group
 function lastSessionIds(sessions,g){

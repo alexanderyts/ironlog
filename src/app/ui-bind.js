@@ -7,7 +7,7 @@ function addExerciseToCur(id){
   if(todayScreen!=='edit'&&!state.active){S.setActive(newSession([]));}
   const t=cur();
   if(t.exercises.some(x=>x.id===id)){toast('Already added');return;}
-  const pf=state.settings.profile||{},inst=B.seedExercise(id,state.sessions,{excludeId:t.id,unit:U(),goal:pf.goal,setStyle:pf.sets,push:pushMode(),gym:pf.gym});
+  const pf=state.settings.profile||{},inst=B.seedExercise(id,state.sessions,{excludeId:t.id,beforeTs:todayScreen==='edit'?t.date:undefined,unit:U(),goal:pf.goal,setStyle:pf.sets,push:pushMode(),gym:pf.gym});   // an old workout is prefilled from history BEFORE it (batch 4)
   if(t.offers)t.offers=t.offers.filter(o=>o.exId!==id);   // an offered add, now added
   const pos=slotFor(t,id);t.exercises.splice(pos,0,inst);
   persistCur();if(todayScreen!=='edit')todayScreen='active';
@@ -47,6 +47,12 @@ function refreshStats(){const t=cur();if(!t)return;const a=$('#stSets'),b=$('#st
 function cleanSets(s){s.exercises=P.finalizeSets(s.exercises);}
 // How many sets were edited (numbers entered/stepped) but never checked off.
 function pendingSets(s){return s.exercises.reduce((n,e)=>n+e.sets.filter(st=>st.t&&!st.done).length,0);}
+// Planned sets left unticked on a lift you DID work on (tick 2 of 3 and forget the 3rd). They aren't
+// saved — only ticked sets are — but the finish summary offers to add them back (batch 4).
+function leftoverSets(s){const out=[];s.exercises.forEach(e=>{if(!e.sets.some(st=>st.done))return;
+  e.sets.forEach(st=>{if(!st.done&&!st.warm&&!st.t&&(+st.r||0)>0)out.push({id:e.id,mode:e.mode,side:e.side,w:st.w,r:st.r});});});return out;}
+// A tick time inside a past workout: just after its last ticked set (or its start).
+function pastTickTime(t){let m=+t.date||Date.now();t.exercises.forEach(e=>e.sets.forEach(st=>{if(+st.at>m)m=+st.at;}));return m+60000;}
 // Before finishing, if there are edited-but-unticked sets, ask whether to keep them. Otherwise they'd
 // silently vanish (only done sets save). Two explicit choices; closing the sheet cancels the finish.
 function confirmUnchecked(s,commit){
@@ -84,9 +90,13 @@ function showSummary(sm){
   }else{
     body+=`<div class="dim" style="font-size:13.5px;line-height:1.5;padding:0 2px">Logged and saved. Consistency is what moves the numbers — every session counts.</div>`;
   }
+  if(sm.left&&sm.left.length)body+=`<div class="card" id="sumLeft" style="padding:12px 14px;margin-top:14px;display:flex;gap:10px;align-items:center"><div class="dim" style="flex:1;font-size:13px;line-height:1.45">${sm.left.length} planned set${sm.left.length>1?'s weren’t':' wasn’t'} ticked, so ${sm.left.length>1?'they weren’t':'it wasn’t'} saved. Did you do ${sm.left.length>1?'them':'it'}?</div><button class="btn sm primary" id="sumAddLeft" style="flex-shrink:0">Add ${sm.left.length>1?'them':'it'}</button></div>`;
   body+=`<button class="btn primary block" id="sumDone" style="margin-top:16px">Done</button>`;
   openSheet(sm.deload?'Recovery logged 🌿':(sm.prs.length?'New PR! 💪':'Workout complete 💪'),body);
-  const d=$('#sumDone');if(d)d.addEventListener('click',()=>{closeSheet();setTab('history');});
+  const al=$('#sumAddLeft');if(al)al.addEventListener('click',()=>{const s=state.sessions.find(x=>x.id===sm.sid);if(!s)return;const at=+s.endedAt||Date.now();
+    sm.left.forEach(l=>{let e=s.exercises.find(x=>x.id===l.id&&(x.mode||'')===(l.mode||'')&&x.side===l.side);if(!e)return;e.sets.push({w:l.w,r:l.r,done:true,at});});
+    s.updatedAt=Date.now();S.upsertSession(s,false);render();const c=$('#sumLeft');if(c)c.innerHTML='<div class="dim" style="font-size:13px">Added ✓</div>';});
+  const d=$('#sumDone');if(d)d.addEventListener('click',()=>{closeSheet();setTab('today');});   // back Home, where you started (batch 4)
 }
 function finishWorkout(){
   const s=state.active;if(!s)return;
@@ -138,6 +148,7 @@ function commitFinish(s,endedAt,estimated){
   closeSheet();
   // Work out what will be saved FIRST, on a copy. The old order cleaned the live workout and only then
   // noticed nothing was ticked — so "Log at least one set first" arrived after the plan was gone (batch 1).
+  const left=leftoverSets(s);
   const fin=P.finalizeSets(s.exercises);
   if(!fin.length){toast('Nothing ticked to save — tick ✓ the sets you did');return;}
   stopRest();stopSw();stopElapsed();
@@ -157,7 +168,7 @@ function commitFinish(s,endedAt,estimated){
     render();return;
   }
   state.active=null;S.persistActive();todayScreen='home';
-  render();showSummary(sm);
+  sm.left=left;render();showSummary(sm);
 }
 /* Record changes (v0.69.0) — both paths are P.pickRecord, then save + sync the sessions it touched. */
 // The pick is stored once in settings (batch 1) — choosing a record no longer re-saves old workouts,
@@ -431,7 +442,10 @@ function bind(){
 // ticked, edited by hand, or a warm-up. 100/100/100 → set 1 to 135 → 135/135/135; a ramp (80/90/100)
 // or pyramid keeps its shape because its later sets never matched. Blank first-time sets all fill in.
 const sameVal=(a,b)=>{const ea=a==null||String(a).trim()==='',eb=b==null||String(b).trim()==='';return ea||eb?(ea&&eb):+a===+b;};
+// Weight only (batch 4): reps are what you actually did on THAT set — typing 8 on set 1 used to turn
+// sets 2–3 into 8s too, and one tick then logged reps you hadn't done.
 function copyDown(t,ei,si,f,prev){
+  if(f!=='w')return;
   const sets=t.exercises[ei].sets;if(sets[si].warm)return;const val=sets[si][f];
   for(let j=si+1;j<sets.length;j++){const s=sets[j];
     if(s.done||s.t||s.warm||!sameVal(s[f],prev))continue;
@@ -489,14 +503,19 @@ function bindLog(root){
       st.done=!st.done;
       // T1: stamp on completion, but keep an existing stamp on un-tick → re-tick (a mis-tap corrected
       // seconds later keeps its true time, instead of jumping to "now" and skewing the rest medians).
-      if(st.done&&!(+st.at>0))st.at=Date.now();
-      if(st.done&&todayScreen==='active'&&state.settings.rest.auto&&!st.warm)startRest(restSecondsFor(t.exercises[ei].id));persistCur();render();return;}
+      if(st.done&&!(+st.at>0))st.at=todayScreen==='edit'?pastTickTime(t):Date.now();   // a set ticked while editing an old workout belongs to THAT day, not today (batch 4)
+      if(st.done&&todayScreen==='active'&&state.settings.rest.auto&&!st.warm&&!(swState&&swState.phase==='run'))startRest(restSecondsFor(t.exercises[ei].id));   // a hold in progress isn't cancelled by ticking another set (batch 4)
+      persistCur();render();return;}
     const wm=e.target.closest('[data-warm]');if(wm){const ei=+wm.dataset.warm,si=+wm.dataset.s;const st=t.exercises[ei].sets[si];st.warm=!st.warm;persistCur();render();toast(st.warm?'Marked as warm-up':'Counted as a working set');return;}
     const step=e.target.closest('[data-step]');if(step){if(heldRepeat){heldRepeat=false;return;}   // the click after a hold is not one more step
       stepSet(+step.dataset.ei,+step.dataset.s,step.dataset.step,+step.dataset.d);return;}
+    const aw=e.target.closest('[data-addwarm]');if(aw){const ex=t.exercises[+aw.dataset.addwarm];if(!ex)return;const first=ex.sets.find(s=>!s.warm)||{};const step=inc(EX[ex.id]);
+      // ~50% of your first working set, on your weight step; inserted after any existing warm-ups (batch 4)
+      const w=+first.w>0?Math.max(step,Math.round((+first.w*0.5)/step)*step):'';const at=ex.sets.filter(s=>s.warm).length;
+      ex.sets.splice(at,0,{w,r:Math.max(8,+first.r||8),warm:true,done:false});persistCur();render();toast('Warm-up added — it’ll be remembered next time');return;}
     const add=e.target.closest('[data-addset]');if(add){const ei=+add.dataset.addset;const sets=t.exercises[ei].sets;const last=sets[sets.length-1]||{w:'',r:''};sets.push({w:last.w,r:last.r,done:false});persistCur();render();return;}
     const sw=e.target.closest('[data-stopwatch]');if(sw){startStopwatch(+sw.dataset.stopwatch);return;}
-    const pl=e.target.closest('[data-plates]');if(pl){const ex=t.exercises[+pl.dataset.plates],m=P.modeOf(ex);const top=Math.max(0,...ex.sets.filter(s=>!s.warm).map(s=>+s.w||0));openPlateSheet(top||barWeight(m),m);return;}   // heaviest entered work set (not just ticked ones — you load the bar before lifting)
+    const pl=e.target.closest('[data-plates]');if(pl){const ex=t.exercises[+pl.dataset.plates],m=P.modeOf(ex);const nxt=ex.sets.find(s=>!s.done&&+s.w>0);const top=nxt?+nxt.w:Math.max(0,...ex.sets.filter(s=>!s.warm).map(s=>+s.w||0));openPlateSheet(top||barWeight(m),m);return;}   // the set you're about to load (warm-ups included), not the heaviest (batch 4)   // heaviest entered work set (not just ticked ones — you load the bar before lifting)
     const rem=e.target.closest('[data-delset]');if(rem){const ei=+rem.dataset.delset,ex=t.exercises[ei];const sets=ex.sets;if(sets.length<=1)return;
       const idx=sets.length-1;
       const doRemove=()=>{const removed=sets.splice(idx,1)[0];persistCur();render();
@@ -522,6 +541,9 @@ function bindLog(root){
     // lift on its default has no flag (and stays on its existing history track).
     const sd=e.target.closest('[data-side]');if(sd){const ex=t.exercises[+sd.dataset.side];if(!ex)return;
       const next=P.sidesOf(ex)!==2;if(next===P.sideDefault(ex.id))delete ex.side;else ex.side=next;
+      // refill the rows you haven't ticked from THIS version's history (the numbers used to stay, now meaning per side — batch 4)
+      const lp=P.lastPerf(state.sessions,ex.id,{mode:P.trackOf(ex),clean:true,excludeId:t.id,beforeTs:todayScreen==='edit'?t.date:undefined});
+      if(lp){let k=0;ex.sets.forEach(st=>{if(st.done||st.warm)return;const n=lp.sets[Math.min(k++,lp.sets.length-1)];st.w=n.w;st.r=n.r;});}
       persistCur();render();toast(next?'One side at a time — reps per side':'Both sides at once');return;}
     const nt=e.target.closest('[data-note]');if(nt){openNote(+nt.dataset.note);return;}
     const oe=e.target.closest('[data-openex]');if(oe){if(EX[oe.dataset.openex])openSheet(EX[oe.dataset.openex].name,exerciseDetail(oe.dataset.openex));return;}
@@ -614,6 +636,7 @@ function finishStopwatch(){
   if(!st){st={w:sets.length?sets[sets.length-1].w:'',r:'',done:false};sets.push(st);}
   st.r=secs;st.done=true;if(!(+st.at>0))st.at=Date.now();
   persistCur();render();toast('Logged '+secs+'s');
+  if(state.settings.rest.auto)startRest(restSecondsFor(ex.id));   // a hold gets its rest like a ticked set does (batch 4)
 }
 
 /* ---------------- boot ---------------- */

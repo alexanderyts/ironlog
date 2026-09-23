@@ -2,6 +2,25 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.73.0 — 2026-09-23 · Smoother logging
+Batch 4 from the overnight review: the between-sets loop.
+- **Replace keeps what you did.** Machine taken after set 2? Your 2 sets stay, and the new exercise goes right below. No confirm, and Undo puts everything back.
+- **Reps no longer copy down.** Changing reps on set 1 used to change the sets below too. Weight still copies down.
+- **Warm-ups:**
+  - A **+ Warm-up** button adds a row on top at about half your first set's weight, without costing a working set.
+  - Your warm-ups come back next time.
+  - Working sets are numbered W, 1, 2, 3 instead of counting the warm-up.
+- **Stopwatch and rest timer:** stopping a hold starts your rest, and ticking another set while a hold is running no longer cancels the hold.
+- **Add exercise** shows your recent exercises first, then the full library.
+- **Forgot to tick the last set?** The finish screen says "1 planned set wasn't ticked" with an **Add it** button. Nothing is saved without your say-so.
+- **Editing an old workout:** a set you tick is timed on that day, not today, and an exercise you add is prefilled from before that workout.
+- **Smaller:**
+  - The "each side" button now refills the numbers you haven't ticked.
+  - The plate loader opens at the next set you're loading.
+  - **Done** after a workout goes back to Home.
+
+Not verified on-device.
+
 ## v0.72.0 — 2026-09-23 · Suggestions you can trust
 Batch 3 from the overnight review: the "next time" numbers and the Stuck label have to be right.
 - **"Stuck" no longer misreads progress:**

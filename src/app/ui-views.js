@@ -410,6 +410,15 @@ function exerciseDetail(id){
     <a class="btn ghost block" href="${demoURL(id)}" target="_blank" rel="noopener noreferrer" style="margin-bottom:10px;text-decoration:none">▶ Watch a demo video</a>
     <button class="btn primary block" data-addto="${id}">${inWorkout?'✓ Already in this workout':(todayScreen==='edit'&&editSession?'＋ Add to your '+fmtDate(editSession.date)+' session (editing)':'＋ Add to today’s workout')}</button>`;   // name the session: from the Library, a past workout left open for editing is easy to forget (review 7.9)
 }
+// Add exercise opens on YOUR exercises first (batch 4): the lifts from your recent workouts that aren't
+// in this one — a machine-gym routine is the same handful every week — then the whole library.
+function recentExerciseIds(target,n){const seen=new Set((target&&target.exercises||[]).map(e=>e.id)),out=[];
+  for(const s of state.sessions){if(s.completed===false)continue;for(const e of s.exercises){if(EX[e.id]&&!seen.has(e.id)){seen.add(e.id);out.push(e.id);if(out.length>=n)return out;}}}
+  return out;}
+function addListHtml(target){const rec=recentExerciseIds(target,8),row=e=>libRow(e,'data-quickadd="'+e.id+'"');
+  const head=t=>`<div class="eyebrow" style="padding:10px 14px 6px">${t}</div>`;
+  return rec.length?head('Your exercises')+rec.map(id=>row(EX[id])).join('')+head('All exercises')+SR.searchEx('').filter(e=>rec.indexOf(e.id)<0).map(row).join('')
+    :SR.searchEx('').map(row).join('');}
 function openAddExercise(){
   const target=cur();
   const sugg=target&&target.exercises.length?B.complementSuggestions(target.exercises.map(e=>e.id),3):[];
@@ -418,12 +427,13 @@ function openAddExercise(){
   openSheet('Add exercise',`${suggHTML}<div class="search" style="margin-bottom:12px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
     <input id="addSearch" placeholder="Search or describe an exercise…"></div>
     <div class="chips hscroll" id="addGroups" style="margin-bottom:12px">${['All',...GROUPS].map(g=>`<button class="chip ${g==='All'?'on':''}" data-ag="${g}">${g}</button>`).join('')}</div>
-    <div class="card list" id="addResults">${SR.searchEx('').map(e=>libRow(e,'data-quickadd="'+e.id+'"')).join('')}</div>`);
+    <div class="card list" id="addResults">${addListHtml(target)}</div>`);
   const pick=ev=>{const b=ev.target.closest('[data-quickadd]');if(!b)return;addExerciseToCur(b.dataset.quickadd);closeSheet();};
   const sg=$('#addSuggest');if(sg)sg.addEventListener('click',pick);
   $('#addResults').addEventListener('click',pick);
   const inp=$('#addSearch');let ag='All';
-  const refresh=()=>{let r=SR.searchEx(inp.value);if(ag!=='All')r=r.filter(e=>e.group===ag||e.muscles.includes(ag));
+  const refresh=()=>{if(!inp.value.trim()&&ag==='All'){$('#addResults').innerHTML=addListHtml(target);return;}
+    let r=SR.searchEx(inp.value);if(ag!=='All')r=r.filter(e=>e.group===ag||e.muscles.includes(ag));
     $('#addResults').innerHTML=r.length?r.map(e=>libRow(e,'data-quickadd="'+e.id+'"')).join(''):'<div style="padding:20px;text-align:center" class="dim">No match.</div>';};
   inp.addEventListener('input',refresh);
   $('#addGroups').addEventListener('click',ev=>{const b=ev.target.closest('[data-ag]');if(!b)return;ag=b.dataset.ag;$('#addGroups').querySelectorAll('.chip').forEach(c=>c.classList.toggle('on',c===b));refresh();});
@@ -723,7 +733,7 @@ function openSessionDetail(sid){
     ${s.exercises.map(e=>{const ex=EX[e.id];return `<div class="card" style="padding:13px 15px;margin-bottom:10px">
       <div style="display:flex;gap:11px;align-items:center;margin-bottom:9px"><div class="ex-ic" style="width:36px;height:36px">${exIcon(ex?ex.group:'Core')}</div><div class="ex-name">${esc(ex?ex.name:e.name)}</div></div>
       <div class="setgrid" style="padding:0"><div class="set-hdr"><div>Set</div><div>${U()}</div><div>${D.TIME_METRIC.has(e.id)?'Sec':'Reps'}</div><div></div></div>
-      ${e.sets.filter(st=>st.done!==false).map((st,i)=>`<div class="set-row"><div class="set-no ${st.warm?'warm':''}">${st.warm?'W':i+1}</div><div class="numwrap" style="justify-content:center"><span class="mono" style="font-size:16px;font-weight:600">${st.w||0}</span></div><div class="numwrap" style="justify-content:center"><span class="mono" style="font-size:16px;font-weight:600">${st.r||0}${D.TIME_METRIC.has(e.id)?'s':''}</span></div><div></div></div>`).join('')}</div></div>`;}).join('')}
+      ${e.sets.filter(st=>st.done!==false).map((st,i,arr)=>`<div class="set-row"><div class="set-no ${st.warm?'warm':''}">${st.warm?'W':arr.slice(0,i).filter(x=>!x.warm).length+1}</div><div class="numwrap" style="justify-content:center"><span class="mono" style="font-size:16px;font-weight:600">${st.w||0}</span></div><div class="numwrap" style="justify-content:center"><span class="mono" style="font-size:16px;font-weight:600">${st.r||0}${D.TIME_METRIC.has(e.id)?'s':''}</span></div><div></div></div>`).join('')}</div></div>`;}).join('')}
     <div style="display:flex;gap:9px;margin:8px 0 10px"><button class="btn ghost" style="flex:1" data-editsess="${s.id}">✎ Edit</button><button class="btn ghost" style="flex:1" data-repeatfrom="${s.id}">↻ Repeat</button></div>
     <button class="btn ghost block" data-routinefrom="${s.id}" style="margin-bottom:10px">★ Save as routine</button>
     <button class="linkbtn dim" data-delsess="${s.id}" style="display:block;text-align:center;width:100%">Delete this session</button>`);
