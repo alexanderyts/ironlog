@@ -90,7 +90,6 @@ function viewProgress(){
   // partial week) always shows a big drop against a full one. This Mon–Tue vs last Mon–Tue is fair,
   // and by Sunday it's the full week either way.
   const inWk=arr=>arr.filter(s=>s.date>=ws),inLw=arr=>arr.filter(s=>s.date>=lwStart&&s.date<lwStart+elapsed);
-  const mo=done.filter(s=>s.date>=now-30*DAY);   // strength last 30d — for the muscle breakdown only
   // Rule (stated once): COUNT tiles (sessions, streak) include cardio — showing up is showing up.
   // MAGNITUDE tiles (volume, sets) are strength only, because cardio has no load or working sets.
   const wkAny=inWk(anyDone).length,lwAny=inLw(anyDone).length;
@@ -105,16 +104,15 @@ function viewProgress(){
       <div class="card stat"><div class="k">Sets this week</div><div class="v mono">${wkSets}<small>set${wkSets!==1?'s':''}</small></div>${statDelta(wkSets,lwSets)}</div>
       <div class="card stat"><div class="k">Current streak</div><div class="v mono">${P.calcStreak(anyDone,now)}<small>wk</small></div></div>
     </div>
-    ${coachCard(done)}
-    ${recoveryCard()}
-    ${timeCard()}
-    ${cardioCard()}
+    ${liftsCard(done)}
+    ${collapsible('records','All-time records','',`${prTip()}<div class="card list" id="prCard">${prList()}</div>`,'14px 2px 10px',true)}
+    ${coachSection(done)}
+    ${musclesCard(done)}
     <div class="eyebrow" style="margin:24px 2px 10px">Weekly volume · last 8 weeks</div>
     <div class="card" style="padding:14px 12px 10px">${volumeChart()}</div>
-    <div class="eyebrow" style="margin:24px 2px 10px">Personal records</div>
-    ${prTip()}
-    <div class="card list" id="prCard">${prList()}</div>
-    ${muscleBreakdown(mo)}
+    ${timeCard()}
+    ${recoveryCard()}
+    ${cardioCard()}
   </div>`;
 }
 function volumeChart(){
@@ -160,11 +158,6 @@ function prList(){
     <div class="ex-sub">Best set ${setStr(p)}</div>${p.adjusted?`<div class="ex-sub" style="color:var(--warn)">PR adjusted · ${setStr({...p,w:p.adjusted.w,r:p.adjusted.r})} on ${fmtDate(p.adjusted.date)} set aside</div>`:''}</div>
     <div style="text-align:right">${p.showEst?`<div class="mono" style="font-weight:700;font-size:16px">${p.est}<span class="dim" style="font-size:11px"> ${U()} e1RM</span></div>`:`<div class="mono dim" style="font-weight:600;font-size:13px">${p.load}${U()}</div>`}</div>${CHEV_R}</div>`).join('');
 }
-function balBar(l,lv,r,rv){
-  const total=lv+rv||1,lp=Math.round(lv/total*100);
-  return `<div style="margin-bottom:13px"><div class="row-between" style="font-size:12.5px;margin-bottom:5px"><span style="font-weight:600">${l} <span class="mono dim">${lv}</span></span><span style="font-weight:600"><span class="mono dim">${rv}</span> ${r}</span></div>
-    <div style="height:9px;border-radius:5px;overflow:hidden;display:flex;background:var(--surface-2)"><div style="width:${lp}%;background:var(--accent)"></div><div style="flex:1;background:var(--good)"></div></div></div>`;
-}
 // How much longer until Coach's Notes will show program-level verdicts (push/pull balance, legs
 // undertrained, weekly-volume landmarks) — those need real history to mean anything, so a brand-new
 // user sees encouragement here instead of a premature judgment. See analysis.js MIN_COMPARATIVE_*.
@@ -181,31 +174,89 @@ function tipsCard(tips){
 // Collapsible section (Coach's notes / Recovery / Time). Default open; the user's open/closed choice
 // per panel rides the synced `seen` map as 'collapse:<key>' (absent = open), so it persists and syncs
 // with no new sanitizer surface. `summary` shows a one-line gist while collapsed.
-function panelOpen(k){return !seenFlag('collapse:'+k);}
-function collapsible(key,title,summary,body,margin){
-  const open=panelOpen(key);
+// closedByDefault panels flip the flag: 'expand:<key>' present = open (secondary panels start folded).
+function panelOpen(k,closedByDefault){return closedByDefault?seenFlag('expand:'+k):!seenFlag('collapse:'+k);}
+function collapsible(key,title,summary,body,margin,closedByDefault){
+  const open=panelOpen(key,closedByDefault);
   const chev=`<svg class="chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>`;
-  return `<div class="eyebrow collapse-head${open?' open':''}" role="button" tabindex="0" aria-expanded="${open}" data-collapse="${esc(key)}" style="margin:${margin||'24px 2px 10px'}">
+  return `<div class="eyebrow collapse-head${open?' open':''}" role="button" tabindex="0" aria-expanded="${open}" data-collapse="${esc(key)}"${closedByDefault?' data-collapse-closed="1"':''} style="margin:${margin||'24px 2px 10px'}">
     <span>${title}</span>
     <span class="collapse-r">${open||!summary?'':`<span class="collapse-sum">${summary}</span>`}${chev}</span></div>
     ${open?body:''}`;
 }
-function coachCard(done){
+/* ---- Progress v2 (v0.68.0) ---- one source per question: "am I getting stronger?" (Your lifts),
+   "what should I do next?" (Coach: Focus + Wins), "is each muscle getting enough?" (Muscles). The
+   numbers come from analysis.liftStatus / coachReport / muscleWeekly, which share the coach's and the
+   builder's rules, so no two cards can contradict each other. */
+let liftsAll=false;   // "Show all" on Your lifts (screen state, not saved)
+const LIFT_BADGE={pr:['★','New PR','var(--accent)'],up:['▲','Improving','var(--good)'],stuck:['⏸','Stuck','var(--warn)'],hold:['→','Holding','var(--ink-3)'],new:['•','First time','var(--ink-3)']};
+// A lift's set, written the way it reads everywhere else: "155lb × 8", "60s", "30lb assist × 8", "Bodyweight × 12".
+function liftSetText(l,st){const u=U(),side=l.sides===2?'/side':'';
+  if(l.time)return (st.w?st.w+u+(l.holds===2?'/ea':'')+' · ':'')+st.r+'s'+side;
+  if(l.assist)return (st.w?st.w+u+' assist':'unassisted')+' × '+st.r+side;
+  if(l.bodyweight)return (st.w?'Bodyweight +'+st.w+u:'Bodyweight')+' × '+st.r+side;
+  return st.w+u+(l.holds===2?'/ea':'')+' × '+st.r+side;}
+function liftRow(l){
+  const b=LIFT_BADGE[l.status],ex=EX[l.id],native=ex&&EQUIP_MODE[ex.equip];
+  const tag=(l.mode&&l.mode!==native&&MODES[l.mode]?` <span class="pill" style="font-size:10px;padding:1px 7px">${esc(MODES[l.mode].label)}</span>`:'');
+  const sub=l.status==='stuck'?`${liftSetText(l,l.best)} · no gain in 2+ weeks`
+    :l.from?`${liftSetText(l,l.to)} <span class="dim">· was ${esc(liftSetText(l,l.from))}</span>`:`Best ${liftSetText(l,l.best)}`;
+  return `<div class="ex-row" data-openex="${l.id}" style="cursor:pointer"><span aria-hidden="true" style="width:18px;text-align:center;font-size:14px;color:${b[2]};flex-shrink:0">${b[0]}</span>
+    <div style="flex:1;min-width:0"><div class="ex-name">${esc(l.name)}${tag}</div><div class="ex-sub">${sub}</div></div>
+    <span style="font-size:11.5px;font-weight:700;color:${b[2]};flex-shrink:0">${b[1]}</span>${CHEV_R}</div>`;
+}
+function liftsCard(done){
+  if(!done.length)return '';
+  const lifts=memoStat('lifts',()=>A.liftStatus(state.sessions,Date.now(),bw()));
+  if(!lifts.length)return `<div class="eyebrow" style="margin:24px 2px 10px">Your lifts · last 4 weeks</div><div class="card" style="padding:20px;text-align:center"><div class="dim">No lifting in the last 4 weeks.</div></div>`;
+  const n=s=>lifts.filter(l=>l.status===s).length,sum=[n('pr')&&n('pr')+' new PR'+(n('pr')>1?'s':''),n('up')&&n('up')+' improving',n('stuck')&&n('stuck')+' stuck'].filter(Boolean).join(' · ');
+  const shown=liftsAll?lifts:lifts.slice(0,8);
+  return `<div class="eyebrow row-between" style="margin:24px 2px 10px"><span>Your lifts · last 4 weeks</span><span style="text-transform:none;letter-spacing:0;font-weight:600">${sum}</span></div>
+    <div class="card list" id="liftCard">${shown.map(liftRow).join('')}
+    ${lifts.length>8?`<button class="linkbtn" data-liftsall style="display:block;width:100%;text-align:center;padding:12px;font-weight:600">${liftsAll?'Show fewer':'Show all '+lifts.length}</button>`:''}</div>`;
+}
+function coachSection(done){
   if(!done.length)return '';
   const a=memoStat('analyze',()=>A.analyze(state.sessions,Date.now()));
-  const tips=A.buildTips(a,state.sessions,Date.now(),bw(),state.settings.profile,state.settings.seen);   // not memoized — depends on the mutable seen/profile settings, and is cheap given `a`
-  const sum=tips.length?`${tips.length} note${tips.length!==1?'s':''}`:'all clear';
-  if(!a.readyForComparative){
-    // early on: encouragement + whatever per-muscle tips (region/pattern gaps, progression) are
-    // already individually meaningful — no full balance analysis yet, so no "Effectiveness" bars
-    const body=`<div class="card" style="padding:16px;margin-bottom:${tips.length?'12':'0'}px"><div class="dim" style="font-size:13.5px;line-height:1.5">${buildupMessage(a)}</div></div>
-      ${tips.length?tipsCard(tips):''}`;
-    return collapsible('coach',"Coach's notes",tips.length?sum:'warming up',body);
-  }
-  const body=tips.length?tipsCard(tips):`<div class="card" style="padding:20px;text-align:center"><div class="dim">Nothing to flag — your training looks well-rounded right now.</div></div>`;
-  return `<div class="eyebrow" style="margin:24px 2px 10px">Effectiveness · last 4 weeks</div>
-    <div class="card" style="padding:16px 16px 6px">${balBar('Push',Math.round(a.push),'Pull',Math.round(a.pull))}${balBar('Upper body',a.upperSets,'Lower body',a.lowerSets)}</div>
-    ${collapsible('coach',"Coach's notes",sum,body,'18px 2px 10px')}`;
+  const lifts=memoStat('lifts',()=>A.liftStatus(state.sessions,Date.now(),bw()));
+  const r=A.coachReport(a,state.sessions,Date.now(),bw(),state.settings.profile,state.settings.seen,lifts);   // not memoized: reads the mutable seen/profile
+  const focus=r.focus.length?r.focus.map((f,i)=>`<div style="display:flex;gap:11px;padding:12px 0;${i?'border-top:1px solid var(--line)':''}">
+      <span aria-hidden="true" style="width:9px;height:9px;border-radius:50%;background:var(--warn);flex-shrink:0;margin-top:6px"></span>
+      <div style="flex:1;min-width:0"><div style="font-weight:700;font-size:14px">${esc(f.title)}${f.still?' <span class="pill" style="font-size:10px;padding:1px 7px">still</span>':''}</div>
+        <div class="dim" style="font-size:12.5px;margin-top:2px">${esc(f.detail)}</div>
+        <div style="display:flex;gap:14px;align-items:center;margin-top:${f.exId||f.mutable?'5':'0'}px">
+          ${f.exId?`<button class="linkbtn" data-openex="${f.exId}" style="font-weight:600;font-size:13px;padding:2px 0">Try: ${esc(f.exName)} ›</button>`:''}
+          ${f.mutable?`<button class="linkbtn dim" data-mute="${esc(f.key)}" style="font-size:12px;padding:2px 0;margin-left:auto" aria-label="Stop showing this">Got it</button>`:''}</div></div></div>`).join('')
+    :`<div class="dim" style="padding:14px 0;font-size:13.5px">${r.ready?'Nothing to fix right now — keep doing what you’re doing.':buildupMessage(a)}</div>`;
+  const wins=r.wins.map((w,i)=>`<div style="display:flex;gap:11px;padding:10px 0;${i?'border-top:1px solid var(--line)':''}">
+      <span aria-hidden="true" style="width:14px;text-align:center;color:${w.type==='pr'?'var(--accent)':'var(--good)'};flex-shrink:0;font-weight:700">${w.type==='pr'?'★':'✓'}</span>
+      <div style="flex:1;min-width:0"><div style="font-weight:600;font-size:13.5px">${esc(w.title)}</div><div class="dim" style="font-size:12.5px;margin-top:1px">${esc(w.lift?liftSetText(w.lift,w.lift.to)+(w.lift.from?' · was '+liftSetText(w.lift,w.lift.from):''):w.detail)}</div></div></div>`).join('');
+  const body=`<div class="card" id="coachCard" style="padding:4px 16px 4px">
+      <div class="eyebrow" style="margin:12px 0 0">Focus</div>${focus}
+      ${!r.ready&&r.focus.length?`<div class="dim" style="font-size:12px;padding:0 0 12px">${buildupMessage(a)}</div>`:''}
+      ${wins?`<div class="eyebrow" style="margin:6px 0 0;padding-top:12px;border-top:1px solid var(--line)">Wins</div>${wins}`:''}</div>`;
+  const sum=[r.focus.length?r.focus.length+' to focus on':'nothing to fix',r.wins.length?r.wins.length+' win'+(r.wins.length>1?'s':''):''].filter(Boolean).join(' · ');
+  return collapsible('coach','Coach',sum,body);
+}
+// Sets per week per muscle vs the target range for your goal. Counted the coach's way (helper muscles
+// get half a set), so a "low" here is exactly a "is low" in Focus — never two different numbers.
+function musclesCard(done){
+  if(!done.length)return '';
+  const a=memoStat('analyze',()=>A.analyze(state.sessions,Date.now()));
+  const F=A.findings(a,state.sessions,Date.now(),bw(),state.settings.profile);   // not memoized: the profile lens can change without the data changing
+  const rows=A.muscleWeekly(a,state.settings.profile,F);if(!rows.length)return '';
+  const t=A.volTargetFor(state.settings.profile),scale=Math.max(t[1]*1.25,...rows.map(r=>r.perWeek))||1,pct=v=>Math.min(100,v/scale*100);
+  const bar=r=>`<div style="position:relative;height:9px;background:var(--surface-2);border-radius:5px;overflow:hidden">
+      ${r.target?`<div style="position:absolute;top:0;bottom:0;left:${pct(r.target[0])}%;width:${pct(r.target[1])-pct(r.target[0])}%;background:color-mix(in srgb,var(--good) 22%,transparent)"></div>`:''}
+      <div style="position:absolute;top:0;bottom:0;left:0;width:${pct(r.perWeek)}%;background:${r.low?'var(--warn)':'var(--accent)'};border-radius:5px"></div></div>`;
+  const legs=F.some(f=>f.type==='legs-low'),bal=F.find(f=>f.type==='balance');
+  const balLine=a.readyForComparative?`<div class="dim" style="font-size:12.5px;margin-top:12px;padding-top:11px;border-top:1px solid var(--line);line-height:1.6">
+      Push <b class="mono">${Math.round(a.push)}</b> · Pull <b class="mono">${Math.round(a.pull)}</b>${bal?` — ${bal.dir==='even'?'balanced':bal.dir==='push'?'pull is behind':'push is behind'}`:''}<br>
+      Upper <b class="mono">${a.upperSets}</b> · Lower <b class="mono">${a.lowerSets}</b>${legs?' — legs are behind':''} <span style="opacity:.8">(sets, 4 weeks)</span></div>`:'';
+  return `<div class="eyebrow row-between" style="margin:24px 2px 10px"><span>Muscles · sets per week</span><span style="text-transform:none;letter-spacing:0;font-weight:600">last 4 weeks</span></div>
+    <div class="card" style="padding:15px 16px">${rows.map(r=>`<div style="margin-bottom:11px"><div class="row-between" style="margin-bottom:5px"><span style="font-weight:600;font-size:13.5px">${r.group}</span><span class="mono" style="font-size:12.5px;${r.low?'color:var(--warn);font-weight:700':'color:var(--ink-3)'}">${r.perWeek}${r.low?' · low':''}</span></div>${bar(r)}</div>`).join('')}
+      <div class="dim" style="font-size:11.5px;line-height:1.5">Shaded = your target, ${t[0]}–${t[1]} sets a week. A lift's helper muscles count as half a set.</div>
+      ${balLine}</div>`;
 }
 // Read-only view of HOW the user deloads. Deliberately makes no judgment and never touches
 // progression — a deload is theirs, at any load, for any reason. See analysis.deloadStats.
@@ -220,7 +271,7 @@ function recoveryCard(){
   const sum=d.lastDaysAgo==null?`${d.deloads} logged`:d.lastDaysAgo===0?'last one today':`last one ${d.lastDaysAgo}d ago`;
   const body=`<div class="card" style="padding:14px 16px"><div style="font-size:13.5px;line-height:1.55">${rows.map(r=>`<div style="padding:4px 0">${r}</div>`).join('')}</div>
     <div class="dim" style="font-size:12px;margin-top:8px">Deloads never affect your progression, PRs or the builder — this is just so you can see your own pattern.</div></div>`;
-  return collapsible('recovery','Recovery · how you deload',sum,body);
+  return collapsible('recovery','Recovery · how you deload',sum,body,null,true);
 }
 // Time card (T3): how long you train, how dense, how long you rest, and where the time goes — all
 // from the per-set stamps. Shows nothing until at least one timed workout exists.
@@ -237,7 +288,7 @@ function timeCard(){
       ${t.byGroup.length?`<div class="eyebrow" style="margin:2px 0 9px">Where your time goes</div>
         ${t.byGroup.map(([g,m])=>`<div style="margin-bottom:9px"><div class="row-between" style="margin-bottom:4px"><span style="font-weight:600;font-size:13px">${g}</span><span class="mono dim" style="font-size:12px">${fmtDur(m)}</span></div><div style="height:6px;background:var(--surface-2);border-radius:3px;overflow:hidden"><div style="height:100%;width:${Math.round(m/maxG*100)}%;background:var(--accent);border-radius:3px"></div></div></div>`).join('')}`:''}
     </div>`;
-  return collapsible('time','Time · last 4 weeks',`avg ${fmtDur(t.avgDuration)}`,body);
+  return collapsible('time','Time · last 4 weeks',`avg ${fmtDur(t.avgDuration)}`,body,null,true);
 }
 // Cardio summary — its own section on Progress. Nothing here touches the lifting stats.
 function cardioCard(){
@@ -251,13 +302,7 @@ function cardioCard(){
       ${c.byType.length?`<div class="eyebrow" style="margin:2px 0 9px">Minutes by type · last 4 weeks</div>
         ${c.byType.map(([t,m])=>`<div style="margin-bottom:9px"><div class="row-between" style="margin-bottom:4px"><span style="font-weight:600;font-size:13px">${cardioTypeLabel(t)}</span><span class="mono dim" style="font-size:12px">${fmtDur(m)}</span></div><div style="height:6px;background:var(--surface-2);border-radius:3px;overflow:hidden"><div style="height:100%;width:${Math.round(m/maxT*100)}%;background:var(--accent);border-radius:3px"></div></div></div>`).join('')}`:''}
     </div>`;
-  return collapsible('cardio','Cardio · last 4 weeks',`${c.winCount} session${c.winCount!==1?'s':''} · ${fmtDur(c.winMin)}`,body);
-}
-function muscleBreakdown(mo){
-  const arr=memoStat('msc',()=>A.muscleSetCounts(mo));if(!arr.length)return'';
-  const max=Math.max(...arr.map(a=>a[1]));
-  return `<div class="eyebrow" style="margin:24px 2px 10px">Sets by muscle · last 30 days</div>
-    <div class="card" style="padding:15px 16px">${arr.map(([g,n])=>`<div style="margin-bottom:11px"><div class="row-between" style="margin-bottom:5px"><span style="font-weight:600;font-size:13.5px">${g}</span><span class="mono dim" style="font-size:12.5px">${n} sets</span></div><div style="height:7px;background:var(--surface-2);border-radius:4px;overflow:hidden"><div style="height:100%;width:${n/max*100}%;background:var(--accent);border-radius:4px"></div></div></div>`).join('')}</div>`;
+  return collapsible('cardio','Cardio · last 4 weeks',`${c.winCount} session${c.winCount!==1?'s':''} · ${fmtDur(c.winMin)}`,body,null,true);
 }
 
 /* ---------------- sheets ---------------- */
@@ -508,7 +553,7 @@ function seenFlag(k){return !!(state.settings.seen&&state.settings.seen[k]);}
 function markSeen(k){state.settings.seen=Object.assign({},state.settings.seen,{[k]:true});S.saveSettingsCloud();}
 // Two-way toggle for a collapsible panel: 'collapse:<key>' present = collapsed, absent = open (default).
 // Rides the synced `seen` map, so the choice persists and syncs across devices.
-function toggleCollapse(key){const k='collapse:'+key,seen=state.settings.seen=state.settings.seen||{};
+function toggleCollapse(key,closedByDefault){const k=(closedByDefault?'expand:':'collapse:')+key,seen=state.settings.seen=state.settings.seen||{};
   if(seen[k])delete seen[k];else seen[k]=true;S.saveSettingsCloud();render();}
 // A short label for the "Profile: …" lines; "Balanced" when nothing is set.
 function profileSummary(){const p=state.settings.profile||{};const parts=[];

@@ -104,6 +104,8 @@ test('the mark survives a backup round-trip',()=>{
 
 /* ---- UI wiring: the engine can be right while the buttons do nothing ---- */
 const {launch}=require('./ui-harness.js');
+// v0.68.0: the all-time records list is a folded section under "Your lifts" — open it like a reader would
+function openProgress(h){h.click('.tab[data-tab="progress"]');const hd=h.$('[data-collapse="records"]');if(hd&&hd.getAttribute('aria-expanded')!=='true')h.click(hd);}
 
 test('UI: the exercise sheet adjusts a PR and puts it back',()=>{
   const h=launch();
@@ -111,7 +113,7 @@ test('UI: the exercise sheet adjusts a PR and puts it back',()=>{
     // same shape as the real history: a 110x10 top set over a previous best of 100x10
     rows(false).forEach(s=>h.S.upsertSession(JSON.parse(JSON.stringify(s)),false));
     h.state.settings.bodyweight=216;
-    h.click('.tab[data-tab="progress"]');
+    openProgress(h);
     const row=h.$$('#prCard [data-openex]').find(r=>r.dataset.openex==='barbell-row');
     assert.ok(row,'barbell row has a PR row');
     h.click(row);
@@ -156,7 +158,7 @@ test('UI: the tip and the chevron make the retroactive path findable, and the ti
   const h=launch();
   try{
     rows(false).forEach(s=>h.S.upsertSession(JSON.parse(JSON.stringify(s)),false));
-    h.click('.tab[data-tab="progress"]');
+    openProgress(h);
     assert.ok(h.has('[data-seentip="prAdjustTip"]'),'a first-time reader is told the rows do something');
     const row=h.$$('#prCard [data-openex]').find(r=>r.dataset.openex==='barbell-row');
     assert.ok(row.querySelector('svg'),'the row carries a chevron so it reads as tappable');
@@ -164,7 +166,7 @@ test('UI: the tip and the chevron make the retroactive path findable, and the ti
     h.click('[data-seentip="prAdjustTip"]');
     assert.ok(!h.has('[data-seentip="prAdjustTip"]'),'"Got it" hides it');
     assert.equal(h.state.settings.seen.prAdjustTip,true,'and the choice is stored (so it syncs)');
-    h.click('.tab[data-tab="today"]');h.click('.tab[data-tab="progress"]');
+    h.click('.tab[data-tab="today"]');openProgress(h);
     assert.ok(!h.has('[data-seentip="prAdjustTip"]'),'it stays hidden across navigation');
   }finally{h.teardown();}
 });
@@ -201,7 +203,7 @@ test('UI: "Count it again" restores the shown record one tap at a time, not all 
       session(16,[['barbell-row',[set(100,10)]]]) ]
       .forEach(s=>h.S.upsertSession(JSON.parse(JSON.stringify(s)),false));
     h.state.settings.bodyweight=216;
-    h.click('.tab[data-tab="progress"]');
+    openProgress(h);
     const open=()=>h.click(h.$$('#prCard [data-openex]').find(r=>r.dataset.openex==='barbell-row'));
     open();
     h.click('#sheetBody [data-prmark]');   // set aside 120 -> record 110
@@ -221,7 +223,7 @@ test('UI: adjusting a timed lift reads in seconds, never "0lb"/bare reps',()=>{
     [ session(2,[['farmers-carry',[set(50,45)]]]),
       session(9,[['farmers-carry',[set(50,30)]]]) ]
       .forEach(s=>h.S.upsertSession(JSON.parse(JSON.stringify(s)),false));
-    h.click('.tab[data-tab="progress"]');
+    openProgress(h);
     h.click(h.$$('#prCard [data-openex]').find(r=>r.dataset.openex==='farmers-carry'));
     h.click('#sheetBody [data-prmark]');   // set aside the 45s
     const t=h.text('#sheetBody');
@@ -233,11 +235,11 @@ test('UI: adjusting a timed lift reads in seconds, never "0lb"/bare reps',()=>{
 test('UI: the PR tip stays hidden until there is a record to tap',()=>{
   const h=launch();
   try{
-    h.click('.tab[data-tab="progress"]');
+    openProgress(h);
     assert.ok(!h.has('[data-seentip="prAdjustTip"]'),'no tip when there are no PRs yet');
     h.S.upsertSession({id:'r',schema:1,date:Date.now()-2*86400000,updatedAt:1,completed:true,
       exercises:[{id:'barbell-row',name:'Barbell Row',sets:[{w:100,r:10,done:true}]}]},false);
-    h.click('.tab[data-tab="today"]');h.click('.tab[data-tab="progress"]');
+    h.click('.tab[data-tab="today"]');openProgress(h);
     assert.ok(h.has('[data-seentip="prAdjustTip"]'),'tip appears once a record exists');
   }finally{h.teardown();}
 });

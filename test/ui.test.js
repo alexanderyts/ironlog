@@ -210,6 +210,7 @@ test('UI: T3 — the Progress Time card summarises duration, rest and time-by-mu
     ];
     h.IL.ui.render();
     h.click(h.$$('[data-tab]').find(b=>b.dataset.tab==='progress'));
+    h.click('[data-collapse="time"]');   // v0.68.0: Time starts folded
     const txt=h.text('#view');
     assert.ok(txt.includes('Time · last 4 weeks'),'Time card present');
     assert.ok(txt.includes('30 min'),'avg workout (40+20)/2 = 30 min');
@@ -468,6 +469,7 @@ test('UI: rest times on the Time card render as clean m:ss, never with decimals'
     h.state.sessions=[{id:'tt',schema:1,date:t0,updatedAt:now,completed:true,endedAt:t0+600000,
       exercises:[{id:'barbell-bench-press',name:'Bench',sets:at.map(a=>({w:135,r:5,done:true,at:a}))}]}];
     h.click('.tab[data-tab="progress"]');
+    h.click('[data-collapse="time"]');   // v0.68.0: Time starts folded
     const view=h.$('#view').textContent;
     assert.match(view,/compounds ~\d+:\d\d\b/,'rest shows m:ss');
     assert.doesNotMatch(view,/:\d\d\.\d/,'no decimal seconds anywhere on the tab');

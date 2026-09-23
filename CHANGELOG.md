@@ -2,6 +2,19 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.68.0 — 2026-09-22 · A clearer Progress tab and coach
+The Progress tab now answers three questions, in this order: am I getting stronger, what should I work on, and is each muscle getting enough?
+- **Your lifts (new, at the top).** Every lift from the last 4 weeks has one status: ★ New PR, ▲ Improving, ⏸ Stuck, → Holding, or First time. Each row shows your latest set and what it was before ("155 lb × 8 · was 145 × 8"). "Stuck" uses the same test the workout builder uses. Tap a row to see its chart.
+- **All-time records** are still one tap away, in a folded section under Your lifts.
+- **The coach is now Focus + Wins.**
+  - **Focus** lists at most 3 things to work on. Each has a short headline, the number behind it, and a "Try: …" link to a suggested exercise that fits your gym settings. "Got it" hides one.
+  - **Wins** lists what's going well: new PRs (as one line), problems you've fixed, good balance and deloads.
+- **Muscles: sets per week** replaces "Sets by muscle · last 30 days" and the push/pull bars. Each muscle has a shaded target range, which follows the goal in your training profile. A low muscle is marked here with exactly the same number the coach uses. (Before, the coach said hamstrings had 7.5 sets a week while the chart said 24 sets.) Push/pull and upper/lower balance sit under the chart.
+- **Time, Recovery and Cardio** start folded, and the app remembers which ones you open.
+- **Home** shows one line ("2 workouts this week · 3-week streak") instead of repeating the Progress tiles.
+
+Not verified on-device.
+
 ## v0.67.0 — 2026-09-22 · Code tidy-up and new safety checks
 Almost nothing you can see changes here. It makes the app easier to change without breaking something.
 - **One bug fixed:** if saved data had an equipment type this version doesn't recognise, the Progress tab showed "Something went wrong". The app now uses the exercise's usual equipment in that case. A new test found this.

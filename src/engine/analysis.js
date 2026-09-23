@@ -443,5 +443,117 @@ function cardioStats(sessions,now){
   return {sessions:all.length,weekCount:wk.length,weekMin:mins(wk),winCount:win.length,winMin:mins(win),
     byType:Object.entries(byType).sort((a,b)=>b[1]-a[1]),lastType:last.cardio&&last.cardio.type,lastDate:last.date};
 }
-IL.analysis={analyze,progressionStat,gapPrio,patPrio,findings,findingKey,withStatus,renderFinding,buildTips,buildHints,personalRecords,weeklyVolumes,muscleSetCounts,deloadStats,timeByGroup,restTaken,sessionDensity,exerciseRest,timeTrends,cardioStats,MIN_COMPARATIVE_SESSIONS,MIN_COMPARATIVE_DAYS};
+/* ── Progress tab v2 (v0.68.0): three read-outs built on the SAME facts as the coach and the builder ──
+   liftStatus  → "Your lifts": every lift trained in the last 4 weeks, each with ONE status
+                 (★ new PR · ▲ improving · ⏸ stuck · → holding · new), judged by the one judge (scoreSet)
+                 and, for "stuck", by the builder's own isStalled — so the tab and the builder agree.
+   muscleWeekly→ "Muscles": sets per week per muscle, counted exactly as the coach counts them (effective
+                 sets: helper muscles half) with the goal's target range, so the chart and a "low" note
+                 can never disagree again.
+   coachReport → "Focus" (≤3 to-dos, each with the number behind it and an exercise to try) and "Wins". */
+const LIFT_WINDOW_DAYS=28,PR_FRESH_DAYS=14;
+const STATUS_ORDER={pr:0,up:1,stuck:2,hold:3,new:4};
+function liftStatus(sessions,now,bw){
+  now=now||Date.now();const since=now-LIFT_WINDOW_DAYS*DAY;
+  const keys={};
+  // ONE pass, oldest → newest: each session's best working set per lift+track, plus the running best
+  // BEFORE that session (so "is this a PR?" needs no second scan of history).
+  real(sessions).filter(s=>s.date<now).slice().reverse().forEach(s=>{const b=sbw(s,bw);
+    s.exercises.forEach(e=>{if(!EX[e.id])return;let best=null,bs=null;
+      e.sets.forEach(st=>{if(st.nc||!isWorking(st))return;const sc=scoreSet(e.id,st,b);if(beatsScore(sc,best)){best=sc;bs=st;}});
+      if(!best)return;const tr=trackOf(e),k=e.id+'|'+tr;
+      const L=keys[k]=keys[k]||{id:e.id,track:tr,mode:modeOf(e),sides:sidesOf(e),holds:holdsOf(e),perfs:[],top:null,topSet:null};
+      L.perfs.push({date:s.date,sc:best,w:+bs.w||0,r:+bs.r||0,prior:L.top,priorSet:L.topSet});
+      if(beatsScore(best,L.top)){L.top=best;L.topSet={w:+bs.w||0,r:+bs.r||0};}
+    });});
+  const out=[];
+  Object.values(keys).forEach(L=>{
+    const win=L.perfs.filter(p=>p.date>=since);if(!win.length)return;
+    const first=win[0],last=win[win.length-1],ex=EX[L.id];
+    const best=win.reduce((a,p)=>beatsScore(p.sc,a.sc)?p:a,win[0]);
+    const fresh=win.filter(p=>p.date>=now-PR_FRESH_DAYS*DAY&&p.prior&&beatsScore(p.sc,p.prior));
+    let status,from=null,to=last;
+    if(!L.perfs[0].prior&&L.perfs.length===1)status='new';               // first time ever — nothing to compare yet
+    else if(fresh.length){status='pr';to=fresh[fresh.length-1];from=to.priorSet;}
+    else if(IL.builder&&IL.builder.isStalled&&IL.builder.isStalled(sessions,L.id,{mode:L.track,bw}))status='stuck';
+    else if(win.length>=2&&beatsScore(last.sc,first.sc)){status='up';from={w:first.w,r:first.r};}
+    else status='hold';
+    out.push({id:L.id,name:ex.name,track:L.track,mode:L.mode,sides:L.sides,holds:L.holds,kind:best.sc.kind,
+      status,best:{w:best.w,r:best.r},to:{w:to.w,r:to.r},from,sessions:win.length,lastDate:last.date,
+      bodyweight:ex.equip==='Bodyweight',time:!!(TIME_METRIC&&TIME_METRIC.has(L.id)),assist:isAssist(L.id)});
+  });
+  return out.sort((a,b)=>STATUS_ORDER[a.status]-STATUS_ORDER[b.status]||b.lastDate-a.lastDate);
+}
+// Target range (sets/week) for a muscle, from the profile goal — the same numbers volume-low uses.
+function volTargetFor(profile){profile=profile||{};const goal=profile.goal==='size'||profile.goal==='strength'?profile.goal:'general';
+  const r=VOL_LANDMARKS[goal].slice();if(profile.days&&profile.days<=2)r[0]=Math.min(r[0],6);return r;}
+function muscleWeekly(a,profile,F){
+  const t=volTargetFor(profile),low=new Set((F||[]).filter(f=>f.type==='volume-low').map(f=>f.group));
+  return Object.keys(a.groupSets).filter(g=>a.groupSets[g]>0).map(g=>({group:g,perWeek:Math.round((a.perWeek[g]||0)*10)/10,
+    target:(g==='Core'||g==='Calves')?null:t,low:low.has(g)})).sort((x,y)=>y.perWeek-x.perWeek);
+}
+// The exercise to suggest for a to-do: one you already do for that muscle (most sets in the window), else
+// the first gym/avoid-legal foundational lift — never something off-limits for this profile.
+function suggestFor(sessions,now,profile,match,group){
+  const win=completed(sessions).filter(s=>s.date>=now-28*DAY&&s.date<now),cnt={};
+  win.forEach(s=>s.exercises.forEach(e=>{const x=EX[e.id];if(x&&match(x))cnt[e.id]=(cnt[e.id]||0)+e.sets.filter(isWorking).length;}));
+  const used=Object.keys(cnt).sort((p,q)=>cnt[q]-cnt[p])[0];if(used)return EX[used];
+  const pf=Object.assign({},profile,{protect:undefined});
+  return EXERCISES.filter(x=>match(x)&&IL.builder.profileAllows(x,group||x.group,pf,sessions)).sort((p,q)=>p.tier-q.tier)[0]||null;
+}
+function aAn(w){return /^[aeiou]/i.test(w)?'an':'a';}
+function focusItem(f,sessions,now,profile){
+  const g=f.group?f.group.toLowerCase():'',G=cap(g);let title,detail,ex=null;
+  switch(f.type){
+    case 'balance':title=f.dir==='push'?'Add more pulling':'Add more pressing';detail=`${f.push} push vs ${f.pull} pull sets in 4 weeks`;
+      ex=suggestFor(sessions,now,profile,x=>f.dir==='push'?(x.pat==='hpull'||x.pat==='vpull'):(x.pat==='hpush'||x.pat==='vpush'));break;
+    case 'legs-low':title='Legs are behind';detail=`${f.lower} lower-body vs ${f.upper} upper-body sets`;
+      ex=suggestFor(sessions,now,profile,x=>x.type==='compound'&&(x.pat==='squat'||x.pat==='hinge'||x.pat==='lunge'));break;
+    case 'volume-low':{const tgt=f.target||volTargetFor(profile)[0];title=`${G} is low`;
+      detail=`${(Math.round(f.perWeek*10)/10)} sets/week · aim for ${tgt}+`+((f.status==='persisting'&&f.prev&&f.perWeek>f.prev.perWeek)?` · up from ${Math.round(f.prev.perWeek*10)/10}`:'');
+      ex=suggestFor(sessions,now,profile,x=>x.group===f.group,f.group);break;}
+    case 'region-gap':{const rl=regLabel(f.group,f.reg);title=`Cover your ${rl}`;detail='Nothing in 4 weeks';ex=EXERCISES.find(x=>x.name===f.ex)||null;break;}
+    case 'pattern-gap':{const pl=f.pat==='iso'?'isolation':patLabel(f.pat);title=`${G}: add ${aAn(pl)} ${pl} move`;detail=`None in your ${g} work for 4 weeks`;ex=EX[f.exId]||null;break;}
+    case 'freq-low':title=`Split ${g} over 2 days`;detail=`~${Math.round(f.sets)} sets a week, all in one session`;break;
+    case 'deload-due':title='Deload week soon?';detail=`${f.weeks} weeks of steady training — an easier week helps you keep progressing`;break;
+    default:return null;
+  }
+  return {key:findingKey(f),type:f.type,title,detail,still:f.status==='persisting',exId:ex?ex.id:null,exName:ex?ex.name:null,mutable:MUTABLE.has(f.type)};
+}
+function winItem(f,week){
+  const g=f.group?f.group.toLowerCase():'',G=cap(g);
+  if(f.status==='resolved'){
+    const t={balance:'Push & pull back in balance','legs-low':'Legs caught up','volume-low':`${G} volume back up`,'freq-low':`${G} now spread over the week`,
+      'region-gap':f.reg?`${cap(regLabel(f.group,f.reg))} now covered`:'','pattern-gap':`${G} now has ${aAn(f.pat==='iso'?'isolation':patLabel(f.pat||''))} ${f.pat==='iso'?'isolation':patLabel(f.pat||'')} move`}[f.type];
+    return t?{type:'resolved',title:t,detail:'Fixed since last month'}:null;
+  }
+  if(f.type==='balance'&&f.dir==='even')return {type:'balance',title:'Push & pull balanced',detail:`${f.push} / ${f.pull} sets in 4 weeks`};
+  if(f.type==='deload-taken'){const rel=(week||0)-(f.wk||0),when=rel<=0?'this week':rel===1?'last week':f.days+' days ago';return {type:'deload',title:`Deload ${when}`,detail:'Recovery built in — good timing'};}
+  if(f.type==='protect'){const n=f.covering;return {type:'protect',title:`Keeping ${g} light`,detail:(n.length>1?n.slice(0,-1).join(', ')+' and '+n[n.length-1]:n[0])+(n.length>1?' are':' is')+' covering it'};}
+  return null;
+}
+// Focus (to-dos) + Wins, from withStatus. `lifts` (liftStatus) supplies the PR wins so the coach and
+// "Your lifts" can't disagree about what's a PR. Early on (not enough history for comparisons) Focus
+// still carries the per-muscle gaps that are meaningful immediately.
+const FOCUS_ORDER=['balance','legs-low','volume-low','gap','freq-low','deload-due'];
+function coachReport(a,sessions,now,bw,profile,seen,lifts){
+  now=now||Date.now();seen=seen||{};profile=profile||{};const week=isoWeek(now);
+  const ann=withStatus(sessions,now,bw,profile);
+  const muted=f=>MUTABLE.has(f.type)&&seen['mute:'+findingKey(f)]===true;
+  const active=ann.filter(f=>f.status!=='resolved'&&!muted(f)&&f.lv!=='good');
+  const rank=f=>FOCUS_ORDER.indexOf(f.type==='region-gap'||f.type==='pattern-gap'?'gap':f.type);
+  const focus=active.filter(f=>rank(f)>=0).sort((x,y)=>rank(x)-rank(y)||(x.type==='volume-low'?x.perWeek-y.perWeek:0)||((y.prio||0)-(x.prio||0)))
+    .map(f=>focusItem(f,sessions,now,profile)).filter(Boolean).slice(0,3);
+  const wins=[];
+  // PRs already have their own rows in "Your lifts" — here they're ONE win line, so a good fortnight
+  // doesn't push every other win (a fixed gap, good balance) off the list.
+  const prs=(lifts||[]).filter(l=>l.status==='pr');
+  if(prs.length===1)wins.push({type:'pr',title:prs[0].name+' PR',lift:prs[0]});
+  else if(prs.length>1)wins.push({type:'pr',title:prs.length+' new PRs in 2 weeks',detail:prs.slice(0,3).map(l=>l.name).join(', ')+(prs.length>3?' + '+(prs.length-3)+' more':'')});
+  ann.filter(f=>f.status==='resolved'&&RESOLVABLE.has(f.type)).sort((x,y)=>(y.prio||1)-(x.prio||1)).slice(0,2).forEach(f=>{const w=winItem(f,week);if(w)wins.push(w);});
+  ann.filter(f=>f.status!=='resolved'&&(f.type==='balance'||f.type==='deload-taken'||f.type==='protect')).forEach(f=>{const w=winItem(f,week);if(w)wins.push(w);});
+  return {focus,wins:wins.slice(0,5),ready:a.readyForComparative};
+}
+
+IL.analysis={analyze,progressionStat,gapPrio,patPrio,findings,findingKey,withStatus,renderFinding,buildTips,buildHints,personalRecords,weeklyVolumes,muscleSetCounts,deloadStats,timeByGroup,restTaken,sessionDensity,exerciseRest,timeTrends,cardioStats,liftStatus,muscleWeekly,volTargetFor,coachReport,MIN_COMPARATIVE_SESSIONS,MIN_COMPARATIVE_DAYS};
 if(typeof module!=='undefined')module.exports=IL.analysis;

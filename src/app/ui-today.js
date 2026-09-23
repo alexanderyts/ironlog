@@ -9,9 +9,7 @@ function viewToday(){
   return homeView();
 }
 function homeView(){
-  const done=completedSessions(),now=Date.now();
-  const wk=done.filter(s=>s.date>=P.weekStart(now));   // strength this week (for volume)
-  const wkVol=wk.reduce((a,s)=>a+volOf(s),0);
+  const now=Date.now();
   const wkAny=completedAny().filter(s=>s.date>=P.weekStart(now)).length;   // count includes cardio
   const streak=P.calcStreak(completedAny(),now);
   const hr=new Date().getHours();const greet=hr<12?'Good morning':hr<18?'Good afternoon':'Good evening';
@@ -24,11 +22,7 @@ function homeView(){
     </div>
     ${profileIntroCard()}
     ${state.active?resumeCard():''}
-    <div class="statgrid" style="grid-template-columns:1fr 1fr 1fr;margin:16px 0 18px;gap:9px">
-      <div class="card stat" style="padding:14px 12px"><div class="k">This wk</div><div class="v mono">${wkAny}</div></div>
-      <div class="card stat" style="padding:14px 12px"><div class="k">Streak</div><div class="v mono">${streak}<small>wk</small></div></div>
-      <div class="card stat" style="padding:14px 12px"><div class="k">${volLabel()}</div><div class="v mono">${fmtVol(wkVol)}</div></div>
-    </div>
+    <div class="dim" id="homeSummary" style="font-size:13.5px;margin:10px 2px 16px">${wkAny} workout${wkAny!==1?'s':''} this week${streak?` · ${streak}-week streak`:''}</div>   <!-- one line: the full tiles live on Progress (review 5.6) -->
     ${state.active?'':startBlock()}
     ${state.active?'':cardioBlock()}
     ${last?`<div class="eyebrow" style="margin:26px 2px 10px">Last session</div>${sessCard(last)}`:emptyHome()}
