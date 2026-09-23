@@ -200,12 +200,12 @@ function buildButtons(){
   // "plan"/"Session N" framing: the app remembers, it doesn't decide the program.
   if(dl)return `<button class="btn primary block" id="btnRecommend" data-action="build" style="height:auto;padding:12px 16px;font-size:16px;flex-direction:column;gap:2px">
       <span style="display:flex;align-items:center;gap:8px">🌿 Build a deload</span>
-      <span style="font-size:12.5px;font-weight:500;opacity:.85">same lifts as ${relDay(plan.date).toLowerCase()}, ~60% lighter</span></button>
+      <span style="font-size:12.5px;font-weight:500;opacity:.85">same lifts as ${relDayMid(plan.date)}, ~60% lighter</span></button>
     <div style="height:8px"></div>
     <button class="btn ghost block" data-action="buildFresh">Different exercises instead</button>`;
   return `<button class="btn primary block" id="btnRecommend" data-action="build" style="height:auto;padding:12px 16px;font-size:16px;flex-direction:column;gap:2px">
       <span style="display:flex;align-items:center;gap:8px">${ICON_BUILD} Build my workout</span>
-      <span style="font-size:12.5px;font-weight:500;opacity:.85">same lifts as ${relDay(plan.date).toLowerCase()} · weights prefilled from last time</span></button>
+      <span style="font-size:12.5px;font-weight:500;opacity:.85">same lifts as ${relDayMid(plan.date)} · weights prefilled from last time</span></button>
     <div style="height:8px"></div>
     <button class="btn ghost block" data-action="buildFresh">Different exercises instead</button>`;
 }
@@ -442,7 +442,7 @@ function buildAndStart(fresh){
   let msg='Workout built — adjust anything';
   if(p.deload)msg=p.mode==='continue'?'Deload — same lifts as last time, lighter loads, focus on the stretch':'Deload built — lighter loads, focus on the stretch';
   else if(p.mode==='continue'){
-    if(p.lapsed)msg=`Welcome back — weights carried from your session ${relDay(p.plan.date).toLowerCase()}`;
+    if(p.lapsed)msg=`Welcome back — weights carried from your session ${relDayMid(p.plan.date)}`;
     else msg='Same lifts as last time — adjust anything'+((p.offers||[]).length?' · one suggestion inside':'');
   }
   // Settings win on a continued plan: say what was swapped/left out and why (it outranks the messages above)

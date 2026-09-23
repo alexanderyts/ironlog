@@ -183,7 +183,7 @@ function saveRecordPick(id,track,target){
 }
 function setRecord(id,track,target,msg){
   saveRecordPick(id,track,target);
-  render();openSheet(EX[id]?EX[id].name:id,exerciseDetail(id));toast(msg||(target?'Record updated':'Your best set is your record again'));
+  render();openSheet(EX[id]?EX[id].name:id,exerciseDetail(id,track));toast(msg||(target?'Record updated':'Your best set is your record again'));
 }
 // "Don't count this" on the finish screen: keep the record you had before this workout. Stays on the
 // summary (redrawing the exercise sheet over it used to throw away "Done" mid-flow) and ticks in place.
@@ -262,7 +262,10 @@ function startEdit(s){editSession=JSON.parse(JSON.stringify(s));editDirty=false;
 function changeEditDate(iso){
   const s=cur();if(!s||!iso)return;const parts=iso.split('-').map(Number);if(parts.length!==3||!parts[0])return;
   const old=new Date(s.date),nd=new Date(parts[0],parts[1]-1,parts[2],old.getHours(),old.getMinutes(),old.getSeconds(),old.getMilliseconds());
-  const t=nd.getTime();if(t>Date.now()||t===s.date)return;   // no future-dating, no-op if unchanged
+  let t=nd.getTime();if(t===s.date)return;
+  // today at a time that hasn't happened yet (a late-night workout moved to this morning): use now instead
+  // of silently doing nothing — the date field showed the new day while the workout stayed put (batch 5)
+  if(t>Date.now()){if(startOfDay(t)===startOfDay(Date.now()))t=Date.now()-60000;else return;}
   // shift EVERYTHING by the same delta — each set's tick time too, or time-per-muscle / rest / staleness
   // would still read the old day (full review 4.8)
   const delta=t-s.date;s.date=t;if(+s.endedAt>0)s.endedAt+=delta;
@@ -390,6 +393,7 @@ function bind(){
     const mu=e.target.closest('[data-mute]');if(mu){const seen=state.settings.seen=state.settings.seen||{};seen['mute:'+mu.dataset.mute]=true;S.saveSettingsCloud();render();toast('Got it — hidden from Coach’s Focus list. Settings can bring it back',{label:'Undo',fn:()=>{delete seen['mute:'+mu.dataset.mute];S.saveSettingsCloud();render();}});return;}
     const cl=e.target.closest('[data-collapse]');if(cl){toggleCollapse(cl.dataset.collapse,cl.dataset.collapseClosed==='1');return;}
     const la=e.target.closest('[data-liftsall]');if(la){liftsAll=!liftsAll;render();return;}
+    const ra=e.target.closest('[data-recordsall]');if(ra){recordsAll=!recordsAll;render();return;}
     const bv=e.target.closest('[data-barval]');if(bv){bv.classList.toggle('on');return;}   // reveal/hide a volume bar's value
     const sc=e.target.closest('[data-sess]');if(sc){openSessionDetail(sc.dataset.sess);return;}   // works from Home's last-session card AND History
   });
@@ -426,7 +430,7 @@ function bind(){
   bindClick('#btnHistMore',()=>{histShown+=30;render();});
   // [data-sess] is handled by the delegated #view listener above (fires from History AND the Home card).
   // progress: PR rows open the lift's detail (with its progress trend)
-  ['#prCard','#liftCard','#coachCard'].forEach(sel=>{const el=$(sel);if(el)el.addEventListener('click',e=>{const r=e.target.closest('[data-openex]');if(r&&EX[r.dataset.openex])openSheet(EX[r.dataset.openex].name,exerciseDetail(r.dataset.openex));});});
+  ['#prCard','#liftCard','#coachCard'].forEach(sel=>{const el=$(sel);if(el)el.addEventListener('click',e=>{const r=e.target.closest('[data-openex]');if(r&&EX[r.dataset.openex])openSheet(EX[r.dataset.openex].name,exerciseDetail(r.dataset.openex,r.dataset.track));});});
   // library
   const ls=$('#libSearch');if(ls)ls.addEventListener('input',()=>{libQuery=ls.value;const r=$('#libResults');if(r)r.innerHTML=libResultsHtml();});
   v.querySelectorAll('[data-lg]').forEach(b=>b.addEventListener('click',()=>{libGroup=b.dataset.lg;render();}));
@@ -546,7 +550,7 @@ function bindLog(root){
       if(lp){let k=0;ex.sets.forEach(st=>{if(st.done||st.warm)return;const n=lp.sets[Math.min(k++,lp.sets.length-1)];st.w=n.w;st.r=n.r;});}
       persistCur();render();toast(next?'One side at a time — reps per side':'Both sides at once');return;}
     const nt=e.target.closest('[data-note]');if(nt){openNote(+nt.dataset.note);return;}
-    const oe=e.target.closest('[data-openex]');if(oe){if(EX[oe.dataset.openex])openSheet(EX[oe.dataset.openex].name,exerciseDetail(oe.dataset.openex));return;}
+    const oe=e.target.closest('[data-openex]');if(oe){if(EX[oe.dataset.openex])openSheet(EX[oe.dataset.openex].name,exerciseDetail(oe.dataset.openex,oe.dataset.track));return;}
   });
   root.addEventListener('input',e=>{const inp=e.target.closest('input[data-f]');if(!inp)return;const t=cur();if(!t)return;
     const ei=+inp.dataset.ei,si=+inp.dataset.s,f=inp.dataset.f;const val=P.parseWeightInput(inp.value);
@@ -654,8 +658,8 @@ function boot(){
   $('#cdOk').addEventListener('click',()=>{const cb=_confirmCb;closeConfirm();if(cb)cb();});
   $('#sheetBody').addEventListener('click',e=>{const a=e.target.closest('[data-addto]');if(a){addExerciseToCur(a.dataset.addto);closeSheet();return;}
     const nc=e.target.closest('[data-nocount]');if(nc){dontCount(nc.dataset.nocount,nc.dataset.sid,nc);return;}
-    const rc=e.target.closest('[data-recchange]');if(rc){openRecordPicker(rc.dataset.recchange);return;}
-    const rb=e.target.closest('[data-recbest]');if(rb){const p=prFor(rb.dataset.recbest);setRecord(rb.dataset.recbest,p?p.track:P.lastTrackFor(state.sessions,rb.dataset.recbest),null);return;}
+    const rc=e.target.closest('[data-recchange]');if(rc){openRecordPicker(rc.dataset.recchange,rc.dataset.track);return;}
+    const rb=e.target.closest('[data-recbest]');if(rb){const tr=rb.dataset.track||P.lastTrackFor(state.sessions,rb.dataset.recbest);setRecord(rb.dataset.recbest,tr,null);return;}
     const tip=e.target.closest('[data-seentip]');if(tip){markSeen(tip.dataset.seentip);if(tip.parentElement)tip.parentElement.remove();return;}});   // one-time tips inside a sheet
   $('#btnSettings').addEventListener('click',openSettings);
   // the header badge explains itself on tap, so "Storage full" can always be read again (review 7.3)

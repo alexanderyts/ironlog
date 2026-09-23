@@ -85,9 +85,11 @@ test('comparative verdicts stay hidden until there is enough history (new users 
 
 test('pattern gap: hamstrings trained only with curls → suggests a hinge',()=>{
   const now=Date.now();
-  const hist=[session(1,[['lying-leg-curl',[set(80,12),set(80,12)]]],{now})];
+  const hist=[1,4,7].map(d=>session(d,[['lying-leg-curl',[set(80,12),set(80,12)]]],{now}));   // gaps wait for 3 workouts (batch 5)
   const F=A.findings(A.analyze(hist,now),hist,now,0);
   assert.ok(F.some(f=>f.type==='pattern-gap'&&f.group==='Hamstrings'&&f.pat==='hinge'),'hamstrings missing a hinge');
+  // CONTROL (batch 5): after ONE workout, no gap to-dos yet — that read as failure on day one
+  const one=hist.slice(0,1);assert.ok(!A.findings(A.analyze(one,now),one,now,0).some(f=>f.type==='pattern-gap'));
 });
 
 test('healthy balance is reported as good, once there is enough history to say so',()=>{

@@ -24,6 +24,8 @@ function fmtElapsed(startTs){const m=Math.floor((Date.now()-startTs)/60000);retu
 function fmtClock(ts){return new Date(ts).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});}
 // Seconds → "2:10" (rest durations).
 function fmtSec(s){s=Math.round(s||0);return Math.floor(s/60)+':'+String(s%60).padStart(2,'0');}
+// relDay for mid-sentence: "today" / "yesterday" / "3 days ago", but a date keeps its capitals ("Sat, Sep 5" — batch 5)
+function relDayMid(ts){const r=relDay(ts);return /^(Today|Yesterday)$/.test(r)?r.toLowerCase():r;}
 function fmtDate(ts){return new Date(ts).toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'});}
 function relDay(ts){const t=startOfDay(Date.now()),d=startOfDay(ts);const diff=Math.round((t-d)/DAY);
   if(diff===0)return'Today';if(diff===1)return'Yesterday';if(diff<7)return diff+' days ago';return fmtDate(ts);}

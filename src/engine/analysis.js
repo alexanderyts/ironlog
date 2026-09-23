@@ -16,7 +16,12 @@ const completed=IL.prog.liftSessions;
 const MIN_COMPARATIVE_SESSIONS=4,MIN_COMPARATIVE_DAYS=10;
 
 function analyze(sessions,now){
-  now=now||Date.now();const winDays=28,weeks=4;
+  now=now||Date.now();const winDays=28;
+  // Weeks of training so far, capped at the 4-week window (batch 5): dividing a brand-new lifter's first
+  // week by 4 made every muscle read "low" (6 chest sets in week one showed as 1.5/week). A layoff in
+  // OLDER history doesn't change this — only how long ago your very first workout was.
+  const all=completed(sessions).filter(s=>s.date<now),firstEver=all.length?Math.min(...all.map(s=>s.date)):now;
+  const weeks=Math.min(4,Math.max(1,(now-firstEver)/(7*DAY)));
   // Upper bound (s.date < now) matters when `now` is shifted back to compute a PRIOR window
   // (withStatus); for the normal call it's a no-op since there are no future-dated sessions.
   const done=completed(sessions).filter(s=>s.date>=now-winDays*DAY&&s.date<now);
@@ -39,11 +44,15 @@ function analyze(sessions,now){
   // a muscle 12 sets every OTHER week is 6/week of stimulus, not 12). NOTE #14 (a layoff makes the first
   // sessions back read "low") is deferred — dividing by active weeks OVERSTATES an intermittent trainer's
   // volume, which is worse for this app's users; it needs targeted layoff detection, not a divisor swap.
-  const perWeek={};Object.entries(groupSets).forEach(([g,n])=>perWeek[g]=(effSets[g]||n)/weeks);
+  // every muscle worked, directly OR as a helper (rows give biceps half credit) — helper-only muscles used to have no number at all
+  const perWeek={};new Set([...Object.keys(groupSets),...Object.keys(effSets)]).forEach(g=>{perWeek[g]=(effSets[g]||groupSets[g]||0)/weeks;});
   const dates=done.map(s=>s.date);
   const daySpan=dates.length?Math.round((Math.max(...dates)-Math.min(...dates))/DAY):0;
-  const readyForComparative=done.length>=MIN_COMPARATIVE_SESSIONS&&daySpan>=MIN_COMPARATIVE_DAYS;
-  return {sessions:done.length,daySpan,readyForComparative,totalSets,groupSets,effSets,perWeek,groupFreq,push,pull,upperSets,lowerSets,regSeen,patSeen,weeks};
+  // "Enough history to compare" is judged on ALL your history (batch 5): someone with 17 workouts back
+  // from a 2-week break was told "a few more days of training and I'll start…". Still needs 2 recent.
+  const allSpan=all.length?Math.round((Math.max(...all.map(s=>s.date))-firstEver)/DAY):0;
+  const readyForComparative=all.length>=MIN_COMPARATIVE_SESSIONS&&allSpan>=MIN_COMPARATIVE_DAYS&&done.length>=2;
+  return {sessions:done.length,allSessions:all.length,allSpan,daySpan,readyForComparative,totalSets,groupSets,effSets,perWeek,groupFreq,push,pull,upperSets,lowerSets,regSeen,patSeen,weeks};
 }
 // How many tracked lifts are improving over the last 4 weeks. Uses setScore (higher = better for every
 // lift type), so an assist machine losing assist and a plank held longer both read as UP, not down, and
@@ -74,6 +83,8 @@ function patPrio(g,p){return {'Hamstrings:hinge':5,'Hamstrings:iso':4,'Back:hpul
 // Weekly working-set landmarks per goal (Schoenfeld 2017 dose-response; Israetel MEV/MAV). Only the
 // low end raises a finding; 'general' equals today's threshold so Balanced is unchanged.
 const VOL_LANDMARKS={size:[10,20],strength:[6,12],general:[8,15]};
+const NO_TARGET=['Core','Calves','Forearms'];   // no weekly set target (small or everyday muscles)
+const MAIN_GROUPS=['Chest','Back','Shoulders','Biceps','Triceps','Quads','Hamstrings','Glutes'];
 // `profile` (Roadmap v6 P3): the optional training profile is a LENS on the same facts — it never
 // changes what was measured, only which findings are worth raising and how they're worded.
 function findings(a,sessions,now,bw,profile){
@@ -109,10 +120,11 @@ function findings(a,sessions,now,bw,profile){
     if(weeks>=6&&weeks%6<2)F.push({type:'deload-due',lv:'info',weeks});}
   // Region / pattern gaps: the suggested example must be doable at the user's gym — no "try an Incline
   // Barbell Press" at a home gym. If nothing legal covers the gap there, it isn't a gap worth raising (#5).
-  trained.forEach(g=>{const seen=a.regSeen[g]||new Set();(REGIONS[g]||[]).forEach(r=>{if(!seen.has(r)){
+  // (batch 5) not after one workout: "Cover your upper chest" on day one read as failure — wait for 3
+  if((a.allSessions||0)>=3)trained.forEach(g=>{const seen=a.regSeen[g]||new Set();(REGIONS[g]||[]).forEach(r=>{if(!seen.has(r)){
     const pick=EXERCISES.find(x=>x.group===g&&x.reg===r&&x.type==='compound'&&allow(x,g))||EXERCISES.find(x=>x.group===g&&x.reg===r&&allow(x,g));
     if(pick)F.push({type:'region-gap',lv:'info',group:g,reg:r,ex:pick.name,prio:gapPrio(g,r)});}});});
-  trained.forEach(g=>{const seen=a.patSeen[g]||new Set();(IDEAL_PATS[g]||[]).forEach(p=>{if(!seen.has(p)){
+  if((a.allSessions||0)>=3)trained.forEach(g=>{const seen=a.patSeen[g]||new Set();(IDEAL_PATS[g]||[]).forEach(p=>{if(!seen.has(p)){
     const pick=EXERCISES.find(x=>x.group===g&&x.pat===p&&x.tier<=2&&allow(x,g))||EXERCISES.find(x=>x.group===g&&x.pat===p&&allow(x,g));
     if(pick)F.push({type:'pattern-gap',lv:'info',group:g,pat:p,exId:pick.id,exName:pick.name,prio:patPrio(g,p)});}});});
   // 'protect': a muscle you're keeping light must not be nagged toward heavy compounds. Gap findings
@@ -133,10 +145,14 @@ function findings(a,sessions,now,bw,profile){
     let volLo=(VOL_LANDMARKS[goalVol]||VOL_LANDMARKS.general)[0];
     if(profile.days&&profile.days<=2)volLo=Math.min(volLo,6);   // a 2-day lifter can't hit 10 sets/muscle/week; don't call it "low" (#23)
     const volTarget=(goalVol||(profile.days&&profile.days<=2))?volLo:undefined;   // carry the number only when it differs from the Balanced threshold
-    trained.filter(g=>a.groupSets[g]>=4&&g!=='Core'&&g!=='Calves').forEach(g=>{if(a.perWeek[g]<volLo)F.push(Object.assign({type:'volume-low',lv:'warn',group:g,perWeek:a.perWeek[g]},volTarget!==undefined?{target:volTarget,goal:goalVol||'general'}:{}));});
+    // judged on the same weekly number the Muscles chart shows, for every muscle you train DIRECTLY (2+
+    // sets) — the old 4-set gate left the lowest muscles unflagged (batch 5). Muscles you only hit as a
+    // helper (triceps from benching) get a number on the chart but no "low": flagging them buried the real
+    // to-dos. Core, calves and forearms have no target.
+    trained.filter(g=>NO_TARGET.indexOf(g)<0).forEach(g=>{if(a.perWeek[g]<volLo)F.push(Object.assign({type:'volume-low',lv:'warn',group:g,perWeek:a.perWeek[g]},volTarget!==undefined?{target:volTarget,goal:goalVol||'general'}:{}));});
     // 'days': on a 2-day week most muscles only fit once — a 1×/week frequency isn't a gap, it's the plan
     if(!(profile.days&&profile.days<=2))
-      trained.filter(g=>g!=='Core'&&g!=='Calves'&&a.groupSets[g]/a.weeks>=6&&(a.groupFreq[g]||0)/a.weeks<1.5).forEach(g=>F.push({type:'freq-low',lv:'info',group:g,sets:a.groupSets[g]/a.weeks}));
+      trained.filter(g=>NO_TARGET.indexOf(g)<0&&a.groupSets[g]/a.weeks>=6&&(a.groupFreq[g]||0)/a.weeks<1.5).forEach(g=>F.push({type:'freq-low',lv:'info',group:g,sets:a.groupSets[g]/a.weeks}));
   }
   const pr=progressionStat(sessions,now,bw);
   // push:'quiet' — the progression finding stays descriptive (no "lean on the +weight prompts")
@@ -453,7 +469,7 @@ function cardioStats(sessions,now){
                  can never disagree again.
    coachReport → "Focus" (≤3 to-dos, each with the number behind it and an exercise to try) and "Wins". */
 const LIFT_WINDOW_DAYS=28,PR_FRESH_DAYS=14;
-const STATUS_ORDER={pr:0,up:1,stuck:2,hold:3,new:4};
+const STATUS_ORDER={pr:0,up:1,stuck:2,down:3,hold:4,new:5};
 function liftStatus(sessions,now,bw){
   now=now||Date.now();const since=now-LIFT_WINDOW_DAYS*DAY;
   const keys={};
@@ -476,6 +492,8 @@ function liftStatus(sessions,now,bw){
     let status,from=null,to=last;
     if(!L.perfs[0].prior&&L.perfs.length===1)status='new';               // first time ever — nothing to compare yet
     else if(fresh.length){status='pr';to=fresh[fresh.length-1];from=to.priorSet;}
+    // a lift that's going DOWN reads as "below your best" — honest but gentle — not "stuck" with an old best (batch 5)
+    else if(win.length>=2&&beatsScore(best.sc,last.sc)&&beatsScore(first.sc,last.sc))status='down';
     else if(IL.builder&&IL.builder.isStalled&&IL.builder.isStalled(sessions,L.id,{mode:L.track,bw}))status='stuck';
     else if(win.length>=2&&beatsScore(last.sc,first.sc)){status='up';from={w:first.w,r:first.r};}
     else status='hold';
@@ -490,8 +508,9 @@ function volTargetFor(profile){profile=profile||{};const goal=profile.goal==='si
   const r=VOL_LANDMARKS[goal].slice();if(profile.days&&profile.days<=2)r[0]=Math.min(r[0],6);return r;}
 function muscleWeekly(a,profile,F){
   const t=volTargetFor(profile),low=new Set((F||[]).filter(f=>f.type==='volume-low').map(f=>f.group));
-  return Object.keys(a.groupSets).filter(g=>a.groupSets[g]>0).map(g=>({group:g,perWeek:Math.round((a.perWeek[g]||0)*10)/10,
-    target:(g==='Core'||g==='Calves')?null:t,low:low.has(g)})).sort((x,y)=>y.perWeek-x.perWeek);
+  // every main muscle gets a row (0 when untrained — a missing row hid the gap); small muscles only when worked
+  const gs=MAIN_GROUPS.concat(NO_TARGET.filter(g=>(a.perWeek[g]||0)>0));
+  return gs.map(g=>({group:g,perWeek:Math.round((a.perWeek[g]||0)*10)/10,target:NO_TARGET.indexOf(g)>=0?null:t,low:low.has(g)})).sort((x,y)=>y.perWeek-x.perWeek);
 }
 // The exercise to suggest for a to-do: one you already do for that muscle (most sets in the window), else
 // the first gym/avoid-legal foundational lift — never something off-limits for this profile.
@@ -503,18 +522,23 @@ function suggestFor(sessions,now,profile,match,group){
   return EXERCISES.filter(x=>match(x)&&IL.builder.profileAllows(x,group||x.group,pf,sessions)).sort((p,q)=>p.tier-q.tier)[0]||null;
 }
 function aAn(w){return /^[aeiou]/i.test(w)?'an':'a';}
-function focusItem(f,sessions,now,profile){
+// Plain words for the areas the coach names (batch 5: "triceps long head", "upper back / rear delts").
+const PLAIN_REG={'Triceps:long':'triceps (overhead moves)','Triceps:lateral':'triceps (pushdowns)','Biceps:long':'biceps (incline curls)','Biceps:short':'biceps (preacher curls)',
+  'Back:lats':'lats','Back:upper':'upper back','Back:mid':'mid back','Shoulders:front':'front shoulders','Shoulders:side':'side shoulders','Shoulders:rear':'rear shoulders','Glutes:medius':'side glutes'};
+function plainReg(g,r){return PLAIN_REG[g+':'+r]||regLabel(g,r);}
+function focusItem(f,sessions,now,profile,a){
   const g=f.group?f.group.toLowerCase():'',G=cap(g);let title,detail,ex=null;
+  const fresh=a&&a.weeks<4,none=fresh?'Not trained yet':'Nothing in 4 weeks';   // under a month in, "in 4 weeks" isn't true yet
   switch(f.type){
     case 'balance':title=f.dir==='push'?'Add more pulling':'Add more pressing';detail=`${f.push} push vs ${f.pull} pull sets in 4 weeks`;
       ex=suggestFor(sessions,now,profile,x=>f.dir==='push'?(x.pat==='hpull'||x.pat==='vpull'):(x.pat==='hpush'||x.pat==='vpush'));break;
     case 'legs-low':title='Legs are behind';detail=`${f.lower} lower-body vs ${f.upper} upper-body sets`;
       ex=suggestFor(sessions,now,profile,x=>x.type==='compound'&&(x.pat==='squat'||x.pat==='hinge'||x.pat==='lunge'));break;
-    case 'volume-low':{const tgt=f.target||volTargetFor(profile)[0];title=`${G} is low`;
+    case 'volume-low':{const tgt=f.target||volTargetFor(profile)[0];title=`${G}: low`;
       detail=`${(Math.round(f.perWeek*10)/10)} sets/week · aim for ${tgt}+`+((f.status==='persisting'&&f.prev&&f.perWeek>f.prev.perWeek)?` · up from ${Math.round(f.prev.perWeek*10)/10}`:'');
       ex=suggestFor(sessions,now,profile,x=>x.group===f.group,f.group);break;}
-    case 'region-gap':{const rl=regLabel(f.group,f.reg);title=`Cover your ${rl}`;detail='Nothing in 4 weeks';ex=EXERCISES.find(x=>x.name===f.ex)||null;break;}
-    case 'pattern-gap':{const pl=f.pat==='iso'?'isolation':patLabel(f.pat);title=`${G}: add ${aAn(pl)} ${pl} move`;detail=`None in your ${g} work for 4 weeks`;ex=EX[f.exId]||null;break;}
+    case 'region-gap':{const rl=plainReg(f.group,f.reg);title=`Cover your ${rl}`;detail=none;ex=EXERCISES.find(x=>x.name===f.ex)||null;break;}
+    case 'pattern-gap':{const pl=f.pat==='iso'?'isolation':patLabel(f.pat);title=`${G}: add ${aAn(pl)} ${pl} move`;detail=fresh?`Not in your ${g} work yet`:`None in your ${g} work for 4 weeks`;ex=EX[f.exId]||null;break;}
     case 'freq-low':title=`Split ${g} over 2 days`;detail=`~${Math.round(f.sets)} sets a week, all in one session`;break;
     case 'deload-due':title='Deload week soon?';detail=`${f.weeks} weeks of steady training — an easier week helps you keep progressing`;break;
     default:return null;
@@ -525,7 +549,7 @@ function winItem(f,week){
   const g=f.group?f.group.toLowerCase():'',G=cap(g);
   if(f.status==='resolved'){
     const t={balance:'Push & pull back in balance','legs-low':'Legs caught up','volume-low':`${G} volume back up`,'freq-low':`${G} now spread over the week`,
-      'region-gap':f.reg?`${cap(regLabel(f.group,f.reg))} now covered`:'','pattern-gap':`${G} now has ${aAn(f.pat==='iso'?'isolation':patLabel(f.pat||''))} ${f.pat==='iso'?'isolation':patLabel(f.pat||'')} move`}[f.type];
+      'region-gap':f.reg?`${cap(plainReg(f.group,f.reg))} now covered`:'','pattern-gap':`${G} now has ${aAn(f.pat==='iso'?'isolation':patLabel(f.pat||''))} ${f.pat==='iso'?'isolation':patLabel(f.pat||'')} move`}[f.type];
     return t?{type:'resolved',title:t,detail:'Fixed since last month'}:null;
   }
   if(f.type==='balance'&&f.dir==='even')return {type:'balance',title:'Push & pull balanced',detail:`${f.push} / ${f.pull} sets in 4 weeks`};
@@ -544,7 +568,7 @@ function coachReport(a,sessions,now,bw,profile,seen,lifts){
   const active=ann.filter(f=>f.status!=='resolved'&&!muted(f)&&f.lv!=='good');
   const rank=f=>FOCUS_ORDER.indexOf(f.type==='region-gap'||f.type==='pattern-gap'?'gap':f.type);
   const focus=active.filter(f=>rank(f)>=0).sort((x,y)=>rank(x)-rank(y)||(x.type==='volume-low'?x.perWeek-y.perWeek:0)||((y.prio||0)-(x.prio||0)))
-    .map(f=>focusItem(f,sessions,now,profile)).filter(Boolean).slice(0,3);
+    .map(f=>focusItem(f,sessions,now,profile,a)).filter(Boolean).slice(0,3);
   const wins=[];
   // PRs already have their own rows in "Your lifts" — here they're ONE win line, so a good fortnight
   // doesn't push every other win (a fixed gap, good balance) off the list.

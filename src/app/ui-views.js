@@ -17,7 +17,8 @@ function calendar(done){
   const today=startOfDay(Date.now());
   let cells='';for(let i=0;i<pad;i++)cells+=`<div class="cal-cell pad"></div>`;
   for(let d=1;d<=days;d++){const ts=new Date(y,m,d).getTime();
-    cells+=`<div class="cal-cell ${daySet[ts]?'has':''} ${ts===today?'today':''} ${ts===selDay?'sel':''}" data-day="${ts}">${d}</div>`;}
+    const lab=new Date(ts).toLocaleDateString(undefined,{month:'short',day:'numeric'})+(daySet[ts]?', '+daySet[ts]+' workout'+(daySet[ts]>1?'s':''):'');   // VoiceOver hears the date and whether you trained (batch 5)
+    cells+=`<div class="cal-cell ${daySet[ts]?'has':''} ${ts===today?'today':''} ${ts===selDay?'sel':''}" data-day="${ts}" aria-label="${lab}" aria-pressed="${ts===selDay}">${d}</div>`;}
   return `<div class="cal-head"><button class="icon-btn" data-mon="-1" aria-label="Previous month">‹</button><h3>${first.toLocaleDateString(undefined,{month:'long',year:'numeric'})}</h3><button class="icon-btn" data-mon="1" aria-label="Next month">›</button></div>
     <div class="cal-grid">${['S','M','T','W','T','F','S'].map(d=>`<div class="cal-dow">${d}</div>`).join('')}${cells}</div>`;
 }
@@ -39,9 +40,11 @@ function sessCard(s){
   return `<div class="card sess" data-sess="${s.id}">
     <div class="sess-top"><div class="sess-date">${relDay(s.date)}${s.deload?' <span class="deload-badge">Deload</span>':''}</div><span class="pill accent">${s.exercises.length} exercise${s.exercises.length!==1?'s':''}</span></div>
     <div class="sess-meta"><span class="muted">Volume <b>${fmtVol(volOf(s))} ${U()}</b></span><span class="muted">Sets <b>${setsOf(s)}</b></span>${P.sessionDuration(s)!=null?`<span class="muted">${s.endEstimated?'≈':''}<b>${fmtDur(P.sessionDuration(s))}</b></span>`:''}</div>
-    <div class="sess-ex">${s.exercises.slice(0,4).map(e=>{const best=e.sets.filter(P.isWorking);const top=best.length?Math.max(...best.map(x=>+x.w||0)):0;
-      const tm=D.TIME_METRIC.has(e.id);   // seconds, not reps — and a bodyweight hold has no "· 0lb" to show
-      return `<div><span>${esc(EX[e.id]?EX[e.id].name:e.name)}</span><span class="s">${best.length}×${best.length?best[0].r+(tm?'s':''):0}${top?' · '+top+U():''}</span></div>`;}).join('')}
+    <div class="sess-ex">${s.exercises.slice(0,4).map(e=>{const work=e.sets.filter(st=>P.isWorking(st)&&!st.warm);
+      // (batch 5) "3 sets · top 185lb × 5" from ONE set — it used to pair the first set's reps with the heaviest weight
+      const inv=D.isAssist(e.id),top=work.reduce((a,x)=>!a?x:(inv?(+x.w||0)<(+a.w||0):(+x.w||0)>(+a.w||0)||((+x.w||0)===(+a.w||0)&&(+x.r||0)>(+a.r||0)))?x:a,null);
+      const f={time:D.TIME_METRIC.has(e.id),assist:inv,bodyweight:(EX[e.id]||{}).equip==='Bodyweight',holds:P.holdsOf(e),sides:P.sidesOf(e)};
+      return `<div><span>${esc(EX[e.id]?EX[e.id].name:e.name)}</span><span class="s">${work.length}× · ${top?esc(liftSetText(f,{w:+top.w||0,r:+top.r||0})):'—'}</span></div>`;}).join('')}
       ${s.exercises.length>4?`<div class="dim" style="font-size:12px">+${s.exercises.length-4} more</div>`:''}</div>
     ${s.note?`<div class="sess-note" style="margin-top:9px;padding-top:9px;border-top:1px solid var(--line);font-size:12.5px;color:var(--ink-2);line-height:1.4">📝 ${esc(s.note)}</div>`:''}
   </div>`;
@@ -54,7 +57,7 @@ function libResultsHtml(){
   let res=SR.searchEx(libQuery);
   if(libGroup!=='All')res=res.filter(e=>e.group===libGroup||e.muscles.includes(libGroup));
   return `<div class="dim" style="font-size:12.5px;margin:8px 2px 10px" aria-live="polite">${res.length} exercise${res.length!==1?'s':''}</div>
-    <div class="card list">${res.length?res.map(e=>libRow(e)).join(''):'<div style="padding:24px;text-align:center" class="dim">No match. Try a simpler word like “press” or “curl”.</div>'}</div>`;
+    <div class="card list">${res.length?res.map(e=>libRow(e)).join(''):(/tread|run|jog|walk|bike|cycl|spin|ellip|stair|cardio|swim/i.test(libQuery)?'<div style="padding:20px;text-align:center"><div class="dim" style="margin-bottom:10px">Cardio is logged on its own — time, type and distance.</div><button class="btn primary sm" data-action="cardioOpen" style="display:inline-flex">Log cardio</button></div>':'<div style="padding:24px;text-align:center" class="dim">No match. Try a simpler word like “press” or “curl”.</div>')}</div>`;
 }
 function viewLibrary(){
   return `<div class="section">
@@ -85,6 +88,10 @@ function statDelta(cur,prev,fmtFn){
 }
 function viewProgress(){
   const done=completedSessions(),anyDone=completedAny(),now=Date.now();
+  // nothing lifted yet: one clear line instead of four zero tiles and empty charts (batch 5)
+  if(!done.length)return `<div class="section"><div class="view-title" style="margin:0 2px 14px;font-size:22px">Progress</div>
+    <div class="card" style="padding:26px 18px;text-align:center"><div style="font-weight:700;font-size:15px">Your progress shows up here</div><div class="dim" style="margin-top:6px;line-height:1.5">Log your first workout and you’ll see your lifts, records and what to work on next.</div></div>
+    ${cardioCard()}</div>`;
   const ws=P.weekStart(now),lwStart=ws-7*DAY,elapsed=now-ws;   // this-week start (Mon), last-week start, and how far into the week we are
   // Compare against last week THROUGH THE SAME POINT, not the whole week — otherwise a Tuesday (a
   // partial week) always shows a big drop against a full one. This Mon–Tue vs last Mon–Tue is fair,
@@ -142,10 +149,11 @@ function prTip(){
 const CHEV_R='<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color:var(--ink-3)"><path d="M9 6l6 6-6 6"/></svg>';
 // A record's set, written the way the record reads: "Bodyweight +10lb × 8", "45lb/ea × 10", "60s",
 // "/side" when each side is counted. One copy for the PR list and the PR-adjust card.
-function prSetText(p,w,r){const tail=' × '+r+(p.time?'s':'')+(p.sides===2?'/side':'');
-  return p.bodyweight?(w?'Bodyweight +'+w+U():'Bodyweight')+tail:w+U()+(p.holds===2?'/ea':'')+tail;}
+// (batch 5) the same writer as Your lifts — the PR list said "40kg × 8" for an assist machine and "× 40s" for a carry
+function prSetText(p,w,r){return liftSetText({time:p.time,assist:p.inverted,bodyweight:p.bodyweight,holds:p.holds,sides:p.sides},{w,r});}
+let recordsAll=false;
 function prList(){
-  const arr=memoStat('prAll',()=>A.personalRecords(state.sessions,bw(),999)).slice(0,8);
+  const all=memoStat('prAll',()=>A.personalRecords(state.sessions,bw(),999)),arr=recordsAll?all:all.slice(0,8);
   if(!arr.length)return`<div style="padding:22px;text-align:center" class="dim">Log a few sets and your PRs show up here.</div>`;
   const setStr=p=>prSetText(p,p.w,p.r);
   // show the modality only when it isn't the exercise's native equipment (so a Smith/cable variant
@@ -154,17 +162,18 @@ function prList(){
   // …and tag a lift done the non-default way round ("Each side" / "Both sides"), since it keeps its own record
   const modeTag=p=>{const ex=EX[p.id];const native=ex&&EQUIP_MODE[ex.equip];
     return (p.mode&&p.mode!==native?pill(MODES[p.mode].label):'')+(p.track&&p.track.indexOf('|')>=0?pill(p.sides===2?'Each side':'Both sides'):'');};
-  return arr.map(p=>`<div class="ex-row" data-openex="${p.id}" style="cursor:pointer"><div style="flex:1;min-width:0"><div class="ex-name">${esc(p.name)}${modeTag(p)}</div>
+  return arr.map(p=>`<div class="ex-row" data-openex="${p.id}" data-track="${esc(p.track)}" style="cursor:pointer"><div style="flex:1;min-width:0"><div class="ex-name">${esc(p.name)}${modeTag(p)}</div>
     <div class="ex-sub">Record ${setStr(p)}</div>${p.adjusted?`<div class="ex-sub">Your pick · best logged ${setStr({...p,w:p.adjusted.w,r:p.adjusted.r})}</div>`:''}</div>
-    <div style="text-align:right">${p.showEst?`<div class="mono" style="font-weight:700;font-size:16px">${p.est}<span class="dim" style="font-size:11px"> ${U()} e1RM</span></div>`:`<div class="mono dim" style="font-weight:600;font-size:13px">${p.load}${U()}</div>`}</div>${CHEV_R}</div>`).join('');
+    <span class="dim" style="font-size:12px;flex-shrink:0">${fmtDate(p.date).replace(/^\w+, /,'')}</span>${CHEV_R}</div>`).join('')   // the date, not an "e1RM" nobody lifted (batch 5)
+    +(all.length>8?`<button class="linkbtn" data-recordsall style="display:block;width:100%;text-align:center;padding:12px;font-weight:600">${recordsAll?'Show fewer':'Show all '+all.length}</button>`:'');
 }
 // How much longer until Coach's Notes will show program-level verdicts (push/pull balance, legs
 // undertrained, weekly-volume landmarks) — those need real history to mean anything, so a brand-new
 // user sees encouragement here instead of a premature judgment. See analysis.js MIN_COMPARATIVE_*.
 function buildupMessage(a){
-  const remS=Math.max(0,A.MIN_COMPARATIVE_SESSIONS-a.sessions);
+  const remS=Math.max(0,A.MIN_COMPARATIVE_SESSIONS-(a.allSessions!=null?a.allSessions:a.sessions));   // all your history (batch 5)
   if(remS>0)return `Log ${remS} more session${remS===1?'':'s'} and I'll start giving you balance and volume feedback.`;
-  if(a.daySpan<A.MIN_COMPARATIVE_DAYS)return `A few more days of training and I'll start giving you balance and volume feedback.`;
+  if((a.allSpan!=null?a.allSpan:a.daySpan)<A.MIN_COMPARATIVE_DAYS)return `A few more days of training and I'll start giving you balance and volume feedback.`;
   return `I'll start giving you balance and volume feedback soon.`;
 }
 function tipsCard(tips){
@@ -189,7 +198,7 @@ function collapsible(key,title,summary,body,margin,closedByDefault){
    numbers come from analysis.liftStatus / coachReport / muscleWeekly, which share the coach's and the
    builder's rules, so no two cards can contradict each other. */
 let liftsAll=false;   // "Show all" on Your lifts (screen state, not saved)
-const LIFT_BADGE={pr:['★','New PR','var(--accent)'],up:['▲','Improving','var(--good)'],stuck:['⏸','Stuck','var(--warn)'],hold:['→','Holding','var(--ink-3)'],new:['•','First time','var(--ink-3)']};
+const LIFT_BADGE={pr:['★','New PR','var(--accent)'],up:['▲','Improving','var(--good)'],stuck:['⏸','Stuck','var(--warn)'],down:['↘','Below your best','var(--ink-3)'],hold:['→','Holding','var(--ink-3)'],new:['•','First time','var(--ink-3)']};
 // A lift's set, written the way it reads everywhere else: "155lb × 8", "60s", "30lb assist × 8", "Bodyweight × 12".
 function liftSetText(l,st){const u=U(),side=l.sides===2?'/side':'';
   if(l.time)return (st.w?st.w+u+(l.holds===2?'/ea':'')+' · ':'')+st.r+'s'+side;
@@ -198,10 +207,13 @@ function liftSetText(l,st){const u=U(),side=l.sides===2?'/side':'';
   return st.w+u+(l.holds===2?'/ea':'')+' × '+st.r+side;}
 function liftRow(l){
   const b=LIFT_BADGE[l.status],ex=EX[l.id],native=ex&&EQUIP_MODE[ex.equip];
-  const tag=(l.mode&&l.mode!==native&&MODES[l.mode]?` <span class="pill" style="font-size:10px;padding:1px 7px">${esc(MODES[l.mode].label)}</span>`:'');
-  const sub=l.status==='stuck'?`${liftSetText(l,l.best)} · no gain in 2+ weeks`
+  const pill=t=>` <span class="pill" style="font-size:10px;padding:1px 7px">${esc(t)}</span>`;
+  // tag BOTH the equipment and the side, so two versions of one lift can be told apart (batch 5)
+  const tag=(l.mode&&l.mode!==native&&MODES[l.mode]?pill(MODES[l.mode].label):'')+(l.track&&l.track.indexOf('|')>=0?pill(l.sides===2?'Each side':'Both sides'):'');
+  const sub=l.status==='stuck'?`${liftSetText(l,l.to)} · no gain in 2+ weeks`
+    :l.status==='down'?`${liftSetText(l,l.to)} <span class="dim">· best ${esc(liftSetText(l,l.best))}</span>`
     :l.from?`${liftSetText(l,l.to)} <span class="dim">· was ${esc(liftSetText(l,l.from))}</span>`:`Best ${liftSetText(l,l.best)}`;
-  return `<div class="ex-row" data-openex="${l.id}" style="cursor:pointer"><span aria-hidden="true" style="width:18px;text-align:center;font-size:14px;color:${b[2]};flex-shrink:0">${b[0]}</span>
+  return `<div class="ex-row" data-openex="${l.id}" data-track="${esc(l.track)}" style="cursor:pointer"><span aria-hidden="true" style="width:18px;text-align:center;font-size:14px;color:${b[2]};flex-shrink:0">${b[0]}</span>
     <div style="flex:1;min-width:0"><div class="ex-name">${esc(l.name)}${tag}</div><div class="ex-sub">${sub}</div></div>
     <span style="font-size:11.5px;font-weight:700;color:${b[2]};flex-shrink:0">${b[1]}</span>${CHEV_R}</div>`;
 }
@@ -307,8 +319,8 @@ function cardioCard(){
 
 /* ---------------- sheets ---------------- */
 // Compact SVG line of a lift's best-set estimated 1RM over its recent sessions, with the delta.
-function trendCard(id){
-  const dmode=P.lastTrackFor(state.sessions,id);   // follow the version (equipment + side) done most recently
+function trendCard(id,track){
+  const dmode=track||P.lastTrackFor(state.sessions,id);   // follow the version (equipment + side) done most recently
   const series=P.exerciseSeries(state.sessions,id,{mode:dmode,bw:bw(),limit:10});
   if(series.length<2)return '';   // need at least two sessions to show a trend
   const vals=series.map(p=>p.est),min=Math.min(...vals),max=Math.max(...vals),range=max-min||1;
@@ -323,22 +335,24 @@ function trendCard(id){
   // bodyweight entered — its score is −assist, so it's shown as the assist, with "less" as progress)
   const metric=series[series.length-1].metric||'e1rm';
   const unit=metric==='time'?'s':metric==='reps'?' reps':U();
-  const label=metric==='time'?'Progress · hold':metric==='resist'?'Progress · resistance':metric==='assist'?'Progress · less assist':metric==='reps'?'Progress · reps':'Progress · est. 1RM';
+  // (batch 5) the title and the number are things you actually lifted — no "est. 1RM" / "resistance"
+  const label='Your best set each time';
   // A dip caused by the user setting their own record aside is not a decline, and must not be painted
   // like one. When the latest point is adjusted, the delta goes neutral and says why — that is the
   // whole point of the flag: going lighter on purpose should never read as losing ground.
   const adjusted=!!series[series.length-1].adj, anyAdj=series.some(p=>p.adj);
   const col=adjusted?'var(--ink-3)':delta>0?'var(--good)':delta<0?'var(--warn)':'var(--ink-3)';
   const asst=metric==='assist';   // shown as the assist itself; progress = LESS of it
-  const arrow=delta>0?(asst?'▲ '+delta+unit+' less':'▲ +'+delta+unit):delta<0?(asst?'▼ '+Math.abs(delta)+unit+' more':'▼ '+Math.abs(delta)+unit):'— flat';
-  const shown=asst?Math.abs(vals[vals.length-1])+unit+' assist':vals[vals.length-1]+unit;
+  const arrow=delta>0?'▲ stronger':delta<0?'▼ below your best':'— same';
+  const lastPt=series[series.length-1],ex0=EX[id]||{};
+  const shown=esc(liftSetText({time:D.TIME_METRIC.has(id),assist:D.isAssist(id),bodyweight:ex0.equip==='Bodyweight',holds:1,sides:String(dmode).indexOf('|1side')>=0?2:1},{w:lastPt.w,r:lastPt.r}));
   return `<div class="card" style="padding:14px 15px;margin:0 0 12px">
     <div class="row-between" style="margin-bottom:9px"><span class="eyebrow">${label}</span>
       <span class="mono" style="font-weight:700;color:${col}">${shown} <span style="font-size:12px">${arrow}</span></span></div>
     <svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" preserveAspectRatio="none" style="display:block;overflow:visible">
       <path d="${d}" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
       <circle cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="3.5" fill="${adjusted?'var(--ink-3)':'var(--accent)'}"/></svg>
-    <div class="dim" style="font-size:11.5px;margin-top:7px">Best set each session · last ${series.length}${anyAdj?' · sets better than your chosen record aren’t counted here':''}</div></div>`;
+    <div class="dim" style="font-size:11.5px;margin-top:7px">Your last ${series.length} workouts${anyAdj?' · sets better than your chosen record aren’t counted here':''}</div></div>`;
 }
 /* "Your record" (v0.69.0). Your record is the set you pick — by default your best. "Change" lists your
    best set from each recent workout of this lift; picking one makes every BETTER set not count as a
@@ -347,28 +361,28 @@ function trendCard(id){
    different way that day (seated face pulls at 75 vs standing at 25). */
 // The record a lift's card acts on: the version (equipment + "each side") done most recently —
 // the same one the trend chart follows. A lift with two versions (one-arm vs two-hand) has two records.
-function prFor(id){const all=A.personalRecords(state.sessions,bw(),999).filter(x=>x.id===id),t=P.lastTrackFor(state.sessions,id);
+function prFor(id,track){const all=A.personalRecords(state.sessions,bw(),999).filter(x=>x.id===id),t=track||P.lastTrackFor(state.sessions,id);
   return all.find(x=>x.track===t)||all[0];}
 // How to write a set of this lift (seconds, assist, bodyweight, per-dumbbell, per-side) — from its record.
 function recFlags(id,p){const ex=EX[id]||{};
   return {time:D.TIME_METRIC.has(id),assist:D.isAssist(id),bodyweight:p?!!p.bodyweight:ex.equip==='Bodyweight',holds:p?p.holds:1,sides:p?p.sides:1};}
-function recordCard(id){
-  const p=prFor(id);if(!p)return '';
+function recordCard(id,track){
+  const p=prFor(id,track);if(!p)return '';
   const f=recFlags(id,p),txt=(w,r)=>esc(liftSetText(f,{w,r}));
   return `<div class="card" style="padding:12px 15px;margin:0 0 12px">
     <div class="row-between"><div><div class="eyebrow">Your record</div>
       <div class="mono" style="font-weight:700;font-size:16px;margin-top:3px">${txt(p.w,p.r)}</div>
       <div class="dim" style="font-size:12px;margin-top:1px">${fmtDate(p.date)}</div></div>
-      <button class="btn sm ghost" data-recchange="${id}" style="flex-shrink:0">Change</button></div>
+      <button class="btn sm ghost" data-recchange="${id}" data-track="${esc(p.track)}" style="flex-shrink:0">Change</button></div>
     ${p.adjusted?`<div class="dim" style="font-size:12px;margin-top:9px;line-height:1.45">Your pick · best logged ${txt(p.adjusted.w,p.adjusted.r)} on ${fmtDate(p.adjusted.date)}
-      <button class="linkbtn" data-recbest="${id}" style="font-size:12px;font-weight:600;padding:0 0 0 4px">Use best</button></div>`:''}
+      <button class="linkbtn" data-recbest="${id}" data-track="${esc(p.track)}" style="font-size:12px;font-weight:600;padding:0 0 0 4px">Use best</button></div>`:''}
     ${seenFlag('recordTip')?'':`<div class="dim" style="font-size:12px;margin-top:9px;padding-top:9px;border-top:1px solid var(--line);line-height:1.45;display:flex;gap:10px;align-items:flex-start">
       <span style="flex:1">Your record is the best set you’ve logged here — the bar Ironlog measures you against. Tap <b>Change</b> if a set shouldn’t count.</span>
       <button class="linkbtn dim" data-seentip="recordTip" style="font-size:12px;padding:0;flex-shrink:0">Got it</button></div>`}
   </div>`;
 }
-function openRecordPicker(id){
-  const p=prFor(id),track=p?p.track:P.lastTrackFor(state.sessions,id),f=recFlags(id,p);
+function openRecordPicker(id,tr){
+  const p=prFor(id,tr),track=p?p.track:(tr||P.lastTrackFor(state.sessions,id)),f=recFlags(id,p);
   const ch=P.recordChoices(state.sessions,id,track,bw(),8);if(!ch.length){toast('Nothing logged for this lift yet');return;}
   const isRec=c=>p&&c.date===p.date&&c.w===p.w&&c.r===p.r;
   openSheet('Which set is your record?',`<div class="dim" style="font-size:13px;margin:-4px 2px 14px;line-height:1.5">Pick the set that should count — for example if your form slipped, or you did it a different way that day.</div>
@@ -390,8 +404,8 @@ function notesCard(id){
     ${notes.slice(0,4).map(n=>`<div style="font-size:13.5px;line-height:1.45;padding:5px 0;border-top:1px solid var(--line)"><span class="dim mono" style="font-size:11.5px">${fmtDate(n.date)}${n.deload?' · deload':''}</span><br>${esc(n.note)}</div>`).join('')}
     ${notes.length>4?`<div class="dim" style="font-size:12px;margin-top:6px">+${notes.length-4} older</div>`:''}</div>`;
 }
-function exerciseDetail(id){
-  const e=EX[id];const lp=P.lastPerf(state.sessions,id,{excludeId:state.active&&state.active.id});
+function exerciseDetail(id,track){
+  const e=EX[id];const lp=P.lastPerf(state.sessions,id,{excludeId:state.active&&state.active.id,mode:track||undefined});
   const target=cur();const inWorkout=target&&target.exercises.some(x=>x.id===id);
   const rest=A.exerciseRest(state.sessions,id);   // T3: median rest you actually take here
   return `<div style="display:flex;gap:13px;align-items:center;margin-bottom:16px">
@@ -399,8 +413,8 @@ function exerciseDetail(id){
       <div><div class="mono dim" style="font-size:12px">${e.equip} · ${e.type}${e.tier===1?' · foundational lift':''}</div>
       <div class="chips" style="margin-top:6px">${e.muscles.map(m=>`<span class="pill">${m}</span>`).join('')}</div></div></div>
     <p class="instr">${esc(e.instr)}</p>
-    ${trendCard(id)}
-    ${recordCard(id)}
+    ${trendCard(id,track)}
+    ${recordCard(id,track)}
     ${notesCard(id)}
     <div class="card" style="padding:12px 15px;margin:16px 0">
       <div class="row-between"><span class="eyebrow">Target rep range</span><span class="mono" style="font-weight:600">${e.rr[0]}–${e.rr[1]}</span></div>
@@ -586,7 +600,7 @@ function profileSummary(){const p=state.settings.profile||{};const parts=[];
   return parts.length?parts.join(' · '):'Balanced';}
 function setProfile(field,val){const p=Object.assign({},state.settings.profile);
   if(!val||val==='auto')delete p[field];else p[field]=field==='days'?+val:val;
-  state.settings.profile=Object.keys(p).length?p:undefined;S.saveSettingsCloud();}
+  state.settings.profile=Object.keys(p).length?p:undefined;S.saveSettingsCloud();render();}   // Progress targets follow at once (batch 5)
 function toggleProtect(gp){const p=Object.assign({},state.settings.profile),set=new Set(p.protect||[]);
   set.has(gp)?set.delete(gp):set.add(gp);if(set.size)p.protect=[...set];else delete p.protect;
   state.settings.profile=Object.keys(p).length?p:undefined;S.saveSettingsCloud();}

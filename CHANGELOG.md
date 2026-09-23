@@ -2,6 +2,26 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.74.0 — 2026-09-23 · Clearer screens
+Batch 5a from the overnight review: numbers that agree, and plain words.
+- **Your first weeks don't look like failure.** Weekly sets are no longer divided by 4 before you've trained 4 weeks, so 6 chest sets in week one reads 6, not 1.5. The coach waits for 3 workouts before suggesting gaps to fill, and says "Not trained yet" instead of "Nothing in 4 weeks".
+- **"Enough history for balance feedback"** now counts all your workouts. If you're back after a break, it no longer says "a few more days of training".
+- **Muscles:** every main muscle has a row, 0 if untrained. Muscles you only work as helpers, like biceps from rows, get a number but no "low" nag.
+- **Below your best:** a lift that's going down shows your latest set next to your best, instead of "Stuck" with an old number.
+- **Two versions of a lift** (both hands vs each side, barbell vs Smith) are tagged, and each opens its own record and chart.
+- **One way of writing a set everywhere,** e.g. "40lb assist × 8" and "45s". The records list no longer shows "e1RM", and has **Show all**. The chart reads "Your best set each time · 155lb × 8 ▲ stronger".
+- **History cards** show your real top set ("3× · 185lb × 5") instead of mixing numbers from two sets.
+- **Fixes:**
+  - Moving a late-night workout to today now works.
+  - Changing your training goal updates Progress straight away.
+  - Nothing lifted yet shows one clear line instead of zero tiles.
+  - Searching "treadmill" points you to Log cardio.
+  - Calendar days are read out properly by VoiceOver.
+  - Dates keep their capitals ("same lifts as Sat, Sep 5").
+  - The coach says "Hamstrings: low" and uses plainer names for muscle areas.
+
+Not verified on-device.
+
 ## v0.73.0 — 2026-09-23 · Smoother logging
 Batch 4 from the overnight review: the between-sets loop.
 - **Replace keeps what you did.** Machine taken after set 2? Your 2 sets stay, and the new exercise goes right below. No confirm, and Undo puts everything back.

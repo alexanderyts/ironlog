@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-nQFNWnlqvVTrAs4dHYacSdyFWNDsvYl6oXec1x0CuKo=' 'sha256-WPBob/luB2k1aalTWXpi6zk3SrIbj8GlZV7AlFdG7oA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-jAlqcrJf8pbthXsrjNzC+1UTt0SC25ueBbMdi5Vx3jo=' 'sha256-WPBob/luB2k1aalTWXpi6zk3SrIbj8GlZV7AlFdG7oA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Ironlog</title>
@@ -456,8 +456,8 @@ html.kb-open .tabbar{display:none}
 </div>
 
 <script>
-/* Ironlog v0.73.0 · site build */
-var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.73.0",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
+/* Ironlog v0.74.0 · site build */
+var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.74.0",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
 
 /* ===== src/data/exercises.js ===== */
 (function(){'use strict';
@@ -2027,7 +2027,12 @@ const completed=IL.prog.liftSessions;
 const MIN_COMPARATIVE_SESSIONS=4,MIN_COMPARATIVE_DAYS=10;
 
 function analyze(sessions,now){
-  now=now||Date.now();const winDays=28,weeks=4;
+  now=now||Date.now();const winDays=28;
+  // Weeks of training so far, capped at the 4-week window (batch 5): dividing a brand-new lifter's first
+  // week by 4 made every muscle read "low" (6 chest sets in week one showed as 1.5/week). A layoff in
+  // OLDER history doesn't change this — only how long ago your very first workout was.
+  const all=completed(sessions).filter(s=>s.date<now),firstEver=all.length?Math.min(...all.map(s=>s.date)):now;
+  const weeks=Math.min(4,Math.max(1,(now-firstEver)/(7*DAY)));
   // Upper bound (s.date < now) matters when `now` is shifted back to compute a PRIOR window
   // (withStatus); for the normal call it's a no-op since there are no future-dated sessions.
   const done=completed(sessions).filter(s=>s.date>=now-winDays*DAY&&s.date<now);
@@ -2050,11 +2055,15 @@ function analyze(sessions,now){
   // a muscle 12 sets every OTHER week is 6/week of stimulus, not 12). NOTE #14 (a layoff makes the first
   // sessions back read "low") is deferred — dividing by active weeks OVERSTATES an intermittent trainer's
   // volume, which is worse for this app's users; it needs targeted layoff detection, not a divisor swap.
-  const perWeek={};Object.entries(groupSets).forEach(([g,n])=>perWeek[g]=(effSets[g]||n)/weeks);
+  // every muscle worked, directly OR as a helper (rows give biceps half credit) — helper-only muscles used to have no number at all
+  const perWeek={};new Set([...Object.keys(groupSets),...Object.keys(effSets)]).forEach(g=>{perWeek[g]=(effSets[g]||groupSets[g]||0)/weeks;});
   const dates=done.map(s=>s.date);
   const daySpan=dates.length?Math.round((Math.max(...dates)-Math.min(...dates))/DAY):0;
-  const readyForComparative=done.length>=MIN_COMPARATIVE_SESSIONS&&daySpan>=MIN_COMPARATIVE_DAYS;
-  return {sessions:done.length,daySpan,readyForComparative,totalSets,groupSets,effSets,perWeek,groupFreq,push,pull,upperSets,lowerSets,regSeen,patSeen,weeks};
+  // "Enough history to compare" is judged on ALL your history (batch 5): someone with 17 workouts back
+  // from a 2-week break was told "a few more days of training and I'll start…". Still needs 2 recent.
+  const allSpan=all.length?Math.round((Math.max(...all.map(s=>s.date))-firstEver)/DAY):0;
+  const readyForComparative=all.length>=MIN_COMPARATIVE_SESSIONS&&allSpan>=MIN_COMPARATIVE_DAYS&&done.length>=2;
+  return {sessions:done.length,allSessions:all.length,allSpan,daySpan,readyForComparative,totalSets,groupSets,effSets,perWeek,groupFreq,push,pull,upperSets,lowerSets,regSeen,patSeen,weeks};
 }
 // How many tracked lifts are improving over the last 4 weeks. Uses setScore (higher = better for every
 // lift type), so an assist machine losing assist and a plank held longer both read as UP, not down, and
@@ -2085,6 +2094,8 @@ function patPrio(g,p){return {'Hamstrings:hinge':5,'Hamstrings:iso':4,'Back:hpul
 // Weekly working-set landmarks per goal (Schoenfeld 2017 dose-response; Israetel MEV/MAV). Only the
 // low end raises a finding; 'general' equals today's threshold so Balanced is unchanged.
 const VOL_LANDMARKS={size:[10,20],strength:[6,12],general:[8,15]};
+const NO_TARGET=['Core','Calves','Forearms'];   // no weekly set target (small or everyday muscles)
+const MAIN_GROUPS=['Chest','Back','Shoulders','Biceps','Triceps','Quads','Hamstrings','Glutes'];
 // `profile` (Roadmap v6 P3): the optional training profile is a LENS on the same facts — it never
 // changes what was measured, only which findings are worth raising and how they're worded.
 function findings(a,sessions,now,bw,profile){
@@ -2120,10 +2131,11 @@ function findings(a,sessions,now,bw,profile){
     if(weeks>=6&&weeks%6<2)F.push({type:'deload-due',lv:'info',weeks});}
   // Region / pattern gaps: the suggested example must be doable at the user's gym — no "try an Incline
   // Barbell Press" at a home gym. If nothing legal covers the gap there, it isn't a gap worth raising (#5).
-  trained.forEach(g=>{const seen=a.regSeen[g]||new Set();(REGIONS[g]||[]).forEach(r=>{if(!seen.has(r)){
+  // (batch 5) not after one workout: "Cover your upper chest" on day one read as failure — wait for 3
+  if((a.allSessions||0)>=3)trained.forEach(g=>{const seen=a.regSeen[g]||new Set();(REGIONS[g]||[]).forEach(r=>{if(!seen.has(r)){
     const pick=EXERCISES.find(x=>x.group===g&&x.reg===r&&x.type==='compound'&&allow(x,g))||EXERCISES.find(x=>x.group===g&&x.reg===r&&allow(x,g));
     if(pick)F.push({type:'region-gap',lv:'info',group:g,reg:r,ex:pick.name,prio:gapPrio(g,r)});}});});
-  trained.forEach(g=>{const seen=a.patSeen[g]||new Set();(IDEAL_PATS[g]||[]).forEach(p=>{if(!seen.has(p)){
+  if((a.allSessions||0)>=3)trained.forEach(g=>{const seen=a.patSeen[g]||new Set();(IDEAL_PATS[g]||[]).forEach(p=>{if(!seen.has(p)){
     const pick=EXERCISES.find(x=>x.group===g&&x.pat===p&&x.tier<=2&&allow(x,g))||EXERCISES.find(x=>x.group===g&&x.pat===p&&allow(x,g));
     if(pick)F.push({type:'pattern-gap',lv:'info',group:g,pat:p,exId:pick.id,exName:pick.name,prio:patPrio(g,p)});}});});
   // 'protect': a muscle you're keeping light must not be nagged toward heavy compounds. Gap findings
@@ -2144,10 +2156,14 @@ function findings(a,sessions,now,bw,profile){
     let volLo=(VOL_LANDMARKS[goalVol]||VOL_LANDMARKS.general)[0];
     if(profile.days&&profile.days<=2)volLo=Math.min(volLo,6);   // a 2-day lifter can't hit 10 sets/muscle/week; don't call it "low" (#23)
     const volTarget=(goalVol||(profile.days&&profile.days<=2))?volLo:undefined;   // carry the number only when it differs from the Balanced threshold
-    trained.filter(g=>a.groupSets[g]>=4&&g!=='Core'&&g!=='Calves').forEach(g=>{if(a.perWeek[g]<volLo)F.push(Object.assign({type:'volume-low',lv:'warn',group:g,perWeek:a.perWeek[g]},volTarget!==undefined?{target:volTarget,goal:goalVol||'general'}:{}));});
+    // judged on the same weekly number the Muscles chart shows, for every muscle you train DIRECTLY (2+
+    // sets) — the old 4-set gate left the lowest muscles unflagged (batch 5). Muscles you only hit as a
+    // helper (triceps from benching) get a number on the chart but no "low": flagging them buried the real
+    // to-dos. Core, calves and forearms have no target.
+    trained.filter(g=>NO_TARGET.indexOf(g)<0).forEach(g=>{if(a.perWeek[g]<volLo)F.push(Object.assign({type:'volume-low',lv:'warn',group:g,perWeek:a.perWeek[g]},volTarget!==undefined?{target:volTarget,goal:goalVol||'general'}:{}));});
     // 'days': on a 2-day week most muscles only fit once — a 1×/week frequency isn't a gap, it's the plan
     if(!(profile.days&&profile.days<=2))
-      trained.filter(g=>g!=='Core'&&g!=='Calves'&&a.groupSets[g]/a.weeks>=6&&(a.groupFreq[g]||0)/a.weeks<1.5).forEach(g=>F.push({type:'freq-low',lv:'info',group:g,sets:a.groupSets[g]/a.weeks}));
+      trained.filter(g=>NO_TARGET.indexOf(g)<0&&a.groupSets[g]/a.weeks>=6&&(a.groupFreq[g]||0)/a.weeks<1.5).forEach(g=>F.push({type:'freq-low',lv:'info',group:g,sets:a.groupSets[g]/a.weeks}));
   }
   const pr=progressionStat(sessions,now,bw);
   // push:'quiet' — the progression finding stays descriptive (no "lean on the +weight prompts")
@@ -2464,7 +2480,7 @@ function cardioStats(sessions,now){
                  can never disagree again.
    coachReport → "Focus" (≤3 to-dos, each with the number behind it and an exercise to try) and "Wins". */
 const LIFT_WINDOW_DAYS=28,PR_FRESH_DAYS=14;
-const STATUS_ORDER={pr:0,up:1,stuck:2,hold:3,new:4};
+const STATUS_ORDER={pr:0,up:1,stuck:2,down:3,hold:4,new:5};
 function liftStatus(sessions,now,bw){
   now=now||Date.now();const since=now-LIFT_WINDOW_DAYS*DAY;
   const keys={};
@@ -2487,6 +2503,8 @@ function liftStatus(sessions,now,bw){
     let status,from=null,to=last;
     if(!L.perfs[0].prior&&L.perfs.length===1)status='new';               // first time ever — nothing to compare yet
     else if(fresh.length){status='pr';to=fresh[fresh.length-1];from=to.priorSet;}
+    // a lift that's going DOWN reads as "below your best" — honest but gentle — not "stuck" with an old best (batch 5)
+    else if(win.length>=2&&beatsScore(best.sc,last.sc)&&beatsScore(first.sc,last.sc))status='down';
     else if(IL.builder&&IL.builder.isStalled&&IL.builder.isStalled(sessions,L.id,{mode:L.track,bw}))status='stuck';
     else if(win.length>=2&&beatsScore(last.sc,first.sc)){status='up';from={w:first.w,r:first.r};}
     else status='hold';
@@ -2501,8 +2519,9 @@ function volTargetFor(profile){profile=profile||{};const goal=profile.goal==='si
   const r=VOL_LANDMARKS[goal].slice();if(profile.days&&profile.days<=2)r[0]=Math.min(r[0],6);return r;}
 function muscleWeekly(a,profile,F){
   const t=volTargetFor(profile),low=new Set((F||[]).filter(f=>f.type==='volume-low').map(f=>f.group));
-  return Object.keys(a.groupSets).filter(g=>a.groupSets[g]>0).map(g=>({group:g,perWeek:Math.round((a.perWeek[g]||0)*10)/10,
-    target:(g==='Core'||g==='Calves')?null:t,low:low.has(g)})).sort((x,y)=>y.perWeek-x.perWeek);
+  // every main muscle gets a row (0 when untrained — a missing row hid the gap); small muscles only when worked
+  const gs=MAIN_GROUPS.concat(NO_TARGET.filter(g=>(a.perWeek[g]||0)>0));
+  return gs.map(g=>({group:g,perWeek:Math.round((a.perWeek[g]||0)*10)/10,target:NO_TARGET.indexOf(g)>=0?null:t,low:low.has(g)})).sort((x,y)=>y.perWeek-x.perWeek);
 }
 // The exercise to suggest for a to-do: one you already do for that muscle (most sets in the window), else
 // the first gym/avoid-legal foundational lift — never something off-limits for this profile.
@@ -2514,18 +2533,23 @@ function suggestFor(sessions,now,profile,match,group){
   return EXERCISES.filter(x=>match(x)&&IL.builder.profileAllows(x,group||x.group,pf,sessions)).sort((p,q)=>p.tier-q.tier)[0]||null;
 }
 function aAn(w){return /^[aeiou]/i.test(w)?'an':'a';}
-function focusItem(f,sessions,now,profile){
+// Plain words for the areas the coach names (batch 5: "triceps long head", "upper back / rear delts").
+const PLAIN_REG={'Triceps:long':'triceps (overhead moves)','Triceps:lateral':'triceps (pushdowns)','Biceps:long':'biceps (incline curls)','Biceps:short':'biceps (preacher curls)',
+  'Back:lats':'lats','Back:upper':'upper back','Back:mid':'mid back','Shoulders:front':'front shoulders','Shoulders:side':'side shoulders','Shoulders:rear':'rear shoulders','Glutes:medius':'side glutes'};
+function plainReg(g,r){return PLAIN_REG[g+':'+r]||regLabel(g,r);}
+function focusItem(f,sessions,now,profile,a){
   const g=f.group?f.group.toLowerCase():'',G=cap(g);let title,detail,ex=null;
+  const fresh=a&&a.weeks<4,none=fresh?'Not trained yet':'Nothing in 4 weeks';   // under a month in, "in 4 weeks" isn't true yet
   switch(f.type){
     case 'balance':title=f.dir==='push'?'Add more pulling':'Add more pressing';detail=`${f.push} push vs ${f.pull} pull sets in 4 weeks`;
       ex=suggestFor(sessions,now,profile,x=>f.dir==='push'?(x.pat==='hpull'||x.pat==='vpull'):(x.pat==='hpush'||x.pat==='vpush'));break;
     case 'legs-low':title='Legs are behind';detail=`${f.lower} lower-body vs ${f.upper} upper-body sets`;
       ex=suggestFor(sessions,now,profile,x=>x.type==='compound'&&(x.pat==='squat'||x.pat==='hinge'||x.pat==='lunge'));break;
-    case 'volume-low':{const tgt=f.target||volTargetFor(profile)[0];title=`${G} is low`;
+    case 'volume-low':{const tgt=f.target||volTargetFor(profile)[0];title=`${G}: low`;
       detail=`${(Math.round(f.perWeek*10)/10)} sets/week · aim for ${tgt}+`+((f.status==='persisting'&&f.prev&&f.perWeek>f.prev.perWeek)?` · up from ${Math.round(f.prev.perWeek*10)/10}`:'');
       ex=suggestFor(sessions,now,profile,x=>x.group===f.group,f.group);break;}
-    case 'region-gap':{const rl=regLabel(f.group,f.reg);title=`Cover your ${rl}`;detail='Nothing in 4 weeks';ex=EXERCISES.find(x=>x.name===f.ex)||null;break;}
-    case 'pattern-gap':{const pl=f.pat==='iso'?'isolation':patLabel(f.pat);title=`${G}: add ${aAn(pl)} ${pl} move`;detail=`None in your ${g} work for 4 weeks`;ex=EX[f.exId]||null;break;}
+    case 'region-gap':{const rl=plainReg(f.group,f.reg);title=`Cover your ${rl}`;detail=none;ex=EXERCISES.find(x=>x.name===f.ex)||null;break;}
+    case 'pattern-gap':{const pl=f.pat==='iso'?'isolation':patLabel(f.pat);title=`${G}: add ${aAn(pl)} ${pl} move`;detail=fresh?`Not in your ${g} work yet`:`None in your ${g} work for 4 weeks`;ex=EX[f.exId]||null;break;}
     case 'freq-low':title=`Split ${g} over 2 days`;detail=`~${Math.round(f.sets)} sets a week, all in one session`;break;
     case 'deload-due':title='Deload week soon?';detail=`${f.weeks} weeks of steady training — an easier week helps you keep progressing`;break;
     default:return null;
@@ -2536,7 +2560,7 @@ function winItem(f,week){
   const g=f.group?f.group.toLowerCase():'',G=cap(g);
   if(f.status==='resolved'){
     const t={balance:'Push & pull back in balance','legs-low':'Legs caught up','volume-low':`${G} volume back up`,'freq-low':`${G} now spread over the week`,
-      'region-gap':f.reg?`${cap(regLabel(f.group,f.reg))} now covered`:'','pattern-gap':`${G} now has ${aAn(f.pat==='iso'?'isolation':patLabel(f.pat||''))} ${f.pat==='iso'?'isolation':patLabel(f.pat||'')} move`}[f.type];
+      'region-gap':f.reg?`${cap(plainReg(f.group,f.reg))} now covered`:'','pattern-gap':`${G} now has ${aAn(f.pat==='iso'?'isolation':patLabel(f.pat||''))} ${f.pat==='iso'?'isolation':patLabel(f.pat||'')} move`}[f.type];
     return t?{type:'resolved',title:t,detail:'Fixed since last month'}:null;
   }
   if(f.type==='balance'&&f.dir==='even')return {type:'balance',title:'Push & pull balanced',detail:`${f.push} / ${f.pull} sets in 4 weeks`};
@@ -2555,7 +2579,7 @@ function coachReport(a,sessions,now,bw,profile,seen,lifts){
   const active=ann.filter(f=>f.status!=='resolved'&&!muted(f)&&f.lv!=='good');
   const rank=f=>FOCUS_ORDER.indexOf(f.type==='region-gap'||f.type==='pattern-gap'?'gap':f.type);
   const focus=active.filter(f=>rank(f)>=0).sort((x,y)=>rank(x)-rank(y)||(x.type==='volume-low'?x.perWeek-y.perWeek:0)||((y.prio||0)-(x.prio||0)))
-    .map(f=>focusItem(f,sessions,now,profile)).filter(Boolean).slice(0,3);
+    .map(f=>focusItem(f,sessions,now,profile,a)).filter(Boolean).slice(0,3);
   const wins=[];
   // PRs already have their own rows in "Your lifts" — here they're ONE win line, so a good fortnight
   // doesn't push every other win (a fixed gap, good balance) off the list.
@@ -3253,6 +3277,8 @@ function fmtElapsed(startTs){const m=Math.floor((Date.now()-startTs)/60000);retu
 function fmtClock(ts){return new Date(ts).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'});}
 // Seconds → "2:10" (rest durations).
 function fmtSec(s){s=Math.round(s||0);return Math.floor(s/60)+':'+String(s%60).padStart(2,'0');}
+// relDay for mid-sentence: "today" / "yesterday" / "3 days ago", but a date keeps its capitals ("Sat, Sep 5" — batch 5)
+function relDayMid(ts){const r=relDay(ts);return /^(Today|Yesterday)$/.test(r)?r.toLowerCase():r;}
 function fmtDate(ts){return new Date(ts).toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'});}
 function relDay(ts){const t=startOfDay(Date.now()),d=startOfDay(ts);const diff=Math.round((t-d)/DAY);
   if(diff===0)return'Today';if(diff===1)return'Yesterday';if(diff<7)return diff+' days ago';return fmtDate(ts);}
@@ -3666,12 +3692,12 @@ function buildButtons(){
   // "plan"/"Session N" framing: the app remembers, it doesn't decide the program.
   if(dl)return `<button class="btn primary block" id="btnRecommend" data-action="build" style="height:auto;padding:12px 16px;font-size:16px;flex-direction:column;gap:2px">
       <span style="display:flex;align-items:center;gap:8px">🌿 Build a deload</span>
-      <span style="font-size:12.5px;font-weight:500;opacity:.85">same lifts as ${relDay(plan.date).toLowerCase()}, ~60% lighter</span></button>
+      <span style="font-size:12.5px;font-weight:500;opacity:.85">same lifts as ${relDayMid(plan.date)}, ~60% lighter</span></button>
     <div style="height:8px"></div>
     <button class="btn ghost block" data-action="buildFresh">Different exercises instead</button>`;
   return `<button class="btn primary block" id="btnRecommend" data-action="build" style="height:auto;padding:12px 16px;font-size:16px;flex-direction:column;gap:2px">
       <span style="display:flex;align-items:center;gap:8px">${ICON_BUILD} Build my workout</span>
-      <span style="font-size:12.5px;font-weight:500;opacity:.85">same lifts as ${relDay(plan.date).toLowerCase()} · weights prefilled from last time</span></button>
+      <span style="font-size:12.5px;font-weight:500;opacity:.85">same lifts as ${relDayMid(plan.date)} · weights prefilled from last time</span></button>
     <div style="height:8px"></div>
     <button class="btn ghost block" data-action="buildFresh">Different exercises instead</button>`;
 }
@@ -3908,7 +3934,7 @@ function buildAndStart(fresh){
   let msg='Workout built — adjust anything';
   if(p.deload)msg=p.mode==='continue'?'Deload — same lifts as last time, lighter loads, focus on the stretch':'Deload built — lighter loads, focus on the stretch';
   else if(p.mode==='continue'){
-    if(p.lapsed)msg=`Welcome back — weights carried from your session ${relDay(p.plan.date).toLowerCase()}`;
+    if(p.lapsed)msg=`Welcome back — weights carried from your session ${relDayMid(p.plan.date)}`;
     else msg='Same lifts as last time — adjust anything'+((p.offers||[]).length?' · one suggestion inside':'');
   }
   // Settings win on a continued plan: say what was swapped/left out and why (it outranks the messages above)
@@ -4087,7 +4113,8 @@ function calendar(done){
   const today=startOfDay(Date.now());
   let cells='';for(let i=0;i<pad;i++)cells+=`<div class="cal-cell pad"></div>`;
   for(let d=1;d<=days;d++){const ts=new Date(y,m,d).getTime();
-    cells+=`<div class="cal-cell ${daySet[ts]?'has':''} ${ts===today?'today':''} ${ts===selDay?'sel':''}" data-day="${ts}">${d}</div>`;}
+    const lab=new Date(ts).toLocaleDateString(undefined,{month:'short',day:'numeric'})+(daySet[ts]?', '+daySet[ts]+' workout'+(daySet[ts]>1?'s':''):'');   // VoiceOver hears the date and whether you trained (batch 5)
+    cells+=`<div class="cal-cell ${daySet[ts]?'has':''} ${ts===today?'today':''} ${ts===selDay?'sel':''}" data-day="${ts}" aria-label="${lab}" aria-pressed="${ts===selDay}">${d}</div>`;}
   return `<div class="cal-head"><button class="icon-btn" data-mon="-1" aria-label="Previous month">‹</button><h3>${first.toLocaleDateString(undefined,{month:'long',year:'numeric'})}</h3><button class="icon-btn" data-mon="1" aria-label="Next month">›</button></div>
     <div class="cal-grid">${['S','M','T','W','T','F','S'].map(d=>`<div class="cal-dow">${d}</div>`).join('')}${cells}</div>`;
 }
@@ -4109,9 +4136,11 @@ function sessCard(s){
   return `<div class="card sess" data-sess="${s.id}">
     <div class="sess-top"><div class="sess-date">${relDay(s.date)}${s.deload?' <span class="deload-badge">Deload</span>':''}</div><span class="pill accent">${s.exercises.length} exercise${s.exercises.length!==1?'s':''}</span></div>
     <div class="sess-meta"><span class="muted">Volume <b>${fmtVol(volOf(s))} ${U()}</b></span><span class="muted">Sets <b>${setsOf(s)}</b></span>${P.sessionDuration(s)!=null?`<span class="muted">${s.endEstimated?'≈':''}<b>${fmtDur(P.sessionDuration(s))}</b></span>`:''}</div>
-    <div class="sess-ex">${s.exercises.slice(0,4).map(e=>{const best=e.sets.filter(P.isWorking);const top=best.length?Math.max(...best.map(x=>+x.w||0)):0;
-      const tm=D.TIME_METRIC.has(e.id);   // seconds, not reps — and a bodyweight hold has no "· 0lb" to show
-      return `<div><span>${esc(EX[e.id]?EX[e.id].name:e.name)}</span><span class="s">${best.length}×${best.length?best[0].r+(tm?'s':''):0}${top?' · '+top+U():''}</span></div>`;}).join('')}
+    <div class="sess-ex">${s.exercises.slice(0,4).map(e=>{const work=e.sets.filter(st=>P.isWorking(st)&&!st.warm);
+      // (batch 5) "3 sets · top 185lb × 5" from ONE set — it used to pair the first set's reps with the heaviest weight
+      const inv=D.isAssist(e.id),top=work.reduce((a,x)=>!a?x:(inv?(+x.w||0)<(+a.w||0):(+x.w||0)>(+a.w||0)||((+x.w||0)===(+a.w||0)&&(+x.r||0)>(+a.r||0)))?x:a,null);
+      const f={time:D.TIME_METRIC.has(e.id),assist:inv,bodyweight:(EX[e.id]||{}).equip==='Bodyweight',holds:P.holdsOf(e),sides:P.sidesOf(e)};
+      return `<div><span>${esc(EX[e.id]?EX[e.id].name:e.name)}</span><span class="s">${work.length}× · ${top?esc(liftSetText(f,{w:+top.w||0,r:+top.r||0})):'—'}</span></div>`;}).join('')}
       ${s.exercises.length>4?`<div class="dim" style="font-size:12px">+${s.exercises.length-4} more</div>`:''}</div>
     ${s.note?`<div class="sess-note" style="margin-top:9px;padding-top:9px;border-top:1px solid var(--line);font-size:12.5px;color:var(--ink-2);line-height:1.4">📝 ${esc(s.note)}</div>`:''}
   </div>`;
@@ -4124,7 +4153,7 @@ function libResultsHtml(){
   let res=SR.searchEx(libQuery);
   if(libGroup!=='All')res=res.filter(e=>e.group===libGroup||e.muscles.includes(libGroup));
   return `<div class="dim" style="font-size:12.5px;margin:8px 2px 10px" aria-live="polite">${res.length} exercise${res.length!==1?'s':''}</div>
-    <div class="card list">${res.length?res.map(e=>libRow(e)).join(''):'<div style="padding:24px;text-align:center" class="dim">No match. Try a simpler word like “press” or “curl”.</div>'}</div>`;
+    <div class="card list">${res.length?res.map(e=>libRow(e)).join(''):(/tread|run|jog|walk|bike|cycl|spin|ellip|stair|cardio|swim/i.test(libQuery)?'<div style="padding:20px;text-align:center"><div class="dim" style="margin-bottom:10px">Cardio is logged on its own — time, type and distance.</div><button class="btn primary sm" data-action="cardioOpen" style="display:inline-flex">Log cardio</button></div>':'<div style="padding:24px;text-align:center" class="dim">No match. Try a simpler word like “press” or “curl”.</div>')}</div>`;
 }
 function viewLibrary(){
   return `<div class="section">
@@ -4155,6 +4184,10 @@ function statDelta(cur,prev,fmtFn){
 }
 function viewProgress(){
   const done=completedSessions(),anyDone=completedAny(),now=Date.now();
+  // nothing lifted yet: one clear line instead of four zero tiles and empty charts (batch 5)
+  if(!done.length)return `<div class="section"><div class="view-title" style="margin:0 2px 14px;font-size:22px">Progress</div>
+    <div class="card" style="padding:26px 18px;text-align:center"><div style="font-weight:700;font-size:15px">Your progress shows up here</div><div class="dim" style="margin-top:6px;line-height:1.5">Log your first workout and you’ll see your lifts, records and what to work on next.</div></div>
+    ${cardioCard()}</div>`;
   const ws=P.weekStart(now),lwStart=ws-7*DAY,elapsed=now-ws;   // this-week start (Mon), last-week start, and how far into the week we are
   // Compare against last week THROUGH THE SAME POINT, not the whole week — otherwise a Tuesday (a
   // partial week) always shows a big drop against a full one. This Mon–Tue vs last Mon–Tue is fair,
@@ -4212,10 +4245,11 @@ function prTip(){
 const CHEV_R='<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color:var(--ink-3)"><path d="M9 6l6 6-6 6"/></svg>';
 // A record's set, written the way the record reads: "Bodyweight +10lb × 8", "45lb/ea × 10", "60s",
 // "/side" when each side is counted. One copy for the PR list and the PR-adjust card.
-function prSetText(p,w,r){const tail=' × '+r+(p.time?'s':'')+(p.sides===2?'/side':'');
-  return p.bodyweight?(w?'Bodyweight +'+w+U():'Bodyweight')+tail:w+U()+(p.holds===2?'/ea':'')+tail;}
+// (batch 5) the same writer as Your lifts — the PR list said "40kg × 8" for an assist machine and "× 40s" for a carry
+function prSetText(p,w,r){return liftSetText({time:p.time,assist:p.inverted,bodyweight:p.bodyweight,holds:p.holds,sides:p.sides},{w,r});}
+let recordsAll=false;
 function prList(){
-  const arr=memoStat('prAll',()=>A.personalRecords(state.sessions,bw(),999)).slice(0,8);
+  const all=memoStat('prAll',()=>A.personalRecords(state.sessions,bw(),999)),arr=recordsAll?all:all.slice(0,8);
   if(!arr.length)return`<div style="padding:22px;text-align:center" class="dim">Log a few sets and your PRs show up here.</div>`;
   const setStr=p=>prSetText(p,p.w,p.r);
   // show the modality only when it isn't the exercise's native equipment (so a Smith/cable variant
@@ -4224,17 +4258,18 @@ function prList(){
   // …and tag a lift done the non-default way round ("Each side" / "Both sides"), since it keeps its own record
   const modeTag=p=>{const ex=EX[p.id];const native=ex&&EQUIP_MODE[ex.equip];
     return (p.mode&&p.mode!==native?pill(MODES[p.mode].label):'')+(p.track&&p.track.indexOf('|')>=0?pill(p.sides===2?'Each side':'Both sides'):'');};
-  return arr.map(p=>`<div class="ex-row" data-openex="${p.id}" style="cursor:pointer"><div style="flex:1;min-width:0"><div class="ex-name">${esc(p.name)}${modeTag(p)}</div>
+  return arr.map(p=>`<div class="ex-row" data-openex="${p.id}" data-track="${esc(p.track)}" style="cursor:pointer"><div style="flex:1;min-width:0"><div class="ex-name">${esc(p.name)}${modeTag(p)}</div>
     <div class="ex-sub">Record ${setStr(p)}</div>${p.adjusted?`<div class="ex-sub">Your pick · best logged ${setStr({...p,w:p.adjusted.w,r:p.adjusted.r})}</div>`:''}</div>
-    <div style="text-align:right">${p.showEst?`<div class="mono" style="font-weight:700;font-size:16px">${p.est}<span class="dim" style="font-size:11px"> ${U()} e1RM</span></div>`:`<div class="mono dim" style="font-weight:600;font-size:13px">${p.load}${U()}</div>`}</div>${CHEV_R}</div>`).join('');
+    <span class="dim" style="font-size:12px;flex-shrink:0">${fmtDate(p.date).replace(/^\w+, /,'')}</span>${CHEV_R}</div>`).join('')   // the date, not an "e1RM" nobody lifted (batch 5)
+    +(all.length>8?`<button class="linkbtn" data-recordsall style="display:block;width:100%;text-align:center;padding:12px;font-weight:600">${recordsAll?'Show fewer':'Show all '+all.length}</button>`:'');
 }
 // How much longer until Coach's Notes will show program-level verdicts (push/pull balance, legs
 // undertrained, weekly-volume landmarks) — those need real history to mean anything, so a brand-new
 // user sees encouragement here instead of a premature judgment. See analysis.js MIN_COMPARATIVE_*.
 function buildupMessage(a){
-  const remS=Math.max(0,A.MIN_COMPARATIVE_SESSIONS-a.sessions);
+  const remS=Math.max(0,A.MIN_COMPARATIVE_SESSIONS-(a.allSessions!=null?a.allSessions:a.sessions));   // all your history (batch 5)
   if(remS>0)return `Log ${remS} more session${remS===1?'':'s'} and I'll start giving you balance and volume feedback.`;
-  if(a.daySpan<A.MIN_COMPARATIVE_DAYS)return `A few more days of training and I'll start giving you balance and volume feedback.`;
+  if((a.allSpan!=null?a.allSpan:a.daySpan)<A.MIN_COMPARATIVE_DAYS)return `A few more days of training and I'll start giving you balance and volume feedback.`;
   return `I'll start giving you balance and volume feedback soon.`;
 }
 function tipsCard(tips){
@@ -4259,7 +4294,7 @@ function collapsible(key,title,summary,body,margin,closedByDefault){
    numbers come from analysis.liftStatus / coachReport / muscleWeekly, which share the coach's and the
    builder's rules, so no two cards can contradict each other. */
 let liftsAll=false;   // "Show all" on Your lifts (screen state, not saved)
-const LIFT_BADGE={pr:['★','New PR','var(--accent)'],up:['▲','Improving','var(--good)'],stuck:['⏸','Stuck','var(--warn)'],hold:['→','Holding','var(--ink-3)'],new:['•','First time','var(--ink-3)']};
+const LIFT_BADGE={pr:['★','New PR','var(--accent)'],up:['▲','Improving','var(--good)'],stuck:['⏸','Stuck','var(--warn)'],down:['↘','Below your best','var(--ink-3)'],hold:['→','Holding','var(--ink-3)'],new:['•','First time','var(--ink-3)']};
 // A lift's set, written the way it reads everywhere else: "155lb × 8", "60s", "30lb assist × 8", "Bodyweight × 12".
 function liftSetText(l,st){const u=U(),side=l.sides===2?'/side':'';
   if(l.time)return (st.w?st.w+u+(l.holds===2?'/ea':'')+' · ':'')+st.r+'s'+side;
@@ -4268,10 +4303,13 @@ function liftSetText(l,st){const u=U(),side=l.sides===2?'/side':'';
   return st.w+u+(l.holds===2?'/ea':'')+' × '+st.r+side;}
 function liftRow(l){
   const b=LIFT_BADGE[l.status],ex=EX[l.id],native=ex&&EQUIP_MODE[ex.equip];
-  const tag=(l.mode&&l.mode!==native&&MODES[l.mode]?` <span class="pill" style="font-size:10px;padding:1px 7px">${esc(MODES[l.mode].label)}</span>`:'');
-  const sub=l.status==='stuck'?`${liftSetText(l,l.best)} · no gain in 2+ weeks`
+  const pill=t=>` <span class="pill" style="font-size:10px;padding:1px 7px">${esc(t)}</span>`;
+  // tag BOTH the equipment and the side, so two versions of one lift can be told apart (batch 5)
+  const tag=(l.mode&&l.mode!==native&&MODES[l.mode]?pill(MODES[l.mode].label):'')+(l.track&&l.track.indexOf('|')>=0?pill(l.sides===2?'Each side':'Both sides'):'');
+  const sub=l.status==='stuck'?`${liftSetText(l,l.to)} · no gain in 2+ weeks`
+    :l.status==='down'?`${liftSetText(l,l.to)} <span class="dim">· best ${esc(liftSetText(l,l.best))}</span>`
     :l.from?`${liftSetText(l,l.to)} <span class="dim">· was ${esc(liftSetText(l,l.from))}</span>`:`Best ${liftSetText(l,l.best)}`;
-  return `<div class="ex-row" data-openex="${l.id}" style="cursor:pointer"><span aria-hidden="true" style="width:18px;text-align:center;font-size:14px;color:${b[2]};flex-shrink:0">${b[0]}</span>
+  return `<div class="ex-row" data-openex="${l.id}" data-track="${esc(l.track)}" style="cursor:pointer"><span aria-hidden="true" style="width:18px;text-align:center;font-size:14px;color:${b[2]};flex-shrink:0">${b[0]}</span>
     <div style="flex:1;min-width:0"><div class="ex-name">${esc(l.name)}${tag}</div><div class="ex-sub">${sub}</div></div>
     <span style="font-size:11.5px;font-weight:700;color:${b[2]};flex-shrink:0">${b[1]}</span>${CHEV_R}</div>`;
 }
@@ -4377,8 +4415,8 @@ function cardioCard(){
 
 /* ---------------- sheets ---------------- */
 // Compact SVG line of a lift's best-set estimated 1RM over its recent sessions, with the delta.
-function trendCard(id){
-  const dmode=P.lastTrackFor(state.sessions,id);   // follow the version (equipment + side) done most recently
+function trendCard(id,track){
+  const dmode=track||P.lastTrackFor(state.sessions,id);   // follow the version (equipment + side) done most recently
   const series=P.exerciseSeries(state.sessions,id,{mode:dmode,bw:bw(),limit:10});
   if(series.length<2)return '';   // need at least two sessions to show a trend
   const vals=series.map(p=>p.est),min=Math.min(...vals),max=Math.max(...vals),range=max-min||1;
@@ -4393,22 +4431,24 @@ function trendCard(id){
   // bodyweight entered — its score is −assist, so it's shown as the assist, with "less" as progress)
   const metric=series[series.length-1].metric||'e1rm';
   const unit=metric==='time'?'s':metric==='reps'?' reps':U();
-  const label=metric==='time'?'Progress · hold':metric==='resist'?'Progress · resistance':metric==='assist'?'Progress · less assist':metric==='reps'?'Progress · reps':'Progress · est. 1RM';
+  // (batch 5) the title and the number are things you actually lifted — no "est. 1RM" / "resistance"
+  const label='Your best set each time';
   // A dip caused by the user setting their own record aside is not a decline, and must not be painted
   // like one. When the latest point is adjusted, the delta goes neutral and says why — that is the
   // whole point of the flag: going lighter on purpose should never read as losing ground.
   const adjusted=!!series[series.length-1].adj, anyAdj=series.some(p=>p.adj);
   const col=adjusted?'var(--ink-3)':delta>0?'var(--good)':delta<0?'var(--warn)':'var(--ink-3)';
   const asst=metric==='assist';   // shown as the assist itself; progress = LESS of it
-  const arrow=delta>0?(asst?'▲ '+delta+unit+' less':'▲ +'+delta+unit):delta<0?(asst?'▼ '+Math.abs(delta)+unit+' more':'▼ '+Math.abs(delta)+unit):'— flat';
-  const shown=asst?Math.abs(vals[vals.length-1])+unit+' assist':vals[vals.length-1]+unit;
+  const arrow=delta>0?'▲ stronger':delta<0?'▼ below your best':'— same';
+  const lastPt=series[series.length-1],ex0=EX[id]||{};
+  const shown=esc(liftSetText({time:D.TIME_METRIC.has(id),assist:D.isAssist(id),bodyweight:ex0.equip==='Bodyweight',holds:1,sides:String(dmode).indexOf('|1side')>=0?2:1},{w:lastPt.w,r:lastPt.r}));
   return `<div class="card" style="padding:14px 15px;margin:0 0 12px">
     <div class="row-between" style="margin-bottom:9px"><span class="eyebrow">${label}</span>
       <span class="mono" style="font-weight:700;color:${col}">${shown} <span style="font-size:12px">${arrow}</span></span></div>
     <svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" preserveAspectRatio="none" style="display:block;overflow:visible">
       <path d="${d}" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
       <circle cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="3.5" fill="${adjusted?'var(--ink-3)':'var(--accent)'}"/></svg>
-    <div class="dim" style="font-size:11.5px;margin-top:7px">Best set each session · last ${series.length}${anyAdj?' · sets better than your chosen record aren’t counted here':''}</div></div>`;
+    <div class="dim" style="font-size:11.5px;margin-top:7px">Your last ${series.length} workouts${anyAdj?' · sets better than your chosen record aren’t counted here':''}</div></div>`;
 }
 /* "Your record" (v0.69.0). Your record is the set you pick — by default your best. "Change" lists your
    best set from each recent workout of this lift; picking one makes every BETTER set not count as a
@@ -4417,28 +4457,28 @@ function trendCard(id){
    different way that day (seated face pulls at 75 vs standing at 25). */
 // The record a lift's card acts on: the version (equipment + "each side") done most recently —
 // the same one the trend chart follows. A lift with two versions (one-arm vs two-hand) has two records.
-function prFor(id){const all=A.personalRecords(state.sessions,bw(),999).filter(x=>x.id===id),t=P.lastTrackFor(state.sessions,id);
+function prFor(id,track){const all=A.personalRecords(state.sessions,bw(),999).filter(x=>x.id===id),t=track||P.lastTrackFor(state.sessions,id);
   return all.find(x=>x.track===t)||all[0];}
 // How to write a set of this lift (seconds, assist, bodyweight, per-dumbbell, per-side) — from its record.
 function recFlags(id,p){const ex=EX[id]||{};
   return {time:D.TIME_METRIC.has(id),assist:D.isAssist(id),bodyweight:p?!!p.bodyweight:ex.equip==='Bodyweight',holds:p?p.holds:1,sides:p?p.sides:1};}
-function recordCard(id){
-  const p=prFor(id);if(!p)return '';
+function recordCard(id,track){
+  const p=prFor(id,track);if(!p)return '';
   const f=recFlags(id,p),txt=(w,r)=>esc(liftSetText(f,{w,r}));
   return `<div class="card" style="padding:12px 15px;margin:0 0 12px">
     <div class="row-between"><div><div class="eyebrow">Your record</div>
       <div class="mono" style="font-weight:700;font-size:16px;margin-top:3px">${txt(p.w,p.r)}</div>
       <div class="dim" style="font-size:12px;margin-top:1px">${fmtDate(p.date)}</div></div>
-      <button class="btn sm ghost" data-recchange="${id}" style="flex-shrink:0">Change</button></div>
+      <button class="btn sm ghost" data-recchange="${id}" data-track="${esc(p.track)}" style="flex-shrink:0">Change</button></div>
     ${p.adjusted?`<div class="dim" style="font-size:12px;margin-top:9px;line-height:1.45">Your pick · best logged ${txt(p.adjusted.w,p.adjusted.r)} on ${fmtDate(p.adjusted.date)}
-      <button class="linkbtn" data-recbest="${id}" style="font-size:12px;font-weight:600;padding:0 0 0 4px">Use best</button></div>`:''}
+      <button class="linkbtn" data-recbest="${id}" data-track="${esc(p.track)}" style="font-size:12px;font-weight:600;padding:0 0 0 4px">Use best</button></div>`:''}
     ${seenFlag('recordTip')?'':`<div class="dim" style="font-size:12px;margin-top:9px;padding-top:9px;border-top:1px solid var(--line);line-height:1.45;display:flex;gap:10px;align-items:flex-start">
       <span style="flex:1">Your record is the best set you’ve logged here — the bar Ironlog measures you against. Tap <b>Change</b> if a set shouldn’t count.</span>
       <button class="linkbtn dim" data-seentip="recordTip" style="font-size:12px;padding:0;flex-shrink:0">Got it</button></div>`}
   </div>`;
 }
-function openRecordPicker(id){
-  const p=prFor(id),track=p?p.track:P.lastTrackFor(state.sessions,id),f=recFlags(id,p);
+function openRecordPicker(id,tr){
+  const p=prFor(id,tr),track=p?p.track:(tr||P.lastTrackFor(state.sessions,id)),f=recFlags(id,p);
   const ch=P.recordChoices(state.sessions,id,track,bw(),8);if(!ch.length){toast('Nothing logged for this lift yet');return;}
   const isRec=c=>p&&c.date===p.date&&c.w===p.w&&c.r===p.r;
   openSheet('Which set is your record?',`<div class="dim" style="font-size:13px;margin:-4px 2px 14px;line-height:1.5">Pick the set that should count — for example if your form slipped, or you did it a different way that day.</div>
@@ -4460,8 +4500,8 @@ function notesCard(id){
     ${notes.slice(0,4).map(n=>`<div style="font-size:13.5px;line-height:1.45;padding:5px 0;border-top:1px solid var(--line)"><span class="dim mono" style="font-size:11.5px">${fmtDate(n.date)}${n.deload?' · deload':''}</span><br>${esc(n.note)}</div>`).join('')}
     ${notes.length>4?`<div class="dim" style="font-size:12px;margin-top:6px">+${notes.length-4} older</div>`:''}</div>`;
 }
-function exerciseDetail(id){
-  const e=EX[id];const lp=P.lastPerf(state.sessions,id,{excludeId:state.active&&state.active.id});
+function exerciseDetail(id,track){
+  const e=EX[id];const lp=P.lastPerf(state.sessions,id,{excludeId:state.active&&state.active.id,mode:track||undefined});
   const target=cur();const inWorkout=target&&target.exercises.some(x=>x.id===id);
   const rest=A.exerciseRest(state.sessions,id);   // T3: median rest you actually take here
   return `<div style="display:flex;gap:13px;align-items:center;margin-bottom:16px">
@@ -4469,8 +4509,8 @@ function exerciseDetail(id){
       <div><div class="mono dim" style="font-size:12px">${e.equip} · ${e.type}${e.tier===1?' · foundational lift':''}</div>
       <div class="chips" style="margin-top:6px">${e.muscles.map(m=>`<span class="pill">${m}</span>`).join('')}</div></div></div>
     <p class="instr">${esc(e.instr)}</p>
-    ${trendCard(id)}
-    ${recordCard(id)}
+    ${trendCard(id,track)}
+    ${recordCard(id,track)}
     ${notesCard(id)}
     <div class="card" style="padding:12px 15px;margin:16px 0">
       <div class="row-between"><span class="eyebrow">Target rep range</span><span class="mono" style="font-weight:600">${e.rr[0]}–${e.rr[1]}</span></div>
@@ -4656,7 +4696,7 @@ function profileSummary(){const p=state.settings.profile||{};const parts=[];
   return parts.length?parts.join(' · '):'Balanced';}
 function setProfile(field,val){const p=Object.assign({},state.settings.profile);
   if(!val||val==='auto')delete p[field];else p[field]=field==='days'?+val:val;
-  state.settings.profile=Object.keys(p).length?p:undefined;S.saveSettingsCloud();}
+  state.settings.profile=Object.keys(p).length?p:undefined;S.saveSettingsCloud();render();}   // Progress targets follow at once (batch 5)
 function toggleProtect(gp){const p=Object.assign({},state.settings.profile),set=new Set(p.protect||[]);
   set.has(gp)?set.delete(gp):set.add(gp);if(set.size)p.protect=[...set];else delete p.protect;
   state.settings.profile=Object.keys(p).length?p:undefined;S.saveSettingsCloud();}
@@ -5022,7 +5062,7 @@ function saveRecordPick(id,track,target){
 }
 function setRecord(id,track,target,msg){
   saveRecordPick(id,track,target);
-  render();openSheet(EX[id]?EX[id].name:id,exerciseDetail(id));toast(msg||(target?'Record updated':'Your best set is your record again'));
+  render();openSheet(EX[id]?EX[id].name:id,exerciseDetail(id,track));toast(msg||(target?'Record updated':'Your best set is your record again'));
 }
 // "Don't count this" on the finish screen: keep the record you had before this workout. Stays on the
 // summary (redrawing the exercise sheet over it used to throw away "Done" mid-flow) and ticks in place.
@@ -5101,7 +5141,10 @@ function startEdit(s){editSession=JSON.parse(JSON.stringify(s));editDirty=false;
 function changeEditDate(iso){
   const s=cur();if(!s||!iso)return;const parts=iso.split('-').map(Number);if(parts.length!==3||!parts[0])return;
   const old=new Date(s.date),nd=new Date(parts[0],parts[1]-1,parts[2],old.getHours(),old.getMinutes(),old.getSeconds(),old.getMilliseconds());
-  const t=nd.getTime();if(t>Date.now()||t===s.date)return;   // no future-dating, no-op if unchanged
+  let t=nd.getTime();if(t===s.date)return;
+  // today at a time that hasn't happened yet (a late-night workout moved to this morning): use now instead
+  // of silently doing nothing — the date field showed the new day while the workout stayed put (batch 5)
+  if(t>Date.now()){if(startOfDay(t)===startOfDay(Date.now()))t=Date.now()-60000;else return;}
   // shift EVERYTHING by the same delta — each set's tick time too, or time-per-muscle / rest / staleness
   // would still read the old day (full review 4.8)
   const delta=t-s.date;s.date=t;if(+s.endedAt>0)s.endedAt+=delta;
@@ -5229,6 +5272,7 @@ function bind(){
     const mu=e.target.closest('[data-mute]');if(mu){const seen=state.settings.seen=state.settings.seen||{};seen['mute:'+mu.dataset.mute]=true;S.saveSettingsCloud();render();toast('Got it — hidden from Coach’s Focus list. Settings can bring it back',{label:'Undo',fn:()=>{delete seen['mute:'+mu.dataset.mute];S.saveSettingsCloud();render();}});return;}
     const cl=e.target.closest('[data-collapse]');if(cl){toggleCollapse(cl.dataset.collapse,cl.dataset.collapseClosed==='1');return;}
     const la=e.target.closest('[data-liftsall]');if(la){liftsAll=!liftsAll;render();return;}
+    const ra=e.target.closest('[data-recordsall]');if(ra){recordsAll=!recordsAll;render();return;}
     const bv=e.target.closest('[data-barval]');if(bv){bv.classList.toggle('on');return;}   // reveal/hide a volume bar's value
     const sc=e.target.closest('[data-sess]');if(sc){openSessionDetail(sc.dataset.sess);return;}   // works from Home's last-session card AND History
   });
@@ -5265,7 +5309,7 @@ function bind(){
   bindClick('#btnHistMore',()=>{histShown+=30;render();});
   // [data-sess] is handled by the delegated #view listener above (fires from History AND the Home card).
   // progress: PR rows open the lift's detail (with its progress trend)
-  ['#prCard','#liftCard','#coachCard'].forEach(sel=>{const el=$(sel);if(el)el.addEventListener('click',e=>{const r=e.target.closest('[data-openex]');if(r&&EX[r.dataset.openex])openSheet(EX[r.dataset.openex].name,exerciseDetail(r.dataset.openex));});});
+  ['#prCard','#liftCard','#coachCard'].forEach(sel=>{const el=$(sel);if(el)el.addEventListener('click',e=>{const r=e.target.closest('[data-openex]');if(r&&EX[r.dataset.openex])openSheet(EX[r.dataset.openex].name,exerciseDetail(r.dataset.openex,r.dataset.track));});});
   // library
   const ls=$('#libSearch');if(ls)ls.addEventListener('input',()=>{libQuery=ls.value;const r=$('#libResults');if(r)r.innerHTML=libResultsHtml();});
   v.querySelectorAll('[data-lg]').forEach(b=>b.addEventListener('click',()=>{libGroup=b.dataset.lg;render();}));
@@ -5385,7 +5429,7 @@ function bindLog(root){
       if(lp){let k=0;ex.sets.forEach(st=>{if(st.done||st.warm)return;const n=lp.sets[Math.min(k++,lp.sets.length-1)];st.w=n.w;st.r=n.r;});}
       persistCur();render();toast(next?'One side at a time — reps per side':'Both sides at once');return;}
     const nt=e.target.closest('[data-note]');if(nt){openNote(+nt.dataset.note);return;}
-    const oe=e.target.closest('[data-openex]');if(oe){if(EX[oe.dataset.openex])openSheet(EX[oe.dataset.openex].name,exerciseDetail(oe.dataset.openex));return;}
+    const oe=e.target.closest('[data-openex]');if(oe){if(EX[oe.dataset.openex])openSheet(EX[oe.dataset.openex].name,exerciseDetail(oe.dataset.openex,oe.dataset.track));return;}
   });
   root.addEventListener('input',e=>{const inp=e.target.closest('input[data-f]');if(!inp)return;const t=cur();if(!t)return;
     const ei=+inp.dataset.ei,si=+inp.dataset.s,f=inp.dataset.f;const val=P.parseWeightInput(inp.value);
@@ -5493,8 +5537,8 @@ function boot(){
   $('#cdOk').addEventListener('click',()=>{const cb=_confirmCb;closeConfirm();if(cb)cb();});
   $('#sheetBody').addEventListener('click',e=>{const a=e.target.closest('[data-addto]');if(a){addExerciseToCur(a.dataset.addto);closeSheet();return;}
     const nc=e.target.closest('[data-nocount]');if(nc){dontCount(nc.dataset.nocount,nc.dataset.sid,nc);return;}
-    const rc=e.target.closest('[data-recchange]');if(rc){openRecordPicker(rc.dataset.recchange);return;}
-    const rb=e.target.closest('[data-recbest]');if(rb){const p=prFor(rb.dataset.recbest);setRecord(rb.dataset.recbest,p?p.track:P.lastTrackFor(state.sessions,rb.dataset.recbest),null);return;}
+    const rc=e.target.closest('[data-recchange]');if(rc){openRecordPicker(rc.dataset.recchange,rc.dataset.track);return;}
+    const rb=e.target.closest('[data-recbest]');if(rb){const tr=rb.dataset.track||P.lastTrackFor(state.sessions,rb.dataset.recbest);setRecord(rb.dataset.recbest,tr,null);return;}
     const tip=e.target.closest('[data-seentip]');if(tip){markSeen(tip.dataset.seentip);if(tip.parentElement)tip.parentElement.remove();return;}});   // one-time tips inside a sheet
   $('#btnSettings').addEventListener('click',openSettings);
   // the header badge explains itself on tap, so "Storage full" can always be read again (review 7.3)
