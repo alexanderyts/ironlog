@@ -2,6 +2,16 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.64.0 — 2026-09-22 · Faster to change the plan mid-workout
+Logging a set was already one tap. This update makes *changing* the plan quick too.
+- **Change one set and the ones below follow.** Type 135 in set 1 and the sets that had the same number move with it. A ramp (80 / 90 / 100) or a pyramid keeps its shape, and ticked sets never change. The ± buttons work the same way.
+- **One ⋯ button per exercise** replaces the row of small links. It opens: **Replace**, **Move up / down**, **Machine setup & weight step**, **Note**, **Watch a demo**, and **Remove** (with Undo).
+- **Replace an exercise in place.** Machine taken? Tap ⋯ → Replace. The best swaps for that muscle come first, matched to your gym settings, and the new exercise takes the **same spot**. If you've already logged sets on the old one, it asks first.
+- **Machine setup that sticks.** Save a note like "seat 4, pad 3" and it's pinned on that exercise every time you do it.
+- **Weight steps that match the machine.** Set how much a machine goes up by (e.g. 10 or 15 lb on a stack). Suggestions, next session's weights and the ± buttons then only use weights you can actually select, so no more 102.5 on a pec deck.
+
+Not verified on-device.
+
 ## v0.63.0 — 2026-09-22 · Quick fixes from the full review
 - **Unassisted reps now save.** On the assisted pull-up or dip, enter **0** assist when you do it unassisted and it counts, including as your record. (A blank box still asks you to fill it in, so a forgotten entry can't pose as an unassisted PR.)
 - **Bad gym Wi-Fi no longer leaves a blank screen.** If the connection is stuck, the app opens your saved copy after 3 seconds and updates in the background.

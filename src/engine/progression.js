@@ -224,7 +224,16 @@ function lastTrackFor(sessions,exId){
 // The load step for one progression bump. A barbell adds 5 lb / 2.5 kg; a per-hand dumbbell or any
 // isolation move adds HALF that (2.5 lb / 1 kg) — a flat 5 lb was a 20–33% jump on a lateral raise or
 // a per-dumbbell press and overshot every time (#11). Pass `ex` to get the equipment-aware step.
+// A per-exercise override (full review 5.3): a Planet Fitness stack goes up by 10–15 lb, not 5, so the
+// app suggested weights you can't select (102.5 on a pec deck). The user sets it per exercise and unit in
+// the exercise's ⋯ menu; the app hands the map in with setWeightSteps({exId:{lb,kg}}). Every progression
+// path (suggestions, next session's weights, ramp grid, the ± buttons) reads it through here.
+// setWeightSteps accepts the map itself, or a function returning it (the app passes a live getter).
+let WEIGHT_STEPS={};
+function setWeightSteps(src){WEIGHT_STEPS=typeof src==='function'||(src&&typeof src==='object')?src:{};}
 function unitIncrement(unit,ex){
+  const map=typeof WEIGHT_STEPS==='function'?(WEIGHT_STEPS()||{}):WEIGHT_STEPS;
+  const o=ex&&map[ex.id],v=o&&+o[unit==='kg'?'kg':'lb'];if(v>0)return v;
   if(ex&&(ex.equip==='Dumbbell'||ex.type==='isolation'))return unit==='kg'?1:2.5;
   return unit==='kg'?2.5:5;
 }
@@ -416,5 +425,5 @@ function calcStreak(sessions,now){
   return n;
 }
 
-IL.prog={DAY,startOfDay,e1rm,isWorking,setLoad,sbw,sessionVolume,sessionSets,sessionDuration,MAX_SESSION_MIN,setTimeline,lastSetAt,staleness,STALE_AFTER_MIN,LONG_SESSION_MIN,STALE_CONFIRM_MIN,END_PAD_MIN,finalizeSets,parseWeightInput,fmtVol,modeOf,real,lastPerf,lastModeFor,exerciseSeries,setScore,scoreMetric,platesPerSide,sidesOf,holdsOf,sideMult,trackOf,sideDefault,lastSideFor,lastTrackFor,bestE1rmBefore,setPattern,fmtPerf,repRange,nextSets,deloadSets,suggestion,unitIncrement,convertWeight,convertSessions,calcStreak,weekIndex,weekStart};
+IL.prog={DAY,startOfDay,e1rm,isWorking,setLoad,sbw,sessionVolume,sessionSets,sessionDuration,MAX_SESSION_MIN,setTimeline,lastSetAt,staleness,STALE_AFTER_MIN,LONG_SESSION_MIN,STALE_CONFIRM_MIN,END_PAD_MIN,finalizeSets,parseWeightInput,fmtVol,modeOf,real,lastPerf,lastModeFor,exerciseSeries,setScore,scoreMetric,platesPerSide,sidesOf,holdsOf,sideMult,trackOf,sideDefault,lastSideFor,lastTrackFor,bestE1rmBefore,setPattern,fmtPerf,repRange,nextSets,deloadSets,suggestion,unitIncrement,setWeightSteps,convertWeight,convertSessions,calcStreak,weekIndex,weekStart};
 if(typeof module!=='undefined')module.exports=IL.prog;

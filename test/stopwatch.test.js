@@ -79,9 +79,9 @@ test('U1: deleting an exercise mid-hold logs the seconds to the ORIGINAL lift, n
     const plankCard=h.$$('#view .log-ex').find(c=>/Plank/.test(c.textContent));
     plankCard.querySelector('[data-stopwatch]').dispatchEvent(new h.win.MouseEvent('click',{bubbles:true}));
     await sleep(5500);   // past the 5s countdown, into the hold
-    // delete Bench (index 0) — plank shifts from index 2 to 1
-    const benchDel=h.$$('#view .log-ex').find(c=>/Bench/.test(c.textContent)).querySelector('[data-delex]');
-    benchDel.dispatchEvent(new h.win.MouseEvent('click',{bubbles:true}));
+    // delete Bench (index 0) via its ⋯ menu → Remove — plank shifts from index 2 to 1
+    h.$$('#view .log-ex').find(c=>/Bench/.test(c.textContent)).querySelector('[data-exmenu]').dispatchEvent(new h.win.MouseEvent('click',{bubbles:true}));
+    h.click('#sheetBody [data-exact="remove"]');
     await sleep(400);
     h.click('#swStop');
     const plank=h.state.active.exercises.find(e=>e.id==='plank');

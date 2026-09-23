@@ -98,6 +98,13 @@ function cleanSettings(o){if(!o||typeof o!=='object')return null;
   // remembered empty-bar weight per unit for the plate calculator (D-4): `bar` = barbell, `smithBar` = Smith
   const cleanBar=v=>{if(!v||typeof v!=='object')return null;const o={};if('lb'in v){const n=sNum(v.lb);if(n>=0)o.lb=Math.min(200,n);}if('kg'in v){const n=sNum(v.kg);if(n>=0)o.kg=Math.min(100,n);}return Object.keys(o).length?o:null;};   // preserve an explicit 0 (counterbalanced Smith)
   const bar=cleanBar(o.bar);if(bar)s.bar=bar;const sbar=cleanBar(o.smithBar);if(sbar)s.smithBar=sbar;
+  // per-exercise weight step {exId:{lb,kg}} and machine-setup note {exId:"seat 4, pad 3"} (full review 5.3)
+  const idMap=(v,fn)=>{if(!v||typeof v!=='object')return null;const r={};let n=0;
+    Object.keys(v).forEach(k=>{if(n>=MAX_KEYS||DANGER_KEY.test(k))return;const key=sId(k);if(!key||DANGER_KEY.test(key))return;const x=fn(v[k]);if(x!=null){r[key]=x;n++;}});
+    return Object.keys(r).length?r:null;};
+  const steps=idMap(o.steps,x=>{if(!x||typeof x!=='object')return null;const r={};['lb','kg'].forEach(u=>{const n=sNum(x[u]);if(n>0&&n<=50)r[u]=n;});return Object.keys(r).length?r:null;});
+  if(steps)s.steps=steps;
+  const setup=idMap(o.setup,x=>typeof x==='string'&&x.trim()?sStr(x.trim(),120):null);if(setup)s.setup=setup;
   return s;
 }
 const DANGER_KEY=/^(__proto__|constructor|prototype)$/;

@@ -327,6 +327,80 @@ function openPlateSheet(weight,mode){
   plateDraft={mode,bar,weight:w||bar};
   openSheet('Plate loader',plateSheetBody());bindPlateSheet();
 }
+/* ---- exercise ⋯ menu (full review 5.2 replace · 5.3 setup & step · 5.4 reorder · 5.7 declutter) ----
+   One button per card instead of a row of small links beside the ✓. */
+// Per-exercise machine setup note ("seat 4, pad 3") and weight step — settings.setup / settings.steps,
+// synced, keyed by exercise id (the step per unit: a stack in lb and in kg are different numbers).
+function exSetup(id){const s=state.settings.setup||{};return s[id]||'';}
+function exStep(id){const o=(state.settings.steps||{})[id];return o&&+o[U()]>0?+o[U()]:0;}
+function defaultStep(ex){return ex&&(ex.equip==='Dumbbell'||ex.type==='isolation')?(U()==='kg'?1:2.5):(U()==='kg'?2.5:5);}
+function openExMenu(ei){
+  const t=cur(),e=t&&t.exercises[ei];if(!e)return;const ex=EX[e.id],n=t.exercises.length;
+  const row=(act,icon,label,sub,dis)=>`<button class="ex-row" data-exact="${act}"${dis?' disabled':''}><div class="ex-ic">${icon}</div><div style="flex:1;min-width:0;text-align:left"><div class="ex-name">${label}</div>${sub?`<div class="ex-sub">${sub}</div>`:''}</div></button>`;
+  const step=exStep(e.id),su=exSetup(e.id);
+  openSheet(ex?ex.name:e.name,`<div class="card list">
+      ${row('replace','↻','Replace with a similar exercise','Machine taken? Keeps this spot in the workout')}
+      ${row('up','↑','Move up','',ei===0)}
+      ${row('down','↓','Move down','',ei===n-1)}
+      ${row('setup','📌','Machine setup & weight step',esc(su||'')+(su&&step?' · ':'')+(step?'goes up by '+step+' '+U():''))}
+      ${row('note','✎',e.note?'Edit note for this workout':'Note for this workout','')}
+    </div>
+    <a class="btn ghost block" href="${demoURL(e.id)}" target="_blank" rel="noopener noreferrer" style="margin-top:12px;text-decoration:none">▶ Watch a demo</a>
+    <button class="linkbtn dim" data-exact="remove" style="display:block;text-align:center;width:100%;margin-top:14px">Remove from workout</button>`);
+  $('#sheetBody').querySelectorAll('[data-exact]').forEach(b=>b.addEventListener('click',()=>{
+    const a=b.dataset.exact,c=cur();if(!c||!c.exercises[ei])return;
+    if(a==='replace')openReplace(ei);
+    else if(a==='up'||a==='down'){const j=a==='up'?ei-1:ei+1;if(j<0||j>=c.exercises.length)return;
+      const x=c.exercises[ei];c.exercises[ei]=c.exercises[j];c.exercises[j]=x;persistCur();render();openExMenu(j);toast(a==='up'?'Moved up':'Moved down');}   // menu stays open on the moved exercise, so you can keep going
+    else if(a==='setup')openExSetup(ei);
+    else if(a==='note')openNote(ei);
+    else if(a==='remove'){closeSheet();removeExercise(ei);}
+  }));
+}
+// Replace in place: the builder's own swap ranking first (same movement, fits your gym/avoid settings),
+// then everything else for that muscle. The swap takes the SAME spot — no more delete-add-scroll.
+function openReplace(ei){
+  const t=cur(),e=t&&t.exercises[ei],ex=e&&EX[e.id];if(!ex)return;
+  const inPlan=t.exercises.map(x=>x.id),pf=state.settings.profile,best=[];
+  for(let k=0;k<4;k++){const r=B.replacementFor(e.id,inPlan.concat(best),0,null,pf,state.sessions);if(!r)break;best.push(r.id);}
+  const others=IL.data.EXERCISES.filter(x=>x.group===ex.group&&x.id!==e.id&&inPlan.indexOf(x.id)<0&&best.indexOf(x.id)<0).sort((a,b)=>a.name.localeCompare(b.name));
+  const row=x=>`<button class="ex-row" data-replacewith="${x.id}"><div class="ex-ic">${exIcon(x.group)}</div><div style="flex:1;min-width:0;text-align:left"><div class="ex-name">${esc(x.name)}</div><div class="ex-sub">${esc(x.equip)} · ${esc(x.muscles.join(' · '))}</div></div></button>`;
+  openSheet('Replace '+ex.name,`<div class="dim" style="font-size:13px;margin:-4px 2px 14px">Pick a swap — it takes ${esc(ex.name)}’s spot in your workout.</div>
+    ${best.length?`<div class="eyebrow" style="margin:0 2px 8px">Best swaps</div><div class="card list">${best.map(id=>row(EX[id])).join('')}</div>`:''}
+    ${others.length?`<div class="eyebrow" style="margin:16px 2px 8px">Other ${ex.group.toLowerCase()} exercises</div><div class="card list">${others.map(row).join('')}</div>`:''}`);
+  $('#sheetBody').querySelectorAll('[data-replacewith]').forEach(b=>b.addEventListener('click',()=>doReplace(ei,b.dataset.replacewith)));
+}
+function doReplace(ei,id){
+  const t=cur(),old=t&&t.exercises[ei];if(!old||!EX[id])return;const logged=old.sets.filter(s=>s.done).length;
+  const go=()=>{const pf=state.settings.profile||{};
+    const inst=B.seedExercise(id,state.sessions,{excludeId:t.id,unit:U(),goal:pf.goal,setStyle:pf.sets,push:pf.push,gym:pf.gym});
+    t.exercises.splice(ei,1,inst);persistCur();closeSheet();render();
+    toast((old.name||EX[old.id].name)+' → '+EX[id].name,{label:'Undo',fn:()=>{const c=cur();if(c&&c.exercises[ei]===inst){c.exercises.splice(ei,1,old);persistCur();render();}}});};
+  if(logged)showConfirm('Replace '+(old.name||EX[old.id].name)+'?','You’ve logged '+logged+' set'+(logged!==1?'s':'')+' on it — they’ll be removed from this workout.','Replace',go);else go();
+}
+// Machine setup note + weight step for this exercise (kept for every future workout).
+function openExSetup(ei){
+  const t=cur(),e=t&&t.exercises[ei],ex=e&&EX[e.id];if(!ex)return;
+  const u=U(),opts=u==='kg'?[0.5,1,2.5,5,10]:[1,2.5,5,10,15];let pick=exStep(e.id);
+  openSheet('Setup · '+ex.name,`<div class="dim" style="font-size:13px;margin:-4px 2px 14px">Saved for this exercise and shown every time you do it.</div>
+    <div class="eyebrow" style="margin:0 2px 8px">Machine setup</div>
+    <input id="setupText" class="field" maxlength="120" placeholder="e.g. seat 4, back pad 3, pin at 7" value="${esc(exSetup(e.id))}" style="height:44px;padding:0 14px">
+    <div class="eyebrow" style="margin:18px 2px 8px">Weight goes up by</div>
+    <div class="chips" id="stepChips">
+      <button class="chip ${!pick?'on':''}" data-wstep="0">Auto (${defaultStep(ex)} ${u})</button>
+      ${opts.map(v=>`<button class="chip ${pick===v?'on':''}" data-wstep="${v}">${v} ${u}</button>`).join('')}
+    </div>
+    <div class="dim" style="font-size:12px;margin:8px 2px 0;line-height:1.45">Match your machine’s weight stack or plates, so suggestions only use weights you can actually select.</div>
+    <button class="btn primary block" id="setupSave" style="margin-top:18px">Save</button>`);
+  $('#sheetBody').querySelectorAll('[data-wstep]').forEach(b=>b.addEventListener('click',()=>{pick=+b.dataset.wstep;
+    $('#sheetBody').querySelectorAll('[data-wstep]').forEach(x=>x.classList.toggle('on',+x.dataset.wstep===pick));}));
+  $('#setupSave').addEventListener('click',()=>{
+    const setup=Object.assign({},state.settings.setup),v=($('#setupText').value||'').trim().slice(0,120);
+    if(v)setup[e.id]=v;else delete setup[e.id];state.settings.setup=setup;
+    const steps=Object.assign({},state.settings.steps),o=Object.assign({},steps[e.id]);
+    if(pick)o[u]=pick;else delete o[u];if(Object.keys(o).length)steps[e.id]=o;else delete steps[e.id];state.settings.steps=steps;
+    S.saveSettingsCloud();closeSheet();render();toast(pick?'Saved — suggestions now step by '+pick+' '+u:'Saved');});
+}
 function buildAndStart(fresh){
   const dl=draft.deload;
   // Coach's findings feed the builder (Phase C). The engine ignores them on a deload (recovery isn't
@@ -450,10 +524,11 @@ function logExercise(s,e,ei,mode){
       <div class="ex-ic">${exIcon(ex?ex.group:'Core')}</div>
       <button data-openex="${e.id}" style="flex:1;min-width:0;text-align:left;background:none;padding:0"><div class="ex-name">${esc(e.name)} <span class="dim" style="font-weight:400;font-size:12px">ⓘ</span></div>
         <div class="ex-sub">${ex?ex.muscles.join(' · '):''} · target ${ex?ex.rr[0]+'–'+ex.rr[1]:'8–12'} ${D.TIME_METRIC.has(e.id)?'sec':'reps'}</div></button>
-      <button class="sheet-x" data-delex="${ei}" aria-label="Remove exercise">✕</button>
+      <button class="sheet-x" data-exmenu="${ei}" aria-label="Exercise options: replace, move, setup, note, remove">⋯</button>
     </div>
     <div class="chiprow"><button class="modechip" data-mode="${ei}" aria-label="Change equipment">${esc(MODES[emode]?MODES[emode].label:emode)} ▾</button>
       ${sideOK?`<button class="modechip${sides===2?' on':''}" data-side="${ei}" aria-pressed="${sides===2}" aria-label="One side at a time">⇆ ${sides===2?'Each side':'Both sides'}</button>`:''}</div>
+    ${exSetup(e.id)?`<button class="sugg match" data-exsetup="${ei}" style="width:calc(100% - 24px);text-align:left;color:var(--ink-2)"><span>📌 ${esc(exSetup(e.id))}</span></button>`:''}
     ${prLine}${sugg}${noteLine}
     <div class="setgrid">
       <div class="set-hdr"><div>Set</div><div>${whdr}</div><div>${rhdr}</div><div></div></div>
@@ -464,8 +539,6 @@ function logExercise(s,e,ei,mode){
       ${e.sets.length>1?`<button class="linkbtn" data-delset="${ei}">－ Remove set</button>`:''}
       ${D.TIME_METRIC.has(e.id)&&todayScreen==='active'?`<button class="linkbtn" data-stopwatch="${ei}">⏱ Stopwatch</button>`:''}
       ${(emode==='barbell'||emode==='smith')?`<button class="linkbtn" data-plates="${ei}">🏋 Plates</button>`:''}
-      <button class="linkbtn dim" data-note="${ei}">✎ ${e.note?'Edit note':'Note'}</button>
-      <a class="linkbtn dim" href="${demoURL(e.id)}" target="_blank" rel="noopener noreferrer" style="margin-left:auto;text-decoration:none">▶ Watch demo</a>
     </div>
     ${ei===0&&state.sessions.length<3?'<div class="hint">Tip: tap a set number to mark it a warm-up (kept out of PRs and volume).</div>':''}
   </div>`;

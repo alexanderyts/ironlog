@@ -25,6 +25,12 @@ function slotFor(t,id){
   for(let i=after+1;i<exs.length;i++)if(p>B.perfPriority(EX[exs[i].id],focus))return i;
   return exs.length;
 }
+// Remove an exercise from the current workout, with Undo (from the card's ⋯ menu). The undo only
+// restores into the SAME workout it was removed from.
+function removeExercise(ei){
+  const t=cur();if(!t||!t.exercises[ei])return;const removed=t.exercises.splice(ei,1)[0];persistCur();render();
+  toast((removed.name||(EX[removed.id]&&EX[removed.id].name))+' removed',{label:'Undo',fn:()=>{const c=cur();if(c===t){c.exercises.splice(ei,0,removed);persistCur();render();}}});
+}
 function reorderCur(){
   const t=cur();if(!t||t.exercises.length<2)return;
   const focus=focusGroup(t.exercises);
@@ -415,9 +421,20 @@ function bind(){
     if(EX[b.dataset.open])openSheet(EX[b.dataset.open].name,exerciseDetail(b.dataset.open));}));
 }
 // One stepper tick on a set's weight/reps (shared by tap and hold-to-repeat).
+// Copy-down (full review 5.1): sets BELOW that matched the one you just changed follow it — unless
+// ticked, edited by hand, or a warm-up. 100/100/100 → set 1 to 135 → 135/135/135; a ramp (80/90/100)
+// or pyramid keeps its shape because its later sets never matched. Blank first-time sets all fill in.
+const sameVal=(a,b)=>{const ea=a==null||String(a).trim()==='',eb=b==null||String(b).trim()==='';return ea||eb?(ea&&eb):+a===+b;};
+function copyDown(t,ei,si,f,prev){
+  const sets=t.exercises[ei].sets;if(sets[si].warm)return;const val=sets[si][f];
+  for(let j=si+1;j<sets.length;j++){const s=sets[j];
+    if(s.done||s.t||s.warm||!sameVal(s[f],prev))continue;
+    s[f]=val;const inp=$(`input[data-f="${f}"][data-ei="${ei}"][data-s="${j}"]`);if(inp)inp.value=val==null?'':val;}
+}
 function stepSet(ei,si,f,d){
   const t=cur();if(!t||!t.exercises[ei]||!t.exercises[ei].sets[si])return;const st=t.exercises[ei].sets[si];
-  let v=+st[f]||0;v+=f==='w'?d*inc(EX[t.exercises[ei].id]):d;if(v<0)v=0;st[f]=v;st.t=1;persistCur();   // the +/- step matches the lift's increment (2.5 for dumbbells/isolation)
+  const prev=st[f];
+  let v=+st[f]||0;v+=f==='w'?d*inc(EX[t.exercises[ei].id]):d;if(v<0)v=0;st[f]=v;st.t=1;copyDown(t,ei,si,f,prev);persistCur();   // the +/- step matches the lift's increment (2.5 for dumbbells/isolation)
   const inp=$(`input[data-f="${f}"][data-ei="${ei}"][data-s="${si}"]`);if(inp)inp.value=v;refreshStats();
   try{if(navigator.vibrate)navigator.vibrate(8);}catch(e){}   // light haptic where the platform has one (Android); iOS Safari has none
 }
@@ -475,8 +492,9 @@ function bindLog(root){
       const doRemove=()=>{const removed=sets.splice(idx,1)[0];persistCur();render();
         toast('Set removed',{label:'Undo',fn:()=>{const c=cur();if(c&&c.exercises[ei]){c.exercises[ei].sets.splice(idx,0,removed);persistCur();render();}}});};
       if(sets[idx].done)showConfirm('Remove last set?','That set is marked done — remove it anyway?','Remove',doRemove);else doRemove();return;}
-    const del=e.target.closest('[data-delex]');if(del){const ei=+del.dataset.delex;const removed=t.exercises.splice(ei,1)[0];persistCur();render();
-      toast(removed.name+' removed',{label:'Undo',fn:()=>{const c=cur();if(c){c.exercises.splice(ei,0,removed);persistCur();render();}}});return;}
+    const del=e.target.closest('[data-delex]');if(del){removeExercise(+del.dataset.delex);return;}
+    const em=e.target.closest('[data-exmenu]');if(em){openExMenu(+em.dataset.exmenu);return;}
+    const es=e.target.closest('[data-exsetup]');if(es){openExSetup(+es.dataset.exsetup);return;}
     const kw=e.target.closest('[data-keepw]');if(kw){const ei=+kw.dataset.keepw;const ex=t.exercises[ei];const lp=P.lastPerf(state.sessions,ex.id,{beforeTs:t.date,excludeId:t.id,mode:P.trackOf(ex)});
       if(lp)ex.sets=lp.sets.map(s=>({w:s.w,r:s.r,done:false}));persistCur();render();toast('Using last time’s weights');return;}
     const mc=e.target.closest('[data-mode]');if(mc){openModePicker(+mc.dataset.mode);return;}
@@ -491,8 +509,9 @@ function bindLog(root){
   root.addEventListener('input',e=>{const inp=e.target.closest('input[data-f]');if(!inp)return;const t=cur();if(!t)return;
     const ei=+inp.dataset.ei,si=+inp.dataset.s,f=inp.dataset.f;const val=P.parseWeightInput(inp.value);
     if(val!==inp.value)inp.value=val;   // reflect the sanitized value back (e.g. "12,5" -> "12.5")
-    const st=t.exercises[ei].sets[si];st[f]=val===''?'':(f==='r'?parseInt(val)||val:parseFloat(val)||val);
+    const st=t.exercises[ei].sets[si],prev=st[f];st[f]=val===''?'':(f==='r'?parseInt(val)||val:parseFloat(val)||val);
     st.t=1;   // edited but not necessarily ticked — Finish will ask before dropping it
+    copyDown(t,ei,si,f,prev);
     persistCur();refreshStats();});
 }
 
@@ -578,6 +597,8 @@ function finishStopwatch(){
 /* ---------------- boot ---------------- */
 function boot(){
   state.sessions.forEach(s=>{if(!s.schema)s.schema=SCHEMA;});   // schema migrations live here
+  // per-exercise weight steps: the engine reads them LIVE (a sync can replace state.settings wholesale)
+  P.setWeightSteps(()=>state.settings.steps||{});
   document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>setTab(b.dataset.tab)));
   $('#sheetClose').addEventListener('click',closeSheet);$('#scrim').addEventListener('click',closeSheet);
   $('#cdCancel').addEventListener('click',closeConfirm);$('#cscrim').addEventListener('click',closeConfirm);

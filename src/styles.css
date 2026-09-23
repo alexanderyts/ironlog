@@ -206,6 +206,7 @@ html.kb-open .tabbar{display:none}
 .modechip::after{content:"";position:absolute;inset:-10px -8px}   /* hit-slop → ≥44pt target (#27) */
 .modechip:active{background:var(--accent-soft);color:var(--accent)}
 .chiprow{display:flex;flex-wrap:wrap;gap:10px;margin:0 12px 10px}
+.ex-row[disabled]{opacity:.35;pointer-events:none}   /* e.g. "Move up" on the first exercise */
 .chiprow .modechip{margin:0}
 .chiprow .modechip::after{inset:-10px -5px}   /* keep the two chips' hit-slop from overlapping */
 .modechip.on{background:var(--accent-soft);color:var(--accent)}

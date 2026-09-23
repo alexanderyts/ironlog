@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-wW+rHsrmwda0ldzcxI1MtTkaLM+zXVOSUJD7iwRbI7U=' 'sha256-WPBob/luB2k1aalTWXpi6zk3SrIbj8GlZV7AlFdG7oA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-WiVwdj4SrBvbLz8nbSfGww349JcznzPZLC3BrNq6Nws=' 'sha256-WPBob/luB2k1aalTWXpi6zk3SrIbj8GlZV7AlFdG7oA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Ironlog</title>
@@ -228,6 +228,7 @@ html.kb-open .tabbar{display:none}
 .modechip::after{content:"";position:absolute;inset:-10px -8px}   /* hit-slop → ≥44pt target (#27) */
 .modechip:active{background:var(--accent-soft);color:var(--accent)}
 .chiprow{display:flex;flex-wrap:wrap;gap:10px;margin:0 12px 10px}
+.ex-row[disabled]{opacity:.35;pointer-events:none}   /* e.g. "Move up" on the first exercise */
 .chiprow .modechip{margin:0}
 .chiprow .modechip::after{inset:-10px -5px}   /* keep the two chips' hit-slop from overlapping */
 .modechip.on{background:var(--accent-soft);color:var(--accent)}
@@ -447,8 +448,8 @@ html.kb-open .tabbar{display:none}
 </div>
 
 <script>
-/* Ironlog v0.63.0 · site build */
-var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.63.0",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
+/* Ironlog v0.64.0 · site build */
+var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.64.0",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
 
 /* ===== src/data/exercises.js ===== */
 (function(){'use strict';
@@ -994,7 +995,16 @@ function lastTrackFor(sessions,exId){
 // The load step for one progression bump. A barbell adds 5 lb / 2.5 kg; a per-hand dumbbell or any
 // isolation move adds HALF that (2.5 lb / 1 kg) — a flat 5 lb was a 20–33% jump on a lateral raise or
 // a per-dumbbell press and overshot every time (#11). Pass `ex` to get the equipment-aware step.
+// A per-exercise override (full review 5.3): a Planet Fitness stack goes up by 10–15 lb, not 5, so the
+// app suggested weights you can't select (102.5 on a pec deck). The user sets it per exercise and unit in
+// the exercise's ⋯ menu; the app hands the map in with setWeightSteps({exId:{lb,kg}}). Every progression
+// path (suggestions, next session's weights, ramp grid, the ± buttons) reads it through here.
+// setWeightSteps accepts the map itself, or a function returning it (the app passes a live getter).
+let WEIGHT_STEPS={};
+function setWeightSteps(src){WEIGHT_STEPS=typeof src==='function'||(src&&typeof src==='object')?src:{};}
 function unitIncrement(unit,ex){
+  const map=typeof WEIGHT_STEPS==='function'?(WEIGHT_STEPS()||{}):WEIGHT_STEPS;
+  const o=ex&&map[ex.id],v=o&&+o[unit==='kg'?'kg':'lb'];if(v>0)return v;
   if(ex&&(ex.equip==='Dumbbell'||ex.type==='isolation'))return unit==='kg'?1:2.5;
   return unit==='kg'?2.5:5;
 }
@@ -1186,7 +1196,7 @@ function calcStreak(sessions,now){
   return n;
 }
 
-IL.prog={DAY,startOfDay,e1rm,isWorking,setLoad,sbw,sessionVolume,sessionSets,sessionDuration,MAX_SESSION_MIN,setTimeline,lastSetAt,staleness,STALE_AFTER_MIN,LONG_SESSION_MIN,STALE_CONFIRM_MIN,END_PAD_MIN,finalizeSets,parseWeightInput,fmtVol,modeOf,real,lastPerf,lastModeFor,exerciseSeries,setScore,scoreMetric,platesPerSide,sidesOf,holdsOf,sideMult,trackOf,sideDefault,lastSideFor,lastTrackFor,bestE1rmBefore,setPattern,fmtPerf,repRange,nextSets,deloadSets,suggestion,unitIncrement,convertWeight,convertSessions,calcStreak,weekIndex,weekStart};
+IL.prog={DAY,startOfDay,e1rm,isWorking,setLoad,sbw,sessionVolume,sessionSets,sessionDuration,MAX_SESSION_MIN,setTimeline,lastSetAt,staleness,STALE_AFTER_MIN,LONG_SESSION_MIN,STALE_CONFIRM_MIN,END_PAD_MIN,finalizeSets,parseWeightInput,fmtVol,modeOf,real,lastPerf,lastModeFor,exerciseSeries,setScore,scoreMetric,platesPerSide,sidesOf,holdsOf,sideMult,trackOf,sideDefault,lastSideFor,lastTrackFor,bestE1rmBefore,setPattern,fmtPerf,repRange,nextSets,deloadSets,suggestion,unitIncrement,setWeightSteps,convertWeight,convertSessions,calcStreak,weekIndex,weekStart};
 if(typeof module!=='undefined')module.exports=IL.prog;
 
 })();
@@ -2363,6 +2373,13 @@ function cleanSettings(o){if(!o||typeof o!=='object')return null;
   // remembered empty-bar weight per unit for the plate calculator (D-4): `bar` = barbell, `smithBar` = Smith
   const cleanBar=v=>{if(!v||typeof v!=='object')return null;const o={};if('lb'in v){const n=sNum(v.lb);if(n>=0)o.lb=Math.min(200,n);}if('kg'in v){const n=sNum(v.kg);if(n>=0)o.kg=Math.min(100,n);}return Object.keys(o).length?o:null;};   // preserve an explicit 0 (counterbalanced Smith)
   const bar=cleanBar(o.bar);if(bar)s.bar=bar;const sbar=cleanBar(o.smithBar);if(sbar)s.smithBar=sbar;
+  // per-exercise weight step {exId:{lb,kg}} and machine-setup note {exId:"seat 4, pad 3"} (full review 5.3)
+  const idMap=(v,fn)=>{if(!v||typeof v!=='object')return null;const r={};let n=0;
+    Object.keys(v).forEach(k=>{if(n>=MAX_KEYS||DANGER_KEY.test(k))return;const key=sId(k);if(!key||DANGER_KEY.test(key))return;const x=fn(v[k]);if(x!=null){r[key]=x;n++;}});
+    return Object.keys(r).length?r:null;};
+  const steps=idMap(o.steps,x=>{if(!x||typeof x!=='object')return null;const r={};['lb','kg'].forEach(u=>{const n=sNum(x[u]);if(n>0&&n<=50)r[u]=n;});return Object.keys(r).length?r:null;});
+  if(steps)s.steps=steps;
+  const setup=idMap(o.setup,x=>typeof x==='string'&&x.trim()?sStr(x.trim(),120):null);if(setup)s.setup=setup;
   return s;
 }
 const DANGER_KEY=/^(__proto__|constructor|prototype)$/;
@@ -3316,6 +3333,80 @@ function openPlateSheet(weight,mode){
   plateDraft={mode,bar,weight:w||bar};
   openSheet('Plate loader',plateSheetBody());bindPlateSheet();
 }
+/* ---- exercise ⋯ menu (full review 5.2 replace · 5.3 setup & step · 5.4 reorder · 5.7 declutter) ----
+   One button per card instead of a row of small links beside the ✓. */
+// Per-exercise machine setup note ("seat 4, pad 3") and weight step — settings.setup / settings.steps,
+// synced, keyed by exercise id (the step per unit: a stack in lb and in kg are different numbers).
+function exSetup(id){const s=state.settings.setup||{};return s[id]||'';}
+function exStep(id){const o=(state.settings.steps||{})[id];return o&&+o[U()]>0?+o[U()]:0;}
+function defaultStep(ex){return ex&&(ex.equip==='Dumbbell'||ex.type==='isolation')?(U()==='kg'?1:2.5):(U()==='kg'?2.5:5);}
+function openExMenu(ei){
+  const t=cur(),e=t&&t.exercises[ei];if(!e)return;const ex=EX[e.id],n=t.exercises.length;
+  const row=(act,icon,label,sub,dis)=>`<button class="ex-row" data-exact="${act}"${dis?' disabled':''}><div class="ex-ic">${icon}</div><div style="flex:1;min-width:0;text-align:left"><div class="ex-name">${label}</div>${sub?`<div class="ex-sub">${sub}</div>`:''}</div></button>`;
+  const step=exStep(e.id),su=exSetup(e.id);
+  openSheet(ex?ex.name:e.name,`<div class="card list">
+      ${row('replace','↻','Replace with a similar exercise','Machine taken? Keeps this spot in the workout')}
+      ${row('up','↑','Move up','',ei===0)}
+      ${row('down','↓','Move down','',ei===n-1)}
+      ${row('setup','📌','Machine setup & weight step',esc(su||'')+(su&&step?' · ':'')+(step?'goes up by '+step+' '+U():''))}
+      ${row('note','✎',e.note?'Edit note for this workout':'Note for this workout','')}
+    </div>
+    <a class="btn ghost block" href="${demoURL(e.id)}" target="_blank" rel="noopener noreferrer" style="margin-top:12px;text-decoration:none">▶ Watch a demo</a>
+    <button class="linkbtn dim" data-exact="remove" style="display:block;text-align:center;width:100%;margin-top:14px">Remove from workout</button>`);
+  $('#sheetBody').querySelectorAll('[data-exact]').forEach(b=>b.addEventListener('click',()=>{
+    const a=b.dataset.exact,c=cur();if(!c||!c.exercises[ei])return;
+    if(a==='replace')openReplace(ei);
+    else if(a==='up'||a==='down'){const j=a==='up'?ei-1:ei+1;if(j<0||j>=c.exercises.length)return;
+      const x=c.exercises[ei];c.exercises[ei]=c.exercises[j];c.exercises[j]=x;persistCur();render();openExMenu(j);toast(a==='up'?'Moved up':'Moved down');}   // menu stays open on the moved exercise, so you can keep going
+    else if(a==='setup')openExSetup(ei);
+    else if(a==='note')openNote(ei);
+    else if(a==='remove'){closeSheet();removeExercise(ei);}
+  }));
+}
+// Replace in place: the builder's own swap ranking first (same movement, fits your gym/avoid settings),
+// then everything else for that muscle. The swap takes the SAME spot — no more delete-add-scroll.
+function openReplace(ei){
+  const t=cur(),e=t&&t.exercises[ei],ex=e&&EX[e.id];if(!ex)return;
+  const inPlan=t.exercises.map(x=>x.id),pf=state.settings.profile,best=[];
+  for(let k=0;k<4;k++){const r=B.replacementFor(e.id,inPlan.concat(best),0,null,pf,state.sessions);if(!r)break;best.push(r.id);}
+  const others=IL.data.EXERCISES.filter(x=>x.group===ex.group&&x.id!==e.id&&inPlan.indexOf(x.id)<0&&best.indexOf(x.id)<0).sort((a,b)=>a.name.localeCompare(b.name));
+  const row=x=>`<button class="ex-row" data-replacewith="${x.id}"><div class="ex-ic">${exIcon(x.group)}</div><div style="flex:1;min-width:0;text-align:left"><div class="ex-name">${esc(x.name)}</div><div class="ex-sub">${esc(x.equip)} · ${esc(x.muscles.join(' · '))}</div></div></button>`;
+  openSheet('Replace '+ex.name,`<div class="dim" style="font-size:13px;margin:-4px 2px 14px">Pick a swap — it takes ${esc(ex.name)}’s spot in your workout.</div>
+    ${best.length?`<div class="eyebrow" style="margin:0 2px 8px">Best swaps</div><div class="card list">${best.map(id=>row(EX[id])).join('')}</div>`:''}
+    ${others.length?`<div class="eyebrow" style="margin:16px 2px 8px">Other ${ex.group.toLowerCase()} exercises</div><div class="card list">${others.map(row).join('')}</div>`:''}`);
+  $('#sheetBody').querySelectorAll('[data-replacewith]').forEach(b=>b.addEventListener('click',()=>doReplace(ei,b.dataset.replacewith)));
+}
+function doReplace(ei,id){
+  const t=cur(),old=t&&t.exercises[ei];if(!old||!EX[id])return;const logged=old.sets.filter(s=>s.done).length;
+  const go=()=>{const pf=state.settings.profile||{};
+    const inst=B.seedExercise(id,state.sessions,{excludeId:t.id,unit:U(),goal:pf.goal,setStyle:pf.sets,push:pf.push,gym:pf.gym});
+    t.exercises.splice(ei,1,inst);persistCur();closeSheet();render();
+    toast((old.name||EX[old.id].name)+' → '+EX[id].name,{label:'Undo',fn:()=>{const c=cur();if(c&&c.exercises[ei]===inst){c.exercises.splice(ei,1,old);persistCur();render();}}});};
+  if(logged)showConfirm('Replace '+(old.name||EX[old.id].name)+'?','You’ve logged '+logged+' set'+(logged!==1?'s':'')+' on it — they’ll be removed from this workout.','Replace',go);else go();
+}
+// Machine setup note + weight step for this exercise (kept for every future workout).
+function openExSetup(ei){
+  const t=cur(),e=t&&t.exercises[ei],ex=e&&EX[e.id];if(!ex)return;
+  const u=U(),opts=u==='kg'?[0.5,1,2.5,5,10]:[1,2.5,5,10,15];let pick=exStep(e.id);
+  openSheet('Setup · '+ex.name,`<div class="dim" style="font-size:13px;margin:-4px 2px 14px">Saved for this exercise and shown every time you do it.</div>
+    <div class="eyebrow" style="margin:0 2px 8px">Machine setup</div>
+    <input id="setupText" class="field" maxlength="120" placeholder="e.g. seat 4, back pad 3, pin at 7" value="${esc(exSetup(e.id))}" style="height:44px;padding:0 14px">
+    <div class="eyebrow" style="margin:18px 2px 8px">Weight goes up by</div>
+    <div class="chips" id="stepChips">
+      <button class="chip ${!pick?'on':''}" data-wstep="0">Auto (${defaultStep(ex)} ${u})</button>
+      ${opts.map(v=>`<button class="chip ${pick===v?'on':''}" data-wstep="${v}">${v} ${u}</button>`).join('')}
+    </div>
+    <div class="dim" style="font-size:12px;margin:8px 2px 0;line-height:1.45">Match your machine’s weight stack or plates, so suggestions only use weights you can actually select.</div>
+    <button class="btn primary block" id="setupSave" style="margin-top:18px">Save</button>`);
+  $('#sheetBody').querySelectorAll('[data-wstep]').forEach(b=>b.addEventListener('click',()=>{pick=+b.dataset.wstep;
+    $('#sheetBody').querySelectorAll('[data-wstep]').forEach(x=>x.classList.toggle('on',+x.dataset.wstep===pick));}));
+  $('#setupSave').addEventListener('click',()=>{
+    const setup=Object.assign({},state.settings.setup),v=($('#setupText').value||'').trim().slice(0,120);
+    if(v)setup[e.id]=v;else delete setup[e.id];state.settings.setup=setup;
+    const steps=Object.assign({},state.settings.steps),o=Object.assign({},steps[e.id]);
+    if(pick)o[u]=pick;else delete o[u];if(Object.keys(o).length)steps[e.id]=o;else delete steps[e.id];state.settings.steps=steps;
+    S.saveSettingsCloud();closeSheet();render();toast(pick?'Saved — suggestions now step by '+pick+' '+u:'Saved');});
+}
 function buildAndStart(fresh){
   const dl=draft.deload;
   // Coach's findings feed the builder (Phase C). The engine ignores them on a deload (recovery isn't
@@ -3439,10 +3530,11 @@ function logExercise(s,e,ei,mode){
       <div class="ex-ic">${exIcon(ex?ex.group:'Core')}</div>
       <button data-openex="${e.id}" style="flex:1;min-width:0;text-align:left;background:none;padding:0"><div class="ex-name">${esc(e.name)} <span class="dim" style="font-weight:400;font-size:12px">ⓘ</span></div>
         <div class="ex-sub">${ex?ex.muscles.join(' · '):''} · target ${ex?ex.rr[0]+'–'+ex.rr[1]:'8–12'} ${D.TIME_METRIC.has(e.id)?'sec':'reps'}</div></button>
-      <button class="sheet-x" data-delex="${ei}" aria-label="Remove exercise">✕</button>
+      <button class="sheet-x" data-exmenu="${ei}" aria-label="Exercise options: replace, move, setup, note, remove">⋯</button>
     </div>
     <div class="chiprow"><button class="modechip" data-mode="${ei}" aria-label="Change equipment">${esc(MODES[emode]?MODES[emode].label:emode)} ▾</button>
       ${sideOK?`<button class="modechip${sides===2?' on':''}" data-side="${ei}" aria-pressed="${sides===2}" aria-label="One side at a time">⇆ ${sides===2?'Each side':'Both sides'}</button>`:''}</div>
+    ${exSetup(e.id)?`<button class="sugg match" data-exsetup="${ei}" style="width:calc(100% - 24px);text-align:left;color:var(--ink-2)"><span>📌 ${esc(exSetup(e.id))}</span></button>`:''}
     ${prLine}${sugg}${noteLine}
     <div class="setgrid">
       <div class="set-hdr"><div>Set</div><div>${whdr}</div><div>${rhdr}</div><div></div></div>
@@ -3453,8 +3545,6 @@ function logExercise(s,e,ei,mode){
       ${e.sets.length>1?`<button class="linkbtn" data-delset="${ei}">－ Remove set</button>`:''}
       ${D.TIME_METRIC.has(e.id)&&todayScreen==='active'?`<button class="linkbtn" data-stopwatch="${ei}">⏱ Stopwatch</button>`:''}
       ${(emode==='barbell'||emode==='smith')?`<button class="linkbtn" data-plates="${ei}">🏋 Plates</button>`:''}
-      <button class="linkbtn dim" data-note="${ei}">✎ ${e.note?'Edit note':'Note'}</button>
-      <a class="linkbtn dim" href="${demoURL(e.id)}" target="_blank" rel="noopener noreferrer" style="margin-left:auto;text-decoration:none">▶ Watch demo</a>
     </div>
     ${ei===0&&state.sessions.length<3?'<div class="hint">Tip: tap a set number to mark it a warm-up (kept out of PRs and volume).</div>':''}
   </div>`;
@@ -4190,6 +4280,12 @@ function slotFor(t,id){
   for(let i=after+1;i<exs.length;i++)if(p>B.perfPriority(EX[exs[i].id],focus))return i;
   return exs.length;
 }
+// Remove an exercise from the current workout, with Undo (from the card's ⋯ menu). The undo only
+// restores into the SAME workout it was removed from.
+function removeExercise(ei){
+  const t=cur();if(!t||!t.exercises[ei])return;const removed=t.exercises.splice(ei,1)[0];persistCur();render();
+  toast((removed.name||(EX[removed.id]&&EX[removed.id].name))+' removed',{label:'Undo',fn:()=>{const c=cur();if(c===t){c.exercises.splice(ei,0,removed);persistCur();render();}}});
+}
 function reorderCur(){
   const t=cur();if(!t||t.exercises.length<2)return;
   const focus=focusGroup(t.exercises);
@@ -4580,9 +4676,20 @@ function bind(){
     if(EX[b.dataset.open])openSheet(EX[b.dataset.open].name,exerciseDetail(b.dataset.open));}));
 }
 // One stepper tick on a set's weight/reps (shared by tap and hold-to-repeat).
+// Copy-down (full review 5.1): sets BELOW that matched the one you just changed follow it — unless
+// ticked, edited by hand, or a warm-up. 100/100/100 → set 1 to 135 → 135/135/135; a ramp (80/90/100)
+// or pyramid keeps its shape because its later sets never matched. Blank first-time sets all fill in.
+const sameVal=(a,b)=>{const ea=a==null||String(a).trim()==='',eb=b==null||String(b).trim()==='';return ea||eb?(ea&&eb):+a===+b;};
+function copyDown(t,ei,si,f,prev){
+  const sets=t.exercises[ei].sets;if(sets[si].warm)return;const val=sets[si][f];
+  for(let j=si+1;j<sets.length;j++){const s=sets[j];
+    if(s.done||s.t||s.warm||!sameVal(s[f],prev))continue;
+    s[f]=val;const inp=$(`input[data-f="${f}"][data-ei="${ei}"][data-s="${j}"]`);if(inp)inp.value=val==null?'':val;}
+}
 function stepSet(ei,si,f,d){
   const t=cur();if(!t||!t.exercises[ei]||!t.exercises[ei].sets[si])return;const st=t.exercises[ei].sets[si];
-  let v=+st[f]||0;v+=f==='w'?d*inc(EX[t.exercises[ei].id]):d;if(v<0)v=0;st[f]=v;st.t=1;persistCur();   // the +/- step matches the lift's increment (2.5 for dumbbells/isolation)
+  const prev=st[f];
+  let v=+st[f]||0;v+=f==='w'?d*inc(EX[t.exercises[ei].id]):d;if(v<0)v=0;st[f]=v;st.t=1;copyDown(t,ei,si,f,prev);persistCur();   // the +/- step matches the lift's increment (2.5 for dumbbells/isolation)
   const inp=$(`input[data-f="${f}"][data-ei="${ei}"][data-s="${si}"]`);if(inp)inp.value=v;refreshStats();
   try{if(navigator.vibrate)navigator.vibrate(8);}catch(e){}   // light haptic where the platform has one (Android); iOS Safari has none
 }
@@ -4640,8 +4747,9 @@ function bindLog(root){
       const doRemove=()=>{const removed=sets.splice(idx,1)[0];persistCur();render();
         toast('Set removed',{label:'Undo',fn:()=>{const c=cur();if(c&&c.exercises[ei]){c.exercises[ei].sets.splice(idx,0,removed);persistCur();render();}}});};
       if(sets[idx].done)showConfirm('Remove last set?','That set is marked done — remove it anyway?','Remove',doRemove);else doRemove();return;}
-    const del=e.target.closest('[data-delex]');if(del){const ei=+del.dataset.delex;const removed=t.exercises.splice(ei,1)[0];persistCur();render();
-      toast(removed.name+' removed',{label:'Undo',fn:()=>{const c=cur();if(c){c.exercises.splice(ei,0,removed);persistCur();render();}}});return;}
+    const del=e.target.closest('[data-delex]');if(del){removeExercise(+del.dataset.delex);return;}
+    const em=e.target.closest('[data-exmenu]');if(em){openExMenu(+em.dataset.exmenu);return;}
+    const es=e.target.closest('[data-exsetup]');if(es){openExSetup(+es.dataset.exsetup);return;}
     const kw=e.target.closest('[data-keepw]');if(kw){const ei=+kw.dataset.keepw;const ex=t.exercises[ei];const lp=P.lastPerf(state.sessions,ex.id,{beforeTs:t.date,excludeId:t.id,mode:P.trackOf(ex)});
       if(lp)ex.sets=lp.sets.map(s=>({w:s.w,r:s.r,done:false}));persistCur();render();toast('Using last time’s weights');return;}
     const mc=e.target.closest('[data-mode]');if(mc){openModePicker(+mc.dataset.mode);return;}
@@ -4656,8 +4764,9 @@ function bindLog(root){
   root.addEventListener('input',e=>{const inp=e.target.closest('input[data-f]');if(!inp)return;const t=cur();if(!t)return;
     const ei=+inp.dataset.ei,si=+inp.dataset.s,f=inp.dataset.f;const val=P.parseWeightInput(inp.value);
     if(val!==inp.value)inp.value=val;   // reflect the sanitized value back (e.g. "12,5" -> "12.5")
-    const st=t.exercises[ei].sets[si];st[f]=val===''?'':(f==='r'?parseInt(val)||val:parseFloat(val)||val);
+    const st=t.exercises[ei].sets[si],prev=st[f];st[f]=val===''?'':(f==='r'?parseInt(val)||val:parseFloat(val)||val);
     st.t=1;   // edited but not necessarily ticked — Finish will ask before dropping it
+    copyDown(t,ei,si,f,prev);
     persistCur();refreshStats();});
 }
 
@@ -4743,6 +4852,8 @@ function finishStopwatch(){
 /* ---------------- boot ---------------- */
 function boot(){
   state.sessions.forEach(s=>{if(!s.schema)s.schema=SCHEMA;});   // schema migrations live here
+  // per-exercise weight steps: the engine reads them LIVE (a sync can replace state.settings wholesale)
+  P.setWeightSteps(()=>state.settings.steps||{});
   document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>setTab(b.dataset.tab)));
   $('#sheetClose').addEventListener('click',closeSheet);$('#scrim').addEventListener('click',closeSheet);
   $('#cdCancel').addEventListener('click',closeConfirm);$('#cscrim').addEventListener('click',closeConfirm);
