@@ -578,9 +578,10 @@ function openSettings(){
     <label class="btn ghost block" style="margin-bottom:10px">⬆ Import a backup<input type="file" id="fileImport" accept="application/json" hidden></label>`}
     <div style="height:18px"></div>
     <div class="dim" style="font-size:11.5px;line-height:1.55;text-align:center;padding:0 6px">Ironlog offers general fitness information, not medical advice. Warm up, use a weight you can control, and stop if something hurts. Consult a qualified professional before starting a program — you train at your own risk.</div>
-    <div class="dim" style="font-size:12px;text-align:center;margin-top:16px">Ironlog v${APP_VERSION} · ${state.sessions.length} sessions · ${state.routines.length} routines · ${(IL.store.storageBytes()/1e6).toFixed(1)} MB on this phone</div>
-    <div class="dim mono" style="font-size:10.5px;text-align:center;margin-top:4px;opacity:.7">${viewportDiag()}</div>
-    <div class="dim mono" style="font-size:10.5px;text-align:center;margin-top:4px;opacity:.7">${vpLog.join(' · ')}</div>`);
+    <div class="dim" id="verLine" role="button" tabindex="0" style="font-size:12px;text-align:center;margin-top:16px">Ironlog v${APP_VERSION} · ${state.sessions.length} sessions · ${state.routines.length} routines · ${(IL.store.storageBytes()/1e6).toFixed(1)} MB on this phone</div>
+    <div id="vpDiag" hidden>   <!-- layout diagnostics for troubleshooting the iPhone screen fit; tap the version line to show -->
+      <div class="dim mono" style="font-size:10.5px;text-align:center;margin-top:4px;opacity:.7">${viewportDiag()}</div>
+      <div class="dim mono" style="font-size:10.5px;text-align:center;margin-top:4px;opacity:.7">${vpLog.join(' · ')}</div></div>`);
   $('#segUnit').addEventListener('click',e=>{const b=e.target.closest('[data-u]');if(!b)return;const nu=b.dataset.u;if(nu===U())return;
     showConfirm('Switch to '+nu+'?','Every logged weight will be converted so your history and PRs stay accurate.','Convert to '+nu,()=>{convertUnits(U(),nu);openSettings();render();toast('Converted to '+nu);},'primary');});
   $('#segTheme').addEventListener('click',e=>{const b=e.target.closest('[data-t]');if(!b)return;state.settings.theme=b.dataset.t;S.saveSettingsCloud();applyTheme();openSettings();});
@@ -591,6 +592,7 @@ function openSettings(){
   on('#btnProfile',openProfile);
   on('#btnUnmute',()=>{const seen=state.settings.seen||{};Object.keys(seen).forEach(k=>{if(k.indexOf('mute:')===0)delete seen[k];});S.saveSettingsCloud();openSettings();render();toast('Coaching notes are back on');});
   on('#btnExport',exportData);
+  on('#verLine',()=>{const d=$('#vpDiag');if(d)d.hidden=!d.hidden;});
   on('#btnExportCsv',exportCsv);
   const fi=$('#fileImport');if(fi)fi.addEventListener('change',importData);
   on('#btnResetDemo',()=>showConfirm('Reset the demo?','Reloads the original sample data and discards your changes.','Reset',()=>S.resetDemo()));
@@ -630,7 +632,7 @@ async function exportData(){
 async function exportCsv(){
   const done=state.sessions.filter(s=>s.completed!==false).length;
   if(!done){toast('No finished workouts to export yet');return;}
-  const csv=IL.sync.sessionSummaryCsv(state.sessions,U());
+  const csv=IL.sync.sessionSummaryCsv(state.sessions,U(),bw());
   const fname='ironlog-sessions-'+new Date().toISOString().slice(0,10)+'.csv';
   try{if(window.claude&&claude.use){const dl=await claude.use('downloads');if(dl){await dl.save({filename:fname,data:csv});toast('CSV saved');return;}}}catch(e){}
   try{const blob=new Blob([csv],{type:'text/csv'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=fname;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);toast('CSV downloaded');}

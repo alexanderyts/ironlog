@@ -83,7 +83,11 @@ function finalizeSets(exercises){
     // unknown id is treated as bodyweight so a custom move isn't wrongly dropped.
     // Object.assign copies `at` (the check timestamp) through; only `t` (the transient touched flag) is stripped.
     const ex=EX[e.id],allowBlank=!ex||ex.equip==='Bodyweight'||(TIME_METRIC&&TIME_METRIC.has(e.id));   // a time-held lift (plank/carry/hang) can be logged by seconds alone — load is optional
-    const sets=e.sets.filter(st=>st.done===true&&(+st.r||0)>0&&(allowBlank||(+st.w||0)>0)).map(st=>{const o=Object.assign({},st);delete o.t;o.done=true;return o;});
+    // An assist machine at an EXPLICIT 0 is an unassisted rep — the strongest possible, and the goal the
+    // suggestions point you at — so it must save. A blank field is still dropped (it could be a forgotten
+    // entry, and would otherwise record a false "unassisted" PR). (Full review 4.2)
+    const inv=INVERTED_LOAD&&INVERTED_LOAD.has(e.id),typed=st=>st.w!=null&&String(st.w).trim()!==''&&isFinite(+st.w);
+    const sets=e.sets.filter(st=>st.done===true&&(+st.r||0)>0&&(allowBlank||(+st.w||0)>0||(inv&&typed(st)))).map(st=>{const o=Object.assign({},st);delete o.t;o.done=true;return o;});
     return Object.assign({},e,{sets});
   }).filter(e=>e.sets.length);
 }

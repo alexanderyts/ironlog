@@ -265,6 +265,7 @@ html.kb-open .tabbar{display:none}
 /* sheet / modal */
 .scrim{position:fixed;inset:0;bottom:calc(-1 * var(--deficit));z-index:50;background:rgba(10,14,20,.5);opacity:0;pointer-events:none;transition:opacity .2s}
 .scrim.on{opacity:1;pointer-events:auto}
+#cscrim{z-index:65}   /* the confirm dialog's backdrop sits ABOVE an open sheet (51), so "Delete session?" blocks the Edit/Repeat buttons under it (full review 7.2) */
 /* Closed sheet MUST be visibility:hidden, not just translated off-screen: at launch iOS paints the
    region below the short layout viewport, and the parked white sheet showed there as a white strip
    under the tab bar (confirmed by screenshot, v0.8.6). visibility transitions after the slide-out. */

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-cQPFOe9is83e/auzIdz82ooLV3ioUUOi+h33ueaINtc=' 'sha256-WPBob/luB2k1aalTWXpi6zk3SrIbj8GlZV7AlFdG7oA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-wW+rHsrmwda0ldzcxI1MtTkaLM+zXVOSUJD7iwRbI7U=' 'sha256-WPBob/luB2k1aalTWXpi6zk3SrIbj8GlZV7AlFdG7oA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Ironlog</title>
@@ -287,6 +287,7 @@ html.kb-open .tabbar{display:none}
 /* sheet / modal */
 .scrim{position:fixed;inset:0;bottom:calc(-1 * var(--deficit));z-index:50;background:rgba(10,14,20,.5);opacity:0;pointer-events:none;transition:opacity .2s}
 .scrim.on{opacity:1;pointer-events:auto}
+#cscrim{z-index:65}   /* the confirm dialog's backdrop sits ABOVE an open sheet (51), so "Delete session?" blocks the Edit/Repeat buttons under it (full review 7.2) */
 /* Closed sheet MUST be visibility:hidden, not just translated off-screen: at launch iOS paints the
    region below the short layout viewport, and the parked white sheet showed there as a white strip
    under the tab bar (confirmed by screenshot, v0.8.6). visibility transitions after the slide-out. */
@@ -446,8 +447,8 @@ html.kb-open .tabbar{display:none}
 </div>
 
 <script>
-/* Ironlog v0.62.0 · site build */
-var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.62.0",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
+/* Ironlog v0.63.0 · site build */
+var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.63.0",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
 
 /* ===== src/data/exercises.js ===== */
 (function(){'use strict';
@@ -852,7 +853,11 @@ function finalizeSets(exercises){
     // unknown id is treated as bodyweight so a custom move isn't wrongly dropped.
     // Object.assign copies `at` (the check timestamp) through; only `t` (the transient touched flag) is stripped.
     const ex=EX[e.id],allowBlank=!ex||ex.equip==='Bodyweight'||(TIME_METRIC&&TIME_METRIC.has(e.id));   // a time-held lift (plank/carry/hang) can be logged by seconds alone — load is optional
-    const sets=e.sets.filter(st=>st.done===true&&(+st.r||0)>0&&(allowBlank||(+st.w||0)>0)).map(st=>{const o=Object.assign({},st);delete o.t;o.done=true;return o;});
+    // An assist machine at an EXPLICIT 0 is an unassisted rep — the strongest possible, and the goal the
+    // suggestions point you at — so it must save. A blank field is still dropped (it could be a forgotten
+    // entry, and would otherwise record a false "unassisted" PR). (Full review 4.2)
+    const inv=INVERTED_LOAD&&INVERTED_LOAD.has(e.id),typed=st=>st.w!=null&&String(st.w).trim()!==''&&isFinite(+st.w);
+    const sets=e.sets.filter(st=>st.done===true&&(+st.r||0)>0&&(allowBlank||(+st.w||0)>0||(inv&&typed(st)))).map(st=>{const o=Object.assign({},st);delete o.t;o.done=true;return o;});
     return Object.assign({},e,{sets});
   }).filter(e=>e.sets.length);
 }
@@ -2394,7 +2399,9 @@ function resolveActive(local,remote){
 // One row per finished workout — a health-app / spreadsheet friendly summary (D-4 CSV export). Volume
 // uses each session's own bodyweight (D-1). Cardio rows carry their type/intensity/distance in Notes.
 function csvCell(v){v=v==null?'':String(v);return /[",\n\r]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;}
-function sessionSummaryCsv(sessions,unit){
+// bw: the current bodyweight, the fallback for a session saved without its own (the same rule the app's
+// screens use — otherwise the CSV showed 0 volume for those bodyweight lifts; full review 4.9)
+function sessionSummaryCsv(sessions,unit,bw){
   const P=IL.prog;unit=unit==='kg'?'kg':'lb';
   const rows=[['Date','Day','Type','Duration (min)','Volume ('+unit+')','Working sets','Exercises','Bodyweight ('+unit+')','Notes']];
   (sessions||[]).filter(s=>s&&s.completed!==false).slice().sort((a,b)=>a.date-b.date).forEach(s=>{
@@ -2403,7 +2410,7 @@ function sessionSummaryCsv(sessions,unit){
     const dur=P.sessionDuration(s);let notes=s.note||'';
     if(cardio){const c=s.cardio||{},bits=[c.type,c.intensity,(c.distance!=null?c.distance+' '+(c.unit||''):'')].filter(Boolean);notes=[bits.join(' · '),s.note].filter(Boolean).join(' — ');}
     rows.push([iso,day,cardio?'Cardio':(s.deload?'Deload':'Strength'),dur==null?'':dur,
-      cardio?'':P.sessionVolume(s,0),cardio?'':P.sessionSets(s),cardio?'':(s.exercises?s.exercises.length:0),
+      cardio?'':P.sessionVolume(s,+bw||0),cardio?'':P.sessionSets(s),cardio?'':(s.exercises?s.exercises.length:0),
       (+s.bw>0)?s.bw:'',notes].map(csvCell));
   });
   return rows.map(r=>r.join(',')).join('\r\n')+'\r\n';
@@ -4048,9 +4055,10 @@ function openSettings(){
     <label class="btn ghost block" style="margin-bottom:10px">⬆ Import a backup<input type="file" id="fileImport" accept="application/json" hidden></label>`}
     <div style="height:18px"></div>
     <div class="dim" style="font-size:11.5px;line-height:1.55;text-align:center;padding:0 6px">Ironlog offers general fitness information, not medical advice. Warm up, use a weight you can control, and stop if something hurts. Consult a qualified professional before starting a program — you train at your own risk.</div>
-    <div class="dim" style="font-size:12px;text-align:center;margin-top:16px">Ironlog v${APP_VERSION} · ${state.sessions.length} sessions · ${state.routines.length} routines · ${(IL.store.storageBytes()/1e6).toFixed(1)} MB on this phone</div>
-    <div class="dim mono" style="font-size:10.5px;text-align:center;margin-top:4px;opacity:.7">${viewportDiag()}</div>
-    <div class="dim mono" style="font-size:10.5px;text-align:center;margin-top:4px;opacity:.7">${vpLog.join(' · ')}</div>`);
+    <div class="dim" id="verLine" role="button" tabindex="0" style="font-size:12px;text-align:center;margin-top:16px">Ironlog v${APP_VERSION} · ${state.sessions.length} sessions · ${state.routines.length} routines · ${(IL.store.storageBytes()/1e6).toFixed(1)} MB on this phone</div>
+    <div id="vpDiag" hidden>   <!-- layout diagnostics for troubleshooting the iPhone screen fit; tap the version line to show -->
+      <div class="dim mono" style="font-size:10.5px;text-align:center;margin-top:4px;opacity:.7">${viewportDiag()}</div>
+      <div class="dim mono" style="font-size:10.5px;text-align:center;margin-top:4px;opacity:.7">${vpLog.join(' · ')}</div></div>`);
   $('#segUnit').addEventListener('click',e=>{const b=e.target.closest('[data-u]');if(!b)return;const nu=b.dataset.u;if(nu===U())return;
     showConfirm('Switch to '+nu+'?','Every logged weight will be converted so your history and PRs stay accurate.','Convert to '+nu,()=>{convertUnits(U(),nu);openSettings();render();toast('Converted to '+nu);},'primary');});
   $('#segTheme').addEventListener('click',e=>{const b=e.target.closest('[data-t]');if(!b)return;state.settings.theme=b.dataset.t;S.saveSettingsCloud();applyTheme();openSettings();});
@@ -4061,6 +4069,7 @@ function openSettings(){
   on('#btnProfile',openProfile);
   on('#btnUnmute',()=>{const seen=state.settings.seen||{};Object.keys(seen).forEach(k=>{if(k.indexOf('mute:')===0)delete seen[k];});S.saveSettingsCloud();openSettings();render();toast('Coaching notes are back on');});
   on('#btnExport',exportData);
+  on('#verLine',()=>{const d=$('#vpDiag');if(d)d.hidden=!d.hidden;});
   on('#btnExportCsv',exportCsv);
   const fi=$('#fileImport');if(fi)fi.addEventListener('change',importData);
   on('#btnResetDemo',()=>showConfirm('Reset the demo?','Reloads the original sample data and discards your changes.','Reset',()=>S.resetDemo()));
@@ -4100,7 +4109,7 @@ async function exportData(){
 async function exportCsv(){
   const done=state.sessions.filter(s=>s.completed!==false).length;
   if(!done){toast('No finished workouts to export yet');return;}
-  const csv=IL.sync.sessionSummaryCsv(state.sessions,U());
+  const csv=IL.sync.sessionSummaryCsv(state.sessions,U(),bw());
   const fname='ironlog-sessions-'+new Date().toISOString().slice(0,10)+'.csv';
   try{if(window.claude&&claude.use){const dl=await claude.use('downloads');if(dl){await dl.save({filename:fname,data:csv});toast('CSV saved');return;}}}catch(e){}
   try{const blob=new Blob([csv],{type:'text/csv'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=fname;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);toast('CSV downloaded');}
@@ -4401,7 +4410,10 @@ function changeEditDate(iso){
   const s=cur();if(!s||!iso)return;const parts=iso.split('-').map(Number);if(parts.length!==3||!parts[0])return;
   const old=new Date(s.date),nd=new Date(parts[0],parts[1]-1,parts[2],old.getHours(),old.getMinutes(),old.getSeconds(),old.getMilliseconds());
   const t=nd.getTime();if(t>Date.now()||t===s.date)return;   // no future-dating, no-op if unchanged
+  // shift EVERYTHING by the same delta — each set's tick time too, or time-per-muscle / rest / staleness
+  // would still read the old day (full review 4.8)
   const delta=t-s.date;s.date=t;if(+s.endedAt>0)s.endedAt+=delta;
+  s.exercises.forEach(e=>e.sets.forEach(st=>{if(+st.at>0)st.at+=delta;}));
   editDirty=true;render();toast('Moved to '+nd.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'}));
 }
 function finishEdit(){
@@ -4606,7 +4618,9 @@ function bindLog(root){
         // Ticking a loaded lift with no weight would save a 0-volume "working" set and poison "last time".
         // Point the user at the weight field instead of silently accepting it. Bodyweight moves are exempt,
         // and so are time-held lifts (a carry can be logged by time alone; load is optional).
-        if(cex&&cex.equip!=='Bodyweight'&&!D.TIME_METRIC.has(cex.id)&&!(+st.w>0)){const wi=$(`input[data-f="w"][data-ei="${ei}"][data-s="${si}"]`);if(wi){wi.focus();if(wi.select)wi.select();}toast('Add a weight first');return;}
+        // An assist machine may be ticked at an explicit 0 (unassisted — the goal); only a blank is nudged.
+        const inv=D.INVERTED_LOAD.has(cex&&cex.id),blankW=st.w==null||String(st.w).trim()==='';
+        if(cex&&cex.equip!=='Bodyweight'&&!D.TIME_METRIC.has(cex.id)&&(inv?blankW:!(+st.w>0))){const wi=$(`input[data-f="w"][data-ei="${ei}"][data-s="${si}"]`);if(wi){wi.focus();if(wi.select)wi.select();}toast(inv?'Enter the assist — 0 if unassisted':'Add a weight first');return;}
         // Timed lifts log seconds in the reps field. Ticking with it empty saves a set finalizeSets then
         // drops (r>0 required), losing the tick with no warning — require the seconds first.
         if(cex&&D.TIME_METRIC.has(cex.id)&&!(+st.r>0)){const ri=$(`input[data-f="r"][data-ei="${ei}"][data-s="${si}"]`);if(ri){ri.focus();if(ri.select)ri.select();}toast('Add seconds first');return;}}

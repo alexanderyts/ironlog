@@ -2,6 +2,17 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.63.0 — 2026-09-22 · Quick fixes from the full review
+- **Unassisted reps now save.** On the assisted pull-up or dip, enter **0** assist when you do it unassisted and it counts, including as your record. (A blank box still asks you to fill it in, so a forgotten entry can't pose as an unassisted PR.)
+- **Bad gym Wi-Fi no longer leaves a blank screen.** If the connection is stuck, the app opens your saved copy after 3 seconds and updates in the background.
+- **"Delete session?" now blocks the panel behind it**, so a stray tap can't hit Edit or Repeat underneath.
+- **Moving a workout to another day moves all of its set times too**, so time-per-muscle and rest stats stay right.
+- **The CSV export uses your current bodyweight** for any workout saved without one, the same way the app's screens do.
+- The debug text at the bottom of Settings is now hidden (tap the version line to show it).
+- Under the hood: the offline update system only clears Ironlog's own saved files (the web address is shared with other projects), and the app now refuses to build if two parts of the code accidentally use the same name, a mistake that caused a bug before.
+
+Not verified on-device.
+
 ## v0.62.0 — 2026-09-22 · A safer, smarter workout builder — and 17 new exercises
 The workout builder got a full safety and quality overhaul. It was tested by simulating 263,208 workouts: every muscle choice, gym type and session length, with every random variation the app can pick. Every check now comes back clean.
 

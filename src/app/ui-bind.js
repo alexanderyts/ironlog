@@ -245,7 +245,10 @@ function changeEditDate(iso){
   const s=cur();if(!s||!iso)return;const parts=iso.split('-').map(Number);if(parts.length!==3||!parts[0])return;
   const old=new Date(s.date),nd=new Date(parts[0],parts[1]-1,parts[2],old.getHours(),old.getMinutes(),old.getSeconds(),old.getMilliseconds());
   const t=nd.getTime();if(t>Date.now()||t===s.date)return;   // no future-dating, no-op if unchanged
+  // shift EVERYTHING by the same delta — each set's tick time too, or time-per-muscle / rest / staleness
+  // would still read the old day (full review 4.8)
   const delta=t-s.date;s.date=t;if(+s.endedAt>0)s.endedAt+=delta;
+  s.exercises.forEach(e=>e.sets.forEach(st=>{if(+st.at>0)st.at+=delta;}));
   editDirty=true;render();toast('Moved to '+nd.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'}));
 }
 function finishEdit(){
@@ -450,7 +453,9 @@ function bindLog(root){
         // Ticking a loaded lift with no weight would save a 0-volume "working" set and poison "last time".
         // Point the user at the weight field instead of silently accepting it. Bodyweight moves are exempt,
         // and so are time-held lifts (a carry can be logged by time alone; load is optional).
-        if(cex&&cex.equip!=='Bodyweight'&&!D.TIME_METRIC.has(cex.id)&&!(+st.w>0)){const wi=$(`input[data-f="w"][data-ei="${ei}"][data-s="${si}"]`);if(wi){wi.focus();if(wi.select)wi.select();}toast('Add a weight first');return;}
+        // An assist machine may be ticked at an explicit 0 (unassisted — the goal); only a blank is nudged.
+        const inv=D.INVERTED_LOAD.has(cex&&cex.id),blankW=st.w==null||String(st.w).trim()==='';
+        if(cex&&cex.equip!=='Bodyweight'&&!D.TIME_METRIC.has(cex.id)&&(inv?blankW:!(+st.w>0))){const wi=$(`input[data-f="w"][data-ei="${ei}"][data-s="${si}"]`);if(wi){wi.focus();if(wi.select)wi.select();}toast(inv?'Enter the assist — 0 if unassisted':'Add a weight first');return;}
         // Timed lifts log seconds in the reps field. Ticking with it empty saves a set finalizeSets then
         // drops (r>0 required), losing the tick with no warning — require the seconds first.
         if(cex&&D.TIME_METRIC.has(cex.id)&&!(+st.r>0)){const ri=$(`input[data-f="r"][data-ei="${ei}"][data-s="${si}"]`);if(ri){ri.focus();if(ri.select)ri.select();}toast('Add seconds first');return;}}

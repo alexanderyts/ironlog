@@ -134,7 +134,9 @@ function resolveActive(local,remote){
 // One row per finished workout — a health-app / spreadsheet friendly summary (D-4 CSV export). Volume
 // uses each session's own bodyweight (D-1). Cardio rows carry their type/intensity/distance in Notes.
 function csvCell(v){v=v==null?'':String(v);return /[",\n\r]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;}
-function sessionSummaryCsv(sessions,unit){
+// bw: the current bodyweight, the fallback for a session saved without its own (the same rule the app's
+// screens use — otherwise the CSV showed 0 volume for those bodyweight lifts; full review 4.9)
+function sessionSummaryCsv(sessions,unit,bw){
   const P=IL.prog;unit=unit==='kg'?'kg':'lb';
   const rows=[['Date','Day','Type','Duration (min)','Volume ('+unit+')','Working sets','Exercises','Bodyweight ('+unit+')','Notes']];
   (sessions||[]).filter(s=>s&&s.completed!==false).slice().sort((a,b)=>a.date-b.date).forEach(s=>{
@@ -143,7 +145,7 @@ function sessionSummaryCsv(sessions,unit){
     const dur=P.sessionDuration(s);let notes=s.note||'';
     if(cardio){const c=s.cardio||{},bits=[c.type,c.intensity,(c.distance!=null?c.distance+' '+(c.unit||''):'')].filter(Boolean);notes=[bits.join(' · '),s.note].filter(Boolean).join(' — ');}
     rows.push([iso,day,cardio?'Cardio':(s.deload?'Deload':'Strength'),dur==null?'':dur,
-      cardio?'':P.sessionVolume(s,0),cardio?'':P.sessionSets(s),cardio?'':(s.exercises?s.exercises.length:0),
+      cardio?'':P.sessionVolume(s,+bw||0),cardio?'':P.sessionSets(s),cardio?'':(s.exercises?s.exercises.length:0),
       (+s.bw>0)?s.bw:'',notes].map(csvCell));
   });
   return rows.map(r=>r.join(',')).join('\r\n')+'\r\n';
