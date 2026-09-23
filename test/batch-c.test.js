@@ -70,21 +70,21 @@ test('P2: the live editor computes each card’s all-time PR once, not per set t
   }finally{h.teardown();}
 });
 
-test('P1: the viewport rAF loop stops itself once the viewport is stable',async()=>{
-  const h=launch();
+test('P1: the viewport rAF loop stops itself once the viewport is stable',()=>{
+  const h=launch({fakeClock:true});   // virtual clock: frames and the 3 s cap without real waiting
   try{
     // Count requestAnimationFrame scheduling. In jsdom the viewport never changes, so the loop reaches
     // its stable threshold (or the 5s hard cap) and stops. Wait past the cap, THEN confirm no more
     // frames are being scheduled — the old always-on loop would keep incrementing forever.
     let raf=0;const orig=h.win.requestAnimationFrame;
     h.win.requestAnimationFrame=function(cb){raf++;return orig.call(h.win,cb);};
-    await new Promise(r=>setTimeout(r,3800));   // past the loop's 3s elapsed cap
+    h.clock.tick(3800);   // past the loop's 3s elapsed cap
     const a=raf;
-    await new Promise(r=>setTimeout(r,500));
+    h.clock.tick(500);
     assert.equal(raf-a,0,'no frames scheduled after the loop settled (delta='+(raf-a)+')');
     // review finding #3: a rotate can be followed by an eventless settle, so it must RE-ARM the loop
     h.win.dispatchEvent(new h.win.Event('orientationchange'));
-    await new Promise(r=>setTimeout(r,120));
+    h.clock.tick(120);
     assert.ok(raf-a>0,'the loop re-armed after orientationchange (delta='+(raf-a)+')');
   }finally{h.teardown();}
 });

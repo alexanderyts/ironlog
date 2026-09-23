@@ -70,19 +70,18 @@ function startBlank(h,ids){
   h.click('[data-action="startFlow"]');h.click('[data-action="blank"]');
   ids.forEach(id=>{h.click('#btnAddEx');h.click(h.$$('#addResults [data-quickadd]').find(x=>x.dataset.quickadd===id));});
 }
-const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 
-test('U1: deleting an exercise mid-hold logs the seconds to the ORIGINAL lift, not the wrong one',async()=>{
-  const h=launch();
+test('U1: deleting an exercise mid-hold logs the seconds to the ORIGINAL lift, not the wrong one',()=>{
+  const h=launch({fakeClock:true});
   try{
     startBlank(h,['barbell-bench-press','overhead-press','plank']);
     const plankCard=h.$$('#view .log-ex').find(c=>/Plank/.test(c.textContent));
     plankCard.querySelector('[data-stopwatch]').dispatchEvent(new h.win.MouseEvent('click',{bubbles:true}));
-    await sleep(5500);   // past the 5s countdown, into the hold
+    h.clock.tick(5500);   // past the 5s countdown, into the hold (virtual clock: no real wait)
     // delete Bench (index 0) via its ⋯ menu → Remove — plank shifts from index 2 to 1
     h.$$('#view .log-ex').find(c=>/Bench/.test(c.textContent)).querySelector('[data-exmenu]').dispatchEvent(new h.win.MouseEvent('click',{bubbles:true}));
     h.click('#sheetBody [data-exact="remove"]');
-    await sleep(400);
+    h.clock.tick(400);
     h.click('#swStop');
     const plank=h.state.active.exercises.find(e=>e.id==='plank');
     const ohp=h.state.active.exercises.find(e=>e.id==='overhead-press');
@@ -92,14 +91,14 @@ test('U1: deleting an exercise mid-hold logs the seconds to the ORIGINAL lift, n
   }finally{h.teardown();}
 });
 
-test('U4: the hold is written to the first WORKING set, skipping a leading warm-up',async()=>{
-  const h=launch();
+test('U4: the hold is written to the first WORKING set, skipping a leading warm-up',()=>{
+  const h=launch({fakeClock:true});
   try{
     startBlank(h,['plank']);
     // mark set 1 a warm-up
     const warmBtn=h.$('#view [data-warm]');warmBtn.dispatchEvent(new h.win.MouseEvent('click',{bubbles:true}));
     h.$('#view [data-stopwatch]').dispatchEvent(new h.win.MouseEvent('click',{bubbles:true}));
-    await sleep(5500);
+    h.clock.tick(5500);
     h.click('#swStop');
     const plank=h.state.active.exercises.find(e=>e.id==='plank');
     assert.ok(plank.sets[0].warm,'set 1 stayed a warm-up');

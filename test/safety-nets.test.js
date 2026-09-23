@@ -16,6 +16,19 @@ test('the built files match the source (run `node build.js` if this fails)',()=>
   pairs.forEach(([f,want])=>assert.ok(norm(fs.readFileSync(path.join(root,f),'utf8'))===norm(want),f+' is stale — run node build.js'));
   assert.match(build.site,/sha256-/,'the site carries CSP script hashes');
 });
+/* The CSP hashes must match what a BROWSER hashes: it normalizes CRLF→LF while parsing, so an inline
+   script built from CRLF sources (a Windows checkout) would be blocked and the site would load blank.
+   Recompute each inline script's hash the browser's way and require it in the policy. */
+test('every inline script’s CSP hash matches what the browser will compute (no blank-page CRLF trap)',()=>{
+  const crypto=require('crypto'),site=build.site;
+  const csp=(site.match(/Content-Security-Policy"\s+content="([^"]+)"/)||[])[1]||'';
+  assert.ok(csp,'the site has a CSP');
+  const scripts=[...site.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m=>m[1]);
+  assert.ok(scripts.length>0);
+  scripts.forEach((js,i)=>{const h='sha256-'+crypto.createHash('sha256').update(js.replace(/\r\n?/g,'\n'),'utf8').digest('base64');
+    assert.ok(csp.includes(h),'inline script #'+(i+1)+' hash '+h+' is allowed by the CSP');});
+  assert.ok(!/\r/.test(site),'no CR characters in the built page');
+});
 
 /* Bad saved data must never blank a tab. Storage can hold anything: an old app version's shape, a
    half-written record, a hand-edited backup. Every tab must still draw (the error boundary's

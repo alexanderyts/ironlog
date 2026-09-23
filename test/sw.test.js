@@ -10,7 +10,7 @@ function loadSW(fetchImpl){
   const listeners={},store={};let timers=[];
   const keyOf=r=>typeof r==='string'?r:r.url;
   const caches={
-    open:async n=>{store[n]=store[n]||new Map();return {addAll:async reqs=>{reqs.forEach(r=>store[n].set(keyOf(r),{ok:true,body:'asset'}));},put:async(req,res)=>{store[n].set(keyOf(req),res);}};},
+    open:async n=>{store[n]=store[n]||new Map();return {addAll:async reqs=>{reqs.forEach(r=>store[n].set(keyOf(r),{ok:true,body:'asset',opts:r.opts}));},put:async(req,res)=>{store[n].set(keyOf(req),res);}};},
     match:async req=>{const k=keyOf(req);for(const n of Object.keys(store))if(store[n].has(k))return store[n].get(k);return undefined;},
     keys:async()=>Object.keys(store),delete:async n=>{delete store[n];return true;}
   };
@@ -61,4 +61,35 @@ test('activate deletes only Ironlog’s OLD caches — never another project’s
   assert.ok(!sw.store['ironlog-0.0.1'],'old Ironlog cache removed');
   assert.ok(sw.store['someone-elses-app-v2'],'another project’s cache untouched');
   assert.ok(sw.store[V],'current cache kept');
+});
+
+/* ---- v0.69.1: the rest of the worker ---- */
+test('install stores the app shell fresh from the network (cache:"reload"), not a stale HTTP copy',async()=>{
+  const sw=loadSW(async()=>({ok:true}));const waits=[];
+  sw.listeners.install({waitUntil:p=>waits.push(p)});await Promise.all(waits);
+  ['./','./index.html','./manifest.webmanifest','./icon-192.png'].forEach(k=>{const e=sw.store[V].get(k);
+    assert.ok(e,'shell asset cached: '+k);assert.equal(e.opts&&e.opts.cache,'reload',k+' fetched with cache:"reload"');});
+});
+test('assets: served from the cache when present; a good network reply is cached, an error never is',async()=>{
+  let calls=0;const good={ok:true,type:'basic',body:'icon',clone(){return this;}},bad={ok:false,status:404,body:'nope',clone(){return this;}};
+  let reply=good;
+  const sw=loadSW(async()=>{calls++;return reply;});
+  const get=async url=>{let resp;const waits=[];sw.listeners.fetch({request:{url,mode:'no-cors',method:'GET',destination:'image'},respondWith:p=>{resp=p;},waitUntil:p=>waits.push(p)});const r=await resp;await Promise.all(waits);return r;};
+  sw.store[V]=new Map([['https://me.github.io/ironlog/icon-192.png',{ok:true,body:'cached icon'}]]);
+  assert.equal((await get('https://me.github.io/ironlog/icon-192.png')).body,'cached icon');assert.equal(calls,0,'cache hit → no network');
+  assert.equal((await get('https://me.github.io/ironlog/new.png')).body,'icon');
+  assert.equal(sw.store[V].get('https://me.github.io/ironlog/new.png').body,'icon','good reply cached');
+  reply=bad;await get('https://me.github.io/ironlog/missing.png');
+  assert.ok(!sw.store[V].has('https://me.github.io/ironlog/missing.png'),'a 404 is never cached');
+});
+test('Dropbox, fonts and non-GET requests are left alone (straight to the network)',()=>{
+  const sw=loadSW(async()=>({ok:true}));let responded=0;
+  const fire=(url,method)=>sw.listeners.fetch({request:{url,method:method||'GET',mode:'cors',destination:''},respondWith:()=>{responded++;},waitUntil:()=>{}});
+  fire('https://api.dropboxapi.com/2/files/get_metadata','POST');fire('https://fonts.googleapis.com/css2?family=Archivo');fire('https://me.github.io/ironlog/','POST');
+  assert.equal(responded,0,'the worker never intercepts them');
+});
+test('the worker reports its version so the page can offer "Update ready"',()=>{
+  const sw=loadSW(async()=>({ok:true}));let got=null;
+  sw.listeners.message({data:'version',ports:[{postMessage:m=>{got=m;}}]});
+  assert.deepEqual(got,{v:VERSION});
 });

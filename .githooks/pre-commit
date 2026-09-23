@@ -1,0 +1,16 @@
+#!/bin/sh
+# Ironlog pre-commit check (~15 s): the whole test suite must pass before a commit is recorded.
+# The suite includes "the built files match the source" (test/safety-nets.test.js), so a forgotten
+# `node build.js` — which would ship stale code to the phone — also blocks the commit.
+# Enabled per clone with: npm run hooks   (sets git's core.hooksPath to .githooks)
+# Skip in an emergency with: git commit --no-verify
+echo "pre-commit: running tests…"
+if ! node --test --test-timeout=120000 test/*.test.js > .git/precommit-test.log 2>&1; then
+  grep -E "^✖|AssertionError" .git/precommit-test.log | head -20
+  echo ""
+  echo "pre-commit: tests failed — commit blocked. Full log: .git/precommit-test.log"
+  echo "  (if it says a built file is stale: run  node build.js  and add the result)"
+  exit 1
+fi
+grep -E "^ℹ (tests|pass)" .git/precommit-test.log
+exit 0

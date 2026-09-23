@@ -2,6 +2,12 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## Behind the scenes — 2026-09-23 (no app change)
+- **Blank-screen trap closed.** On Windows, git can save source files with different line endings, which made the site's security check block the app's own code, so the page would load blank. The build now normalizes line endings, and a new test checks the security fingerprints the way a browser does. The published site was never affected; this was caught during a phone-size test run.
+- **A test run before every commit.** A commit is now refused if any test fails, including "the published files are out of date". Takes about 15 seconds. Turn it on in a fresh copy with `npm run hooks`.
+- **Timer tests on a virtual clock.** The stopwatch, hold-to-repeat and rest-bar tests no longer wait on the real clock, so they're faster and can't fail at random. The hold-to-repeat test now checks the exact number of repeats.
+- **Offline worker:** 4 more tests covering install, the asset cache, requests it must leave alone, and the "Update ready" version check.
+
 ## v0.69.0 — 2026-09-22 · Pick your own record
 Instead of "That rep wasn't clean" and "Count it again", every lift now has **Your record** with a **Change** button.
 - **Change** lists your best set from each recent workout of that lift, newest first. Your best is ticked by default. Tap another one and it becomes your record.

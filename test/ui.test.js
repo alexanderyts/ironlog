@@ -313,8 +313,8 @@ test('UI: Enter moves weight → reps → next set → done (Phase U1)',()=>{
   }finally{h.teardown();}
 });
 
-test('UI: one tap on + is exactly one increment; a hold repeats and adds nothing extra on release (Phase U1)',async()=>{
-  const h=launch();
+test('UI: one tap on + is exactly one increment; a hold repeats and adds nothing extra on release (Phase U1)',()=>{
+  const h=launch({fakeClock:true});   // virtual clock: the repeat count is exact
   try{
     pushHistory(h.state,h.S);h.IL.ui.render();buildWorkout(h,['Chest']);
     const set0=()=>h.state.active.exercises[0].sets[0];
@@ -322,18 +322,17 @@ test('UI: one tap on + is exactly one increment; a hold repeats and adds nothing
     const start=set0().w;
     h.click(plus());
     assert.equal(set0().w,start+5,'one tap = +5 lb');
-    // hold: pointerdown, then a GENEROUS window so at least one auto-repeat lands even when the test
-    // runner's event loop is busy (asserting an exact repeat COUNT was a real-clock flake — the app's
-    // hold logic is fine, the number of setTimeout fires in a fixed wall-time isn't deterministic under load).
+    // hold for 1 s: 400 ms delay, then a repeat every 110 ms -> at 510, 620, 730, 840, 950 ms = 5 steps.
+    // On the virtual clock that count is exact (on the real clock it varied with machine load).
     const ev=n=>new h.win.Event(n,{bubbles:true});
     plus().dispatchEvent(ev('pointerdown'));
-    await wait(1000);                                 // 400 ms delay, then repeats every ~110 ms
+    h.clock.tick(1000);
     const afterHold=set0().w;
-    assert.ok(afterHold>start+5,'a hold repeats — more than the single tap ('+afterHold+')');
+    assert.equal(afterHold,start+5+5*5,'a hold repeats exactly 5 times in 1 s ('+afterHold+')');
     h.doc.dispatchEvent(ev('pointerup'));plus().dispatchEvent(ev('click'));
     const afterRelease=set0().w;
     assert.equal(afterRelease,afterHold,'the trailing click after a hold adds nothing');
-    await wait(250);
+    h.clock.tick(500);
     assert.equal(set0().w,afterRelease,'and it stopped repeating');
   }finally{h.teardown();}
 });

@@ -5,9 +5,10 @@
   "private": true,
   "scripts": {
     "build": "node build.js",
-    "test": "node --test",
+    "test": "node --test --test-timeout=120000 test/*.test.js",
     "dev": "node server.js",
-    "check": "npm test && npm run build"
+    "check": "npm run build && npm test",
+    "hooks": "git config core.hooksPath .githooks"
   },
   "engines": {
     "node": ">=20"

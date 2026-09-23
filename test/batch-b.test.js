@@ -8,7 +8,6 @@
 const test=require('node:test'),assert=require('node:assert');
 const {launch}=require('./ui-harness.js');
 const {IL}=require('./load.js');
-const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 
 function startBlank(h,ids){
   h.click('[data-action="startFlow"]');h.click('[data-action="blank"]');
@@ -67,18 +66,18 @@ test('U2: starting a rest clears a running stopwatch — the bars never stack',(
   }finally{h.teardown();}
 });
 
-/* ---------------- U3 (real timer) ---------------- */
-test('U3: switching tabs mid-hold self-stops the stopwatch',async()=>{
-  const h=launch();
+/* ---------------- U3 (virtual clock) ---------------- */
+test('U3: switching tabs mid-hold self-stops the stopwatch',()=>{
+  const h=launch({fakeClock:true});
   try{
     startBlank(h,['plank']);
     h.click('#view [data-stopwatch]');
     assert.ok(h.$('#swbar').classList.contains('on'),'stopwatch running');
     // drive the countdown into the running hold so leaving discards a real hold (and toasts)
-    await sleep(5600);
+    h.clock.tick(5600);
     assert.ok(h.$('#swbar').classList.contains('run'),'the hold is running');
     h.$$('.tab').find(b=>b.dataset.tab==='history').dispatchEvent(new h.win.MouseEvent('click',{bubbles:true}));
-    await sleep(250);   // let the ~100ms tick fire on the new tab
+    h.clock.tick(250);   // let the ~100ms tick fire on the new tab
     assert.ok(!h.$('#swbar').classList.contains('on'),'the stopwatch stopped itself off the active editor');
     assert.match(h.text('#toastMsg'),/Hold stopped/,'the user is told the hold was dropped');
   }finally{h.teardown();}

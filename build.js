@@ -5,7 +5,10 @@ const fs=require('fs'),path=require('path'),zlib=require('zlib'),crypto=require(
 const b64sha=s=>crypto.createHash('sha256').update(s,'utf8').digest('base64');
 const root=__dirname,pkg=require('./package.json');
 const cfg=fs.existsSync(path.join(root,'config.json'))?JSON.parse(fs.readFileSync(path.join(root,'config.json'),'utf8')):{};
-const read=p=>fs.readFileSync(path.join(root,p),'utf8');
+// Normalize line endings: git on Windows (core.autocrlf) can check sources out with CRLF, and a browser
+// turns CRLF into LF while parsing the page — so the CSP hash of an inline script computed over CRLF
+// text would never match, and the site would load BLANK (script blocked). Hash what the browser sees.
+const read=p=>fs.readFileSync(path.join(root,p),'utf8').replace(/\r\n?/g,'\n');
 const write=(p,d)=>{const f=path.join(root,p);fs.mkdirSync(path.dirname(f),{recursive:true});fs.writeFileSync(f,d);console.log('  wrote',p,typeof d==='string'?(d.length/1024).toFixed(1)+' KB':d.length+' bytes');};
 
 // A module entry is either a file (its own IIFE, private scope, exports on IL) or an ARRAY of files
