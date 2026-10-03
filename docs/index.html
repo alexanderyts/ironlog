@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-iRlznAfGJUrt/vbqmWfBLwQq9je8lOFKNXISLONVCzY=' 'sha256-WPBob/luB2k1aalTWXpi6zk3SrIbj8GlZV7AlFdG7oA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-U6JSUXrIK9o/Ue4GOhBp/cqD1Vvf6IoZdk5cCuGlAR4=' 'sha256-WPBob/luB2k1aalTWXpi6zk3SrIbj8GlZV7AlFdG7oA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Ironlog</title>
@@ -456,8 +456,8 @@ html.kb-open .tabbar{display:none}
 </div>
 
 <script>
-/* Ironlog v0.75.2 · site build */
-var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.75.2",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
+/* Ironlog v0.75.3 · site build */
+var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.75.3",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
 
 /* ===== src/data/exercises.js ===== */
 (function(){'use strict';
@@ -635,7 +635,10 @@ const RAW=[
  // full-gym additions
  ["belt-squat","Belt Squat","Quads",["Quads","Glutes"],"Machine",C,[8,12],"Belt around the hips, squat to depth with an upright torso and drive up; no load on the spine.","belt squat machine"],
  ["chest-supported-t-bar-row","Chest-Supported T-Bar Row","Back",["Back","Biceps"],"Machine",C,[8,12],"Chest on the pad, row the handles to the ribs, squeeze, lower to a full stretch.","t-bar machine,t bar row machine"],
- ["trap-bar-deadlift","Trap Bar Deadlift","Back",["Back","Quads","Glutes","Hamstrings"],"Barbell",C,[4,8],"Stand inside the hex bar, brace, and push the floor away to stand tall.","hex bar deadlift,trap bar"]
+ ["trap-bar-deadlift","Trap Bar Deadlift","Back",["Back","Quads","Glutes","Hamstrings"],"Barbell",C,[4,8],"Stand inside the hex bar, brace, and push the floor away to stand tall.","hex bar deadlift,trap bar"],
+ // v0.75.3 — no-equipment moves the owner does, tracked by reps (no BW_FACTOR: they're rep-only)
+ ["jump-squat","Jump Squat","Quads",["Quads","Glutes","Calves"],"Bodyweight",C,[8,15],"Squat to parallel, then jump straight up. Land softly on bent knees and go straight into the next rep.","squat jump,squat jumps,jump squats,jumping squat,plyo squat"],
+ ["burpee","Burpee","Quads",["Quads","Glutes","Chest","Core"],"Bodyweight",C,[10,20],"Squat, hands down, jump the feet back to a plank, chest to the floor, jump the feet in and leap up. Log total reps.","burpees,burpie,burpies,squat thrust"]
 ];
 
 // [region/head, movement pattern, tier]. tier 1 = foundational lift (can anchor a session and should be
@@ -674,7 +677,9 @@ const META={
  'dumbbell-romanian-deadlift':['overall','hinge',2],'incline-dumbbell-row':['mid','hpull',2],'cable-pull-through':['overall','hinge',2],'dumbbell-split-squat':['overall','lunge',2],
  'captains-chair-knee-raise':['flexion','iso',2],'low-to-high-cable-fly':['upper','iso',3],'cable-reverse-fly':['rear','iso',3],'single-arm-lat-pulldown':['lats','vpull',3],
  'cable-woodchop':['rotation','iso',2],'rope-hammer-curl':['brachialis','iso',3],'dumbbell-skull-crusher':['long','iso',2],'dead-bug':['antiext','iso',3],'dumbbell-shrug':['traps','iso',3],'single-leg-rdl':['overall','hinge',3],
- 'belt-squat':['overall','squat',2],'chest-supported-t-bar-row':['mid','hpull',2],'trap-bar-deadlift':['lower','hinge',2]
+ 'belt-squat':['overall','squat',2],'chest-supported-t-bar-row':['mid','hpull',2],'trap-bar-deadlift':['lower','hinge',2],
+ // v0.75.3: 'squat', not 'iso' — as an iso they'd win a home gym's quad-isolation slot
+ 'jump-squat':['overall','squat',3],'burpee':['overall','squat',3]
 };
 // Movements trained at a long muscle length (a strong hypertrophy driver) — the builder gives these a
 // small preference so a plan tends to include a stretch-biased option per muscle. Existing lifts that
@@ -1553,8 +1558,9 @@ function profilePool(list,g,profile,sessions){
   return list.filter(e=>profileAllows(e,g,profile,sessions));
 }
 // Moves most beginners can't do yet — their own bodyweight is already too heavy. Kept out of a muscle's
-// build until it has history (audit #7).
-const HARD_BW=new Set(['chest-dip','tricep-dip','nordic-curl','ab-wheel','sissy-squat','hanging-leg-raise','pull-up','chin-up']);
+// build until it has history (audit #7). Jump squat and burpee too: high-impact, and a poor main lift
+// for a no-equipment leg day — the plain Bodyweight Squat leads it (v0.75.3).
+const HARD_BW=new Set(['chest-dip','tricep-dip','nordic-curl','ab-wheel','sissy-squat','hanging-leg-raise','pull-up','chin-up','jump-squat','burpee']);
 // Leftover slots in a multi-group session go to the bigger muscles; a small muscle sharing a 3+ group
 // session gets one exercise (audit #4: Lower got two calf raises and no leg curl).
 const MUSCLE_SIZE={Quads:3,Hamstrings:3,Glutes:3,Back:3,Chest:3,Shoulders:2,Biceps:1,Triceps:1,Calves:1,Core:1,Forearms:1};

@@ -1,6 +1,6 @@
 # Ironlog — Handoff
 
-Last updated: 2026-10-03 · App version: **v0.75.2** (commit `d6b137f`, pushed to `main`) · Tests: **457 passing**
+Last updated: 2026-10-03 · App version: **v0.75.3** (pushed to `main`; see `git log`) · Tests: **458 passing**
 
 ## Project
 
@@ -56,9 +56,10 @@ The owner is not a developer, so explain changes in plain language: what changed
   - New **Bodyweight Squat**, scored by reps.
   - The builder won't make a rep-only bodyweight move a *new* main lift when something loadable fits. Core is exempt.
   - Lifts switched to "Bodyweight" mode tick and save with no weight.
+- **v0.75.3:** new **Jump Squat** and **Burpee** (Quads, Bodyweight, tier 3, `squat` pattern), scored by reps. Both are in `HARD_BW`, so the builder never picks them fresh. Once logged, continued plans keep them. Searching, logging with blank weight and Finish were checked in the browser pane.
 
 **Partly done / known gaps:**
-- **Nothing since v0.70 is verified on a real phone.** Every CHANGELOG entry ends "Not verified on-device." The owner needs to test the v0.75.x changes on the iPhone.
+- **On-device (2026-10-03):** the owner checked the four v0.75.x items on the iPhone, and all worked: Home gym card, push-up "Added lb"/BW, Bodyweight Squat, and the calendar reminder from the installed PWA (iOS .ics works). Other v0.70–v0.74 changes have had no targeted on-device check. CHANGELOG entries still say "Not verified on-device."
 - **Lifts switched to Bodyweight mode** (e.g. a walking lunge) save, but at 0 weight they produce **no record**. `scoreSet` in `src/engine/progression.js` judges by exercise id, not mode.
 - **Calendar reminder and export do nothing in the public demo.** The demo artifact has no `downloads` capability, and the publish tool warns about it each time.
 - **Not built from batch 5b:**
@@ -72,13 +73,9 @@ The owner is not a developer, so explain changes in plain language: what changed
 
 ## Next steps
 
-1. **Ask the owner for an on-device check of v0.75.x.**
-   - Home gym card;
-   - push-up "Added lb"/BW;
-   - Bodyweight Squat;
-   - calendar reminder from the installed PWA (iOS .ics handling is unverified).
-2. **Get the owner's answer to the last open offer:** add other no-equipment moves as their own exercises (lunges, jump squats, calf raises, burpees) so they're fully tracked.
-   - To add one, put a row in `RAW` plus a `META` entry in `src/data/exercises.js`.
+1. ~~Ask the owner for an on-device check of v0.75.x.~~ **Done 2026-10-03:** all four items passed.
+2. ~~Get the owner's answer on no-equipment moves.~~ **Done 2026-10-03:** the owner does jump squats and burpees only, and both shipped in v0.75.3. Lunges and calf raises were not added.
+   - To add another, put a row in `RAW` plus a `META` entry in `src/data/exercises.js`.
    - Then diff `tools/builder-audit.js` and `tools/review.js` output before and after (see How to run and test).
 3. **Optional fix for the record gap:** make bodyweight-mode lifts produce records. This needs `scoreSet` to know the instance mode, and it's called in many places, so plan it first.
 4. **Optional demo fix:** declare `downloads` on the demo, or hide the reminder and export in demo builds (`CFG.DEMO`).
@@ -112,6 +109,10 @@ The owner is not a developer, so explain changes in plain language: what changed
   - Wrong guesses are corrected by an offer after the user swaps out barbell lifts twice, never silently.
 - **Deload switch** stays hidden until 5 workouts. A brand-new user's first build is capped at 4 exercises × 3 sets (v0.75.0).
 - **Rep-only bodyweight moves** (air squat, sissy squat) can't be a *new* main lift when a loadable option fits. Core is exempt, because ab wheel and hanging leg raise are fine core main lifts (v0.75.2).
+- **No-equipment additions (v0.75.3):** add only the moves the owner actually does (jump squat, burpee), to keep the library short.
+  - Burpee is filed under **Quads**: the app has no full-body group.
+  - Both use the `squat` pattern, not `iso`. As `iso` they'd win a home gym's quad-isolation slot.
+  - Both are in `HARD_BW` (the builder's copy and the `tools/builder-audit.js` copy). They're high-impact and a poor main lift, so a no-equipment leg day still leads with Bodyweight Squat.
 - **iOS layout saga (v0.8.0–v0.8.10) is closed.**
   - Fix: standalone `html{min-height:screen.height}` and a constant-anchored tab bar.
   - Don't reopen it with positioning guesses. If a new layout bug appears, add on-screen diagnostics first.
@@ -235,10 +236,10 @@ node server.js                    # dev server http://localhost:4321 (or the "ir
 
 ## Open questions
 
-- Should other no-equipment moves (lunges, jump squats, calf raises, burpees) become their own exercises? The owner was asked and hasn't answered.
+- ~~Should other no-equipment moves become their own exercises?~~ Answered 2026-10-03: jump squats and burpees only (shipped in v0.75.3).
 - Should "Pick up where you left off" on Home, and folding Progress details, be built?
 - Does the owner want the couples features (`REVIEW-2026-09-22.md` §6) or an AI coach (§9)?
-- On-device results for v0.75.x are still to come.
+- ~~On-device results for v0.75.x are still to come.~~ Answered 2026-10-03: all four checks passed.
 
 ## Session log
 

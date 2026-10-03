@@ -167,8 +167,9 @@ function profilePool(list,g,profile,sessions){
   return list.filter(e=>profileAllows(e,g,profile,sessions));
 }
 // Moves most beginners can't do yet — their own bodyweight is already too heavy. Kept out of a muscle's
-// build until it has history (audit #7).
-const HARD_BW=new Set(['chest-dip','tricep-dip','nordic-curl','ab-wheel','sissy-squat','hanging-leg-raise','pull-up','chin-up']);
+// build until it has history (audit #7). Jump squat and burpee too: high-impact, and a poor main lift
+// for a no-equipment leg day — the plain Bodyweight Squat leads it (v0.75.3).
+const HARD_BW=new Set(['chest-dip','tricep-dip','nordic-curl','ab-wheel','sissy-squat','hanging-leg-raise','pull-up','chin-up','jump-squat','burpee']);
 // Leftover slots in a multi-group session go to the bigger muscles; a small muscle sharing a 3+ group
 // session gets one exercise (audit #4: Lower got two calf raises and no leg curl).
 const MUSCLE_SIZE={Quads:3,Hamstrings:3,Glutes:3,Back:3,Chest:3,Shoulders:2,Biceps:1,Triceps:1,Calves:1,Core:1,Forearms:1};

@@ -123,6 +123,20 @@ test('library: a plain Bodyweight Squat, found by "air squat"; it never displace
   assert.equal(IL.prog.scoreSet('bodyweight-squat',{w:'',r:30},180).score,30);
 });
 
+test('library (v0.75.3): Jump Squat and Burpee, found by name, scored by reps, never a fresh build’s pick',()=>{
+  const SR=require('../src/engine/search.js');
+  assert.equal(SR.searchEx('jump squat')[0].id,'jump-squat');
+  assert.equal(SR.searchEx('squat jumps')[0].id,'jump-squat');
+  assert.equal(SR.searchEx('burpee')[0].id,'burpee');
+  assert.equal(SR.searchEx('burpees')[0].id,'burpee');
+  assert.equal(IL.prog.scoreSet('jump-squat',{w:'',r:12},180).score,12);
+  assert.equal(IL.prog.scoreSet('burpee',{w:'',r:15},180).score,15);
+  for(const gym of ['full','machine','home'])for(const g of [['Quads'],['Quads','Glutes'],['Quads','Hamstrings','Glutes','Calves']])for(let seed=0;seed<30;seed++){
+    const p=B.planWorkout(g,[],seed,{profile:{gym}});assert.ok(!p.ids.some(id=>id==='jump-squat'||id==='burpee'),gym+' '+g+' seed '+seed+': '+p.ids);}
+  const bare=B.planWorkout(['Quads'],[],1,{profile:{gym:'home',avoid:['goblet-squat','bulgarian-split-squat','walking-lunge','reverse-lunge','step-up','dumbbell-split-squat']}});
+  assert.equal(bare.ids[0],'bodyweight-squat','no-equipment leg day still leads with the plain squat');
+});
+
 test('a lunge switched to Bodyweight: ticks with no weight, keeps it at Finish, and the box reads BW',()=>{
   const fin=IL.prog.finalizeSets([{id:'walking-lunge',mode:'bodyweight',sets:[{w:'',r:12,done:true}]},{id:'walking-lunge',sets:[{w:'',r:12,done:true}]}]);
   assert.equal(fin.length,1,'bodyweight-mode set kept; a dumbbell lunge with no weight still dropped');

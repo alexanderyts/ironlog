@@ -2,6 +2,12 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.75.3 — 2026-10-03 · Jump Squat and Burpee
+- **New exercises: Jump Squat and Burpee.** Search "jump squat" or "burpee". Both are tracked by reps, like push-ups, so beating your best reps counts as a record. They sit under Quads in the library.
+- **The builder won't pick them for you.** Add them yourself. Once you've done them, "Repeat" and continued plans keep them in.
+- v0.75.x checks on the iPhone (gym card, push-up BW, Bodyweight Squat, calendar reminder) all passed.
+- Not verified on-device.
+
 ## v0.75.2 — 2026-09-23 · Bodyweight Squat
 - **New exercise: Bodyweight Squat.** Search "squat", "air squat" or "bodyweight squat". It's tracked by reps, like push-ups, and the weight box reads BW.
 - **The builder won't make it your main leg lift** when something you can add weight to fits, like a goblet squat at a home gym with dumbbells. With no loadable option, it's the pick. Core is exempt: ab wheel and hanging leg raise stay fine main core lifts.

@@ -171,7 +171,10 @@ const RAW=[
  // full-gym additions
  ["belt-squat","Belt Squat","Quads",["Quads","Glutes"],"Machine",C,[8,12],"Belt around the hips, squat to depth with an upright torso and drive up; no load on the spine.","belt squat machine"],
  ["chest-supported-t-bar-row","Chest-Supported T-Bar Row","Back",["Back","Biceps"],"Machine",C,[8,12],"Chest on the pad, row the handles to the ribs, squeeze, lower to a full stretch.","t-bar machine,t bar row machine"],
- ["trap-bar-deadlift","Trap Bar Deadlift","Back",["Back","Quads","Glutes","Hamstrings"],"Barbell",C,[4,8],"Stand inside the hex bar, brace, and push the floor away to stand tall.","hex bar deadlift,trap bar"]
+ ["trap-bar-deadlift","Trap Bar Deadlift","Back",["Back","Quads","Glutes","Hamstrings"],"Barbell",C,[4,8],"Stand inside the hex bar, brace, and push the floor away to stand tall.","hex bar deadlift,trap bar"],
+ // v0.75.3 — no-equipment moves the owner does, tracked by reps (no BW_FACTOR: they're rep-only)
+ ["jump-squat","Jump Squat","Quads",["Quads","Glutes","Calves"],"Bodyweight",C,[8,15],"Squat to parallel, then jump straight up. Land softly on bent knees and go straight into the next rep.","squat jump,squat jumps,jump squats,jumping squat,plyo squat"],
+ ["burpee","Burpee","Quads",["Quads","Glutes","Chest","Core"],"Bodyweight",C,[10,20],"Squat, hands down, jump the feet back to a plank, chest to the floor, jump the feet in and leap up. Log total reps.","burpees,burpie,burpies,squat thrust"]
 ];
 
 // [region/head, movement pattern, tier]. tier 1 = foundational lift (can anchor a session and should be
@@ -210,7 +213,9 @@ const META={
  'dumbbell-romanian-deadlift':['overall','hinge',2],'incline-dumbbell-row':['mid','hpull',2],'cable-pull-through':['overall','hinge',2],'dumbbell-split-squat':['overall','lunge',2],
  'captains-chair-knee-raise':['flexion','iso',2],'low-to-high-cable-fly':['upper','iso',3],'cable-reverse-fly':['rear','iso',3],'single-arm-lat-pulldown':['lats','vpull',3],
  'cable-woodchop':['rotation','iso',2],'rope-hammer-curl':['brachialis','iso',3],'dumbbell-skull-crusher':['long','iso',2],'dead-bug':['antiext','iso',3],'dumbbell-shrug':['traps','iso',3],'single-leg-rdl':['overall','hinge',3],
- 'belt-squat':['overall','squat',2],'chest-supported-t-bar-row':['mid','hpull',2],'trap-bar-deadlift':['lower','hinge',2]
+ 'belt-squat':['overall','squat',2],'chest-supported-t-bar-row':['mid','hpull',2],'trap-bar-deadlift':['lower','hinge',2],
+ // v0.75.3: 'squat', not 'iso' — as an iso they'd win a home gym's quad-isolation slot
+ 'jump-squat':['overall','squat',3],'burpee':['overall','squat',3]
 };
 // Movements trained at a long muscle length (a strong hypertrophy driver) — the builder gives these a
 // small preference so a plan tends to include a stretch-biased option per muscle. Existing lifts that

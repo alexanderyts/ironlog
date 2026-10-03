@@ -14,7 +14,7 @@ const {EX,GROUPS,PRESETS,TIME_METRIC}=IL.data,B=IL.builder,P=IL.prog;
 const C='compound';
 const args=process.argv.slice(2),FULL=args.includes('--full'),JSON_OUT=args.includes('--json');
 
-const HARD_BW=new Set(['chest-dip','tricep-dip','nordic-curl','ab-wheel','sissy-squat','hanging-leg-raise','pull-up','chin-up']);
+const HARD_BW=new Set(['chest-dip','tricep-dip','nordic-curl','ab-wheel','sissy-squat','hanging-leg-raise','pull-up','chin-up','jump-squat','burpee']);
 const SELECTIONS=[...GROUPS.map(g=>[g]),...PRESETS.map(p=>p.groups),
   ['Chest','Back'],['Quads','Hamstrings'],['Glutes','Hamstrings'],['Shoulders','Biceps','Triceps'],GROUPS.slice()];
 const GYMS=[undefined,'full','machine','home'],LENGTHS=[undefined,'short','long'];
