@@ -196,7 +196,7 @@ The owner is not a developer, so explain changes in plain language: what changed
 
 **Links**
 - Live PWA: https://alexanderyts.github.io/ironlog/ · repo: https://github.com/alexanderyts/ironlog
-- App artifact (private): https://claude.ai/artifact/WPBJP4GX3XDiLkqi6mRcXN (v93) · demo artifact (public): https://claude.ai/artifact/MBrq8xsCzHXvgSEsVeb7ro (v87)
+- App artifact (private): https://claude.ai/artifact/WPBJP4GX3XDiLkqi6mRcXN (v94 = app v0.75.3) · demo artifact (public): https://claude.ai/artifact/MBrq8xsCzHXvgSEsVeb7ro (v88 = app v0.75.3)
 - Landing page artifact: https://claude.ai/artifact/S5eQsNjP1Hp8dyJqWzQ8EG. Its source was in a temporary scratchpad and may be gone (unverified); read it back with the Artifact tool's `read` action.
 - Night review report (2026-09-23): https://claude.ai/artifact/9BcB4sVDfsqfcCxLLWRT3t
 
@@ -232,6 +232,8 @@ node server.js                    # dev server http://localhost:4321 (or the "ir
   - Adding an exercise can change builder picks. The Bodyweight Squat briefly became the main leg lift at home gyms half the time.
   - Always diff `builder-audit` and `review.js` output before and after.
 - **Demo artifact downloads:** the publish tool warns that the demo uses `downloads` without declaring it (see Current state).
+- **Demo link shows a pinned version (seen 2026-10-03):** the Artifact tool reports that public viewers of the demo "see a pinned earlier version, not this live version". Republishing doesn't change what the link shows; the pin is set from the page's Share menu (owner only).
+- **Republishing artifacts costs a full read:** the publish tool refuses to replace a live artifact until every line of its saved copy has been read (~5,700 lines each). Diff the saved copy against `dist/` first (`diff <(tr -d '\r' < saved.html) <(tr -d '\r' < dist/app.html)`); the only differences should be your own changes.
 - **Outdated docs:** `README.md` still describes `src/app/ui.js`. That file is now split into the 4 `ui-*.js` files.
 
 ## Open questions
