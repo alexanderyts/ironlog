@@ -81,7 +81,7 @@ test('UI: the ⇆ chip shows on a cable lift (not a barbell one) and flips the h
     assert.ok(!card(h,/Barbell Bench/).querySelector('[data-side]'),'barbell bench does not');
     card(h,/Cable Curl/).querySelector('[data-side]').dispatchEvent(new h.win.MouseEvent('click',{bubbles:true}));
     const cc=card(h,/Cable Curl/);
-    assert.match(cc.querySelector('.set-hdr').textContent,/Reps \/ side/);
+    assert.match(cc.querySelector('.set-hdr').textContent,/Reps \/ arm/);assert.match(cc.querySelector('[data-side]').textContent,/One arm at a time/);
     assert.equal(h.state.active.exercises.find(e=>e.id==='cable-curl').side,true);
     cc.querySelector('[data-side]').dispatchEvent(new h.win.MouseEvent('click',{bubbles:true}));
     assert.equal(h.state.active.exercises.find(e=>e.id==='cable-curl').side,undefined,'back to default = no flag stored');

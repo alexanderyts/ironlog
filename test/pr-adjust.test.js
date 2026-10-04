@@ -162,19 +162,27 @@ test('UI: the PR tip stays hidden until there is a record to tap',()=>{
   }finally{h.teardown();}
 });
 
-test('UI: a sheet opened over the keyboard restores the scroll position on close',()=>{
+test('UI: a sheet opened over the keyboard drops it without moving the page, and sits where you can see it',()=>{
   const h=launch();
   try{
     h.click('[data-action="startFlow"]');h.click('[data-action="blank"]');
     h.click('#btnAddEx');
     h.click(h.$$('#addResults [data-quickadd]')[0]);
     const wInput=h.$('input[data-f="w"]');wInput.focus();
-    let ok=true;try{Object.defineProperty(h.win,'scrollY',{value:240,configurable:true});}catch(e){ok=false;}
-    if(!ok){return;}   // jsdom wouldn't let us fake a scroll offset; covered in the browser instead
     const calls=[];h.win.scrollTo=(x,y)=>calls.push([x,y]);
+    const H=h.win.innerHeight;
+    h.win.visualViewport={offsetTop:0,height:H-300,scale:1};   // keyboard up: iOS shows 300px less than the layout viewport
     h.click('[data-openex]');   // open the exercise sheet while the field is focused
-    assert.ok(calls.length&&calls[0][0]===0&&calls[0][1]===0,'it scrolls to the top so iOS shows the sheet');
-    h.click('#sheetClose');
-    assert.ok(calls.some(c=>c[0]===0&&c[1]===240),'and puts the reader back where they were on close');
+    assert.notEqual(h.doc.activeElement,wInput,'the field lets go, so the keyboard closes');
+    assert.deepEqual(calls,[],'the page is left where it was (v0.49 scrolled to the top and back)');
+    const sh=h.$('#sheet');
+    assert.equal(sh.style.bottom,'300px','the sheet sits on the keyboard, not behind it');
+    assert.equal(sh.style.maxHeight,(H-312)+'px','no taller than what is visible');
+    // keyboard gone, but iOS left the visible area 200px down the layout viewport ("it was up there when I scrolled up")
+    h.win.visualViewport={offsetTop:200,height:H,scale:1};h.IL.ui.fitOverlays();
+    assert.equal(sh.style.bottom,'-200px','it follows the visible area');
+    // the two agree again: back to the CSS, launch-time --deficit fix included
+    h.win.visualViewport={offsetTop:0,height:H,scale:1};h.IL.ui.fitOverlays();
+    assert.equal(sh.style.bottom,'');assert.equal(sh.style.maxHeight,'');
   }finally{h.teardown();}
 });

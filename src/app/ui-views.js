@@ -43,7 +43,7 @@ function sessCard(s){
     <div class="sess-ex">${s.exercises.slice(0,4).map(e=>{const work=e.sets.filter(st=>P.isWorking(st)&&!st.warm);
       // (batch 5) "3 sets · top 185lb × 5" from ONE set — it used to pair the first set's reps with the heaviest weight
       const inv=D.isAssist(e.id),top=work.reduce((a,x)=>!a?x:(inv?(+x.w||0)<(+a.w||0):(+x.w||0)>(+a.w||0)||((+x.w||0)===(+a.w||0)&&(+x.r||0)>(+a.r||0)))?x:a,null);
-      const f={time:D.TIME_METRIC.has(e.id),assist:inv,bodyweight:(EX[e.id]||{}).equip==='Bodyweight',holds:P.holdsOf(e),sides:P.sidesOf(e)};
+      const f={id:e.id,time:D.TIME_METRIC.has(e.id),assist:inv,bodyweight:(EX[e.id]||{}).equip==='Bodyweight',holds:P.holdsOf(e),sides:P.sidesOf(e)};
       return `<div><span>${esc(EX[e.id]?EX[e.id].name:e.name)}</span><span class="s">${work.length}× · ${top?esc(liftSetText(f,{w:+top.w||0,r:+top.r||0})):'—'}</span></div>`;}).join('')}
       ${s.exercises.length>4?`<div class="dim" style="font-size:12px">+${s.exercises.length-4} more</div>`:''}</div>
     ${s.note?`<div class="sess-note" style="margin-top:9px;padding-top:9px;border-top:1px solid var(--line);font-size:12.5px;color:var(--ink-2);line-height:1.4">📝 ${esc(s.note)}</div>`:''}
@@ -56,11 +56,11 @@ function sessCard(s){
 function libResultsHtml(){
   let res=SR.searchEx(libQuery);
   if(libGroup!=='All')res=res.filter(e=>e.group===libGroup||e.muscles.includes(libGroup));
-  return `<div class="dim" style="font-size:12.5px;margin:8px 2px 10px" aria-live="polite">${res.length} exercise${res.length!==1?'s':''}</div>
+  return `<div class="dim libcount" style="font-size:12.5px;margin:8px 2px 10px" aria-live="polite">${res.length} exercise${res.length!==1?'s':''}</div>
     <div class="card list">${res.length?res.map(e=>libRow(e)).join(''):(/tread|run|jog|walk|bike|cycl|spin|ellip|stair|cardio|swim/i.test(libQuery)?'<div style="padding:20px;text-align:center"><div class="dim" style="margin-bottom:10px">Cardio is logged on its own — time, type and distance.</div><button class="btn primary sm" data-action="cardioOpen" style="display:inline-flex">Log cardio</button></div>':'<div style="padding:24px;text-align:center" class="dim">No match. Try a simpler word like “press” or “curl”.</div>')}</div>`;
 }
 function viewLibrary(){
-  return `<div class="section">
+  return `<div class="section libsec">
     <div class="view-title" style="margin:0 2px 14px;font-size:22px">Exercise Library</div>
     <div class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
       <input id="libSearch" type="search" aria-label="Search exercises" placeholder="Describe or name an exercise…" value="${esc(libQuery)}"></div>
@@ -148,9 +148,9 @@ function prTip(){
 }
 const CHEV_R='<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color:var(--ink-3)"><path d="M9 6l6 6-6 6"/></svg>';
 // A record's set, written the way the record reads: "Bodyweight +10lb × 8", "45lb/ea × 10", "60s",
-// "/side" when each side is counted. One copy for the PR list and the PR-adjust card.
+// "/arm" (or /leg, /side) when each side is counted. One copy for the PR list and the PR-adjust card.
 // (batch 5) the same writer as Your lifts — the PR list said "40kg × 8" for an assist machine and "× 40s" for a carry
-function prSetText(p,w,r){return liftSetText({time:p.time,assist:p.inverted,bodyweight:p.bodyweight,holds:p.holds,sides:p.sides},{w,r});}
+function prSetText(p,w,r){return liftSetText({id:p.id,time:p.time,assist:p.inverted,bodyweight:p.bodyweight,holds:p.holds,sides:p.sides},{w,r});}
 let recordsAll=false;
 function prList(){
   const all=memoStat('prAll',()=>A.personalRecords(state.sessions,bw(),999)),arr=recordsAll?all:all.slice(0,8);
@@ -159,9 +159,9 @@ function prList(){
   // show the modality only when it isn't the exercise's native equipment (so a Smith/cable variant
   // is distinguishable from the default; ordinary PRs stay uncluttered)
   const pill=t=>` <span class="pill" style="font-size:10px;padding:1px 7px">${esc(t)}</span>`;
-  // …and tag a lift done the non-default way round ("Each side" / "Both sides"), since it keeps its own record
+  // …and tag a lift done the non-default way round ("One arm" / "Both arms"), since it keeps its own record
   const modeTag=p=>{const ex=EX[p.id];const native=ex&&EQUIP_MODE[ex.equip];
-    return (p.mode&&p.mode!==native?pill(MODES[p.mode].label):'')+(p.track&&p.track.indexOf('|')>=0?pill(p.sides===2?'Each side':'Both sides'):'');};
+    return (p.mode&&p.mode!==native?pill(MODES[p.mode].label):'')+(p.track&&p.track.indexOf('|')>=0?pill(p.sides===2?'One '+limbOf(p.id):'Both '+limbOf(p.id)+'s'):'');};
   return arr.map(p=>`<div class="ex-row" data-openex="${p.id}" data-track="${esc(p.track)}" style="cursor:pointer"><div style="flex:1;min-width:0"><div class="ex-name">${esc(p.name)}${modeTag(p)}</div>
     <div class="ex-sub">Record ${setStr(p)}</div>${p.adjusted?`<div class="ex-sub">Your pick · best logged ${setStr({...p,w:p.adjusted.w,r:p.adjusted.r})}</div>`:''}</div>
     <span class="dim" style="font-size:12px;flex-shrink:0">${fmtDate(p.date).replace(/^\w+, /,'')}</span>${CHEV_R}</div>`).join('')   // the date, not an "e1RM" nobody lifted (batch 5)
@@ -200,7 +200,7 @@ function collapsible(key,title,summary,body,margin,closedByDefault){
 let liftsAll=false;   // "Show all" on Your lifts (screen state, not saved)
 const LIFT_BADGE={pr:['★','New PR','var(--accent)'],up:['▲','Improving','var(--good)'],stuck:['⏸','Stuck','var(--warn)'],down:['↘','Below your best','var(--ink-3)'],hold:['→','Holding','var(--ink-3)'],new:['•','First time','var(--ink-3)']};
 // A lift's set, written the way it reads everywhere else: "155lb × 8", "60s", "30lb assist × 8", "Bodyweight × 12".
-function liftSetText(l,st){const u=U(),side=l.sides===2?'/side':'';
+function liftSetText(l,st){const u=U(),side=l.sides===2?'/'+limbOf(l.id):'';
   if(l.time)return (st.w?st.w+u+(l.holds===2?'/ea':'')+' · ':'')+st.r+'s'+side;
   if(l.assist)return (st.w?st.w+u+' assist':'unassisted')+' × '+st.r+side;
   if(l.bodyweight)return (st.w?'Bodyweight +'+st.w+u:'Bodyweight')+' × '+st.r+side;
@@ -209,7 +209,7 @@ function liftRow(l){
   const b=LIFT_BADGE[l.status],ex=EX[l.id],native=ex&&EQUIP_MODE[ex.equip];
   const pill=t=>` <span class="pill" style="font-size:10px;padding:1px 7px">${esc(t)}</span>`;
   // tag BOTH the equipment and the side, so two versions of one lift can be told apart (batch 5)
-  const tag=(l.mode&&l.mode!==native&&MODES[l.mode]?pill(MODES[l.mode].label):'')+(l.track&&l.track.indexOf('|')>=0?pill(l.sides===2?'Each side':'Both sides'):'');
+  const tag=(l.mode&&l.mode!==native&&MODES[l.mode]?pill(MODES[l.mode].label):'')+(l.track&&l.track.indexOf('|')>=0?pill(l.sides===2?'One '+limbOf(l.id):'Both '+limbOf(l.id)+'s'):'');
   const sub=l.status==='stuck'?`${liftSetText(l,l.to)} · no gain in 2+ weeks`
     :l.status==='down'?`${liftSetText(l,l.to)} <span class="dim">· best ${esc(liftSetText(l,l.best))}</span>`
     :l.from?`${liftSetText(l,l.to)} <span class="dim">· was ${esc(liftSetText(l,l.from))}</span>`:`Best ${liftSetText(l,l.best)}`;
@@ -345,7 +345,7 @@ function trendCard(id,track){
   const asst=metric==='assist';   // shown as the assist itself; progress = LESS of it
   const arrow=delta>0?'▲ stronger':delta<0?'▼ below your best':'— same';
   const lastPt=series[series.length-1],ex0=EX[id]||{};
-  const shown=esc(liftSetText({time:D.TIME_METRIC.has(id),assist:D.isAssist(id),bodyweight:ex0.equip==='Bodyweight',holds:1,sides:String(dmode).indexOf('|1side')>=0?2:1},{w:lastPt.w,r:lastPt.r}));
+  const shown=esc(liftSetText({id,time:D.TIME_METRIC.has(id),assist:D.isAssist(id),bodyweight:ex0.equip==='Bodyweight',holds:1,sides:String(dmode).indexOf('|1side')>=0?2:1},{w:lastPt.w,r:lastPt.r}));
   return `<div class="card" style="padding:14px 15px;margin:0 0 12px">
     <div class="row-between" style="margin-bottom:9px"><span class="eyebrow">${label}</span>
       <span class="mono" style="font-weight:700;color:${col}">${shown} <span style="font-size:12px">${arrow}</span></span></div>
@@ -365,7 +365,7 @@ function prFor(id,track){const all=A.personalRecords(state.sessions,bw(),999).fi
   return all.find(x=>x.track===t)||all[0];}
 // How to write a set of this lift (seconds, assist, bodyweight, per-dumbbell, per-side) — from its record.
 function recFlags(id,p){const ex=EX[id]||{};
-  return {time:D.TIME_METRIC.has(id),assist:D.isAssist(id),bodyweight:p?!!p.bodyweight:ex.equip==='Bodyweight',holds:p?p.holds:1,sides:p?p.sides:1};}
+  return {id,time:D.TIME_METRIC.has(id),assist:D.isAssist(id),bodyweight:p?!!p.bodyweight:ex.equip==='Bodyweight',holds:p?p.holds:1,sides:p?p.sides:1};}
 function recordCard(id,track){
   const p=prFor(id,track);if(!p)return '';
   const f=recFlags(id,p),txt=(w,r)=>esc(liftSetText(f,{w,r}));
@@ -436,8 +436,8 @@ function addListHtml(target){const rec=recentExerciseIds(target,8),row=e=>libRow
 function openAddExercise(){
   const target=cur();
   const sugg=target&&target.exercises.length?B.complementSuggestions(target.exercises.map(e=>e.id),3):[];
-  const suggHTML=sugg.length?`<div class="eyebrow" style="margin:0 2px 8px;display:flex;align-items:center;gap:6px"><span style="color:var(--accent)">✦</span> Smart picks to complement your workout</div>
-    <div class="card list" id="addSuggest" style="margin-bottom:16px">${sugg.map(s=>`<div class="ex-row" data-quickadd="${s.id}"><div class="ex-ic">${exIcon(EX[s.id].group)}</div><div style="flex:1;min-width:0"><div class="ex-name">${esc(EX[s.id].name)}</div><div class="ex-sub" style="color:var(--accent)">${esc(s.why)}</div></div><div class="ex-add">＋</div></div>`).join('')}</div>`:'';
+  const suggHTML=sugg.length?`<div id="addPicks"><div class="eyebrow" style="margin:0 2px 8px;display:flex;align-items:center;gap:6px"><span style="color:var(--accent)">✦</span> Smart picks to complement your workout</div>
+    <div class="card list" id="addSuggest" style="margin-bottom:16px">${sugg.map(s=>`<div class="ex-row" data-quickadd="${s.id}"><div class="ex-ic">${exIcon(EX[s.id].group)}</div><div style="flex:1;min-width:0"><div class="ex-name">${esc(EX[s.id].name)}</div><div class="ex-sub" style="color:var(--accent)">${esc(s.why)}</div></div><div class="ex-add">＋</div></div>`).join('')}</div></div>`:'';
   openSheet('Add exercise',`${suggHTML}<div class="search" style="margin-bottom:12px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
     <input id="addSearch" placeholder="Search or describe an exercise…"></div>
     <div class="chips hscroll" id="addGroups" style="margin-bottom:12px">${['All',...GROUPS].map(g=>`<button class="chip ${g==='All'?'on':''}" data-ag="${g}">${g}</button>`).join('')}</div>
@@ -450,6 +450,11 @@ function openAddExercise(){
     let r=SR.searchEx(inp.value);if(ag!=='All')r=r.filter(e=>e.group===ag||e.muscles.includes(ag));
     $('#addResults').innerHTML=r.length?r.map(e=>libRow(e,'data-quickadd="'+e.id+'"')).join(''):'<div style="padding:20px;text-align:center" class="dim">No match.</div>';};
   inp.addEventListener('input',refresh);
+  // Searching: the smart picks go, so the results sit right under the box — with them above it, the
+  // keyboard covered the results (owner, v0.76.0). Gone for the rest of this panel: bringing them back
+  // on blur would shift the list under the finger mid-tap.
+  const hidePicks=()=>{const pk=$('#addPicks');if(pk&&!pk.hidden){pk.hidden=true;$('#sheetBody').scrollTop=0;}};
+  inp.addEventListener('focus',hidePicks);inp.addEventListener('input',hidePicks);
   $('#addGroups').addEventListener('click',ev=>{const b=ev.target.closest('[data-ag]');if(!b)return;ag=b.dataset.ag;$('#addGroups').querySelectorAll('.chip').forEach(c=>c.classList.toggle('on',c===b));refresh();});
 }
 function openNameSheet(title,defaultName,cb){
@@ -501,7 +506,7 @@ function viewportDiag(){
     const b=Math.round(parseFloat(cs.paddingBottom)||0), t=Math.round(parseFloat(cs.paddingTop)||0);
     probe.remove();
     const vv=window.visualViewport;
-    return `screen ${screen.width}×${screen.height} · inner ${innerWidth}×${innerHeight}`+(vv?` · visual ${Math.round(vv.height)}`:'')+` · inset top ${t} bottom ${b} · deficit ${viewportDeficit()}`;
+    return `screen ${screen.width}×${screen.height} · inner ${innerWidth}×${innerHeight}`+(vv?` · visual ${Math.round(vv.height)}`+(vv.offsetTop>=1?` @${Math.round(vv.offsetTop)}`:''):'')+` · inset top ${t} bottom ${b} · deficit ${viewportDeficit()}`;
   }catch(e){return '';}
 }
 /* The launch-time viewport bug, handled deterministically. In an installed (standalone) iOS web app
@@ -576,7 +581,8 @@ function watchViewport(){
   ['resize','orientationchange','pageshow','focus','scroll'].forEach(ev=>addEventListener(ev,syncViewportDeficit,{passive:true}));
   document.addEventListener('visibilitychange',syncViewportDeficit);
   if(window.visualViewport){visualViewport.addEventListener('resize',syncViewportDeficit);
-    visualViewport.addEventListener('resize',syncKeyboard);visualViewport.addEventListener('scroll',syncKeyboard);}
+    visualViewport.addEventListener('resize',syncKeyboard);visualViewport.addEventListener('scroll',syncKeyboard);
+    visualViewport.addEventListener('resize',fitOverlays);visualViewport.addEventListener('scroll',fitOverlays);}   // an open panel follows the visible area (keyboard up/down)
   addEventListener('focusout',()=>setTimeout(syncKeyboard,50),{passive:true});   // catch the keyboard dismissing
   // Re-arm the settle poll after events whose final layout can lag the event itself (iOS fires
   // orientationchange before innerWidth/Height update; returning from background can re-trigger a correction).

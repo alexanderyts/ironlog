@@ -29,6 +29,13 @@ function relDayMid(ts){const r=relDay(ts);return /^(Today|Yesterday)$/.test(r)?r
 function fmtDate(ts){return new Date(ts).toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'});}
 function relDay(ts){const t=startOfDay(Date.now()),d=startOfDay(ts);const diff=Math.round((t-d)/DAY);
   if(diff===0)return'Today';if(diff===1)return'Yesterday';if(diff<7)return diff+' days ago';return fmtDate(ts);}
+// What one "side" of a lift is, in plain words: a leg for leg moves, a side for core work, else an arm.
+// The ⇆ chip, the reps header and record text say "Both arms" / "One arm at a time" / "× 12/arm" —
+// "⇆ Both sides" on a machine read like an instruction about the weight (owner, v0.76.0).
+function limbOf(id){if(!EX[id])return 'side';const g=EX[id].group;return D.LOWER_GROUPS.indexOf(g)>=0?'leg':g==='Core'?'side':'arm';}
+// A machine lift marked plate-loaded (settings.plates, per exercise, synced). Only a label: the box takes
+// ALL the plates on it, both sides, not the machine's own weight — so its history needs no new track.
+const plateLoaded=id=>!!(state.settings.plates&&state.settings.plates[id]);
 const volOf=s=>P.sessionVolume(s,bw());
 const setsOf=s=>P.sessionSets(s);
 // A "Volume" stat label, tappable for a one-line explainer (the number itself, e.g. "12,480 lb", has
@@ -56,38 +63,44 @@ let _confirmReturn=null;
 function showConfirm(title,msg,okLabel,cb,kind){
   $('#cdTitle').textContent=title;$('#cdMsg').textContent=msg;
   const ok=$('#cdOk');ok.textContent=okLabel;ok.className='btn '+(kind==='primary'?'primary':'danger');
-  _confirmCb=cb;const d=$('#cdialog');d.classList.add('on');d.setAttribute('aria-hidden','false');$('#cscrim').classList.add('on');
+  _confirmCb=cb;const d=$('#cdialog');d.classList.add('on');d.setAttribute('aria-hidden','false');$('#cscrim').classList.add('on');fitOverlays();
   _confirmReturn=document.activeElement;focusQuiet($('#cdCancel'));   // VoiceOver lands IN the dialog; Cancel is the safe default
 }
 function closeConfirm(){const d=$('#cdialog');d.classList.remove('on');d.setAttribute('aria-hidden','true');$('#cscrim').classList.remove('on');_confirmCb=null;
   const r=_confirmReturn;_confirmReturn=null;if(r&&document.contains(r)&&r!==document.body&&!/^(INPUT|TEXTAREA)$/.test(r.tagName))focusQuiet(r);}
-/* scrollTop=0: a reused sheet must open at its top (search bar), not wherever the last one was scrolled.
-   The blur + scroll-to-top is the fix for "I tapped Add exercise and nothing happened": the sheet is
-   position:fixed, i.e. anchored to the LAYOUT viewport, and iOS does not shrink that viewport for the
-   keyboard — it scrolls the visual viewport up over it. So opening a sheet while a weight/name field
-   still held focus painted it below the visible area, above the band the keyboard occupies. Dropping
-   focus first lets iOS restore the viewport before the sheet slides up. Deliberately touches nothing
-   in the tab-bar / safe-area model (--deficit, --screen-h) — see the invariant note in styles.css. */
-let _sheetReturnY=null,_sheetReturnFocus=null;   // background scroll position stashed when a sheet had to scroll the page to top; the element that opened it
+/* Panels on iOS. The sheet is position:fixed, i.e. pinned to the LAYOUT viewport — but what you can SEE is
+   the visual viewport, which the keyboard shrinks and which iOS can leave scrolled away from the layout
+   one after the keyboard closes. Either way the panel opened out of sight: "I tapped Add exercise and
+   nothing happened — it was up there when I scrolled up" (v0.49.0 blurred + scrolled to top for this;
+   the owner still hit it at v0.75.3). So while a panel is open, fitOverlays pins it to what is visible —
+   bottom edge on the visible bottom (the keyboard's top), no taller than the visible height — on every
+   visualViewport resize/scroll. When the two viewports agree the inline styles are cleared, so the CSS,
+   including the --deficit launch fix, is exactly as before. Deliberately touches nothing in the tab-bar
+   / safe-area model (--deficit, --screen-h) — see the invariant note in styles.css. */
+let _sheetReturnFocus=null;   // the element that opened the sheet
+function fitOverlays(){
+  const vv=window.visualViewport,sh=$('#sheet'),cd=$('#cdialog');if(!sh)return;
+  const open=sh.classList.contains('on')||(cd&&cd.classList.contains('on'));
+  let top=0,h=0,off=0,shifted=false;
+  if(vv&&open&&Math.abs((vv.scale||1)-1)<0.01){top=Math.max(0,Math.round(vv.offsetTop));h=Math.round(vv.height);off=Math.round(innerHeight-(top+h));shifted=off>2||top>2;}
+  const px=v=>shifted?v+'px':'';
+  sh.style.bottom=px(off);sh.style.maxHeight=px(h-12);
+  ['#scrim','#cscrim'].forEach(s=>{const el=$(s);if(el){el.style.top=px(top);el.style.bottom=px(off);}});
+  if(cd)cd.style.top=px(top+Math.round(h/2));
+}
 function focusQuiet(el){try{if(el)el.focus({preventScroll:true});}catch(e){}}
 function openSheet(title,body){
-  // Only when a field actually had focus — blurring/scrolling unconditionally would throw away the
-  // reader's scroll position every time they tap a PR row or an exercise from a scrolled list. When we
-  // DO scroll to top (the iOS keyboard fix), remember where they were so closeSheet can put them back —
-  // otherwise opening a Note or the ⓘ mid-set dumped them at the top of a long workout.
-  try{const ae=document.activeElement;
-    if(ae&&/^(INPUT|TEXTAREA)$/.test(ae.tagName)){ae.blur();
-      if(window.scrollY){if(_sheetReturnY==null)_sheetReturnY=window.scrollY;window.scrollTo(0,0);}}
-  }catch(e){}
+  // Drop the keyboard first (only when a field has focus — never move the reader's scroll position).
+  try{const ae=document.activeElement;if(ae&&/^(INPUT|TEXTAREA)$/.test(ae.tagName))ae.blur();}catch(e){}
   const sh=$('#sheet');if(!sh.classList.contains('on'))_sheetReturnFocus=document.activeElement;
   $('#sheetTitle').textContent=title;const b=$('#sheetBody');b.innerHTML=body;b.scrollTop=0;sh.classList.add('on');sh.setAttribute('aria-hidden','false');$('#scrim').classList.add('on');a11yScan(b);
+  fitOverlays();
   focusQuiet($('#sheetTitle'));   // announce the panel; a sheet that wants a field focused (notes) does so right after
 }
 function closeSheet(){const sh=$('#sheet'),sc=$('#scrim');
   sh.style.transition='';sh.style.transform='';if(sc)sc.style.opacity='';   // drop any leftover swipe-drag inline styles so the CSS slide-out runs
   sh.classList.remove('on');sh.setAttribute('aria-hidden','true');sc.classList.remove('on');
   const rf=_sheetReturnFocus;_sheetReturnFocus=null;if(rf&&document.contains(rf)&&rf!==document.body&&!/^(INPUT|TEXTAREA)$/.test(rf.tagName))focusQuiet(rf);   // back to the button that opened it (not a field: that would pop the keyboard)
-  if(_sheetReturnY!=null){const y=_sheetReturnY;_sheetReturnY=null;try{window.scrollTo(0,y);}catch(e){}}   // restore the pre-sheet scroll position
 }
 // Swipe-down-to-dismiss for the bottom sheet (the grab bar promised this). Drag from the grab bar/header,
 // or from the body when it's scrolled to the top; a horizontal swipe (chip rows) or a drag on a text
@@ -200,6 +213,17 @@ function render(){
       +'<button class="btn primary" id="ilReload" style="display:inline-block">Reload</button></div>';
     const rb=v.querySelector('#ilReload');if(rb)rb.onclick=()=>location.reload();   // JS handler (no inline on* — CSP-safe)
   }
+}
+// Re-render, keeping the control you tapped on the same spot on screen. iOS Safari has no scroll
+// anchoring, so a line appearing above it (the ★ PR banner on a tick) shoved the rows under your thumb.
+// A set field still focused is blurred first, so the keyboard closes the ordinary way instead of by the
+// field vanishing from under it (owner, v0.76.0: "ticking a set sometimes jumped the page").
+function renderKeeping(sel){
+  try{const ae=document.activeElement;if(ae&&/^(INPUT|TEXTAREA)$/.test(ae.tagName)&&$('#view').contains(ae))ae.blur();}catch(e){}
+  const a=$(sel),y0=a?a.getBoundingClientRect().top:null;
+  render();
+  const b=y0==null?null:$(sel);if(!b)return;
+  const d=b.getBoundingClientRect().top-y0;if(Math.abs(d)>1)try{window.scrollBy(0,d);}catch(e){}
 }
 /* Derived-stat memo (P2). Every expensive read — Progress-tab analytics, a card's all-time PR — is a
    full scan of state.sessions. They're pure in (sessions, bodyweight, unit, day), so we cache the

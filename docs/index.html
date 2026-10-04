@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-U6JSUXrIK9o/Ue4GOhBp/cqD1Vvf6IoZdk5cCuGlAR4=' 'sha256-WPBob/luB2k1aalTWXpi6zk3SrIbj8GlZV7AlFdG7oA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-fymeDQvDlttM1TVS7QL3oU2nGyJQhZfYosTxoo3qtGg=' 'sha256-WPBob/luB2k1aalTWXpi6zk3SrIbj8GlZV7AlFdG7oA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://api.dropboxapi.com https://content.dropboxapi.com; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="referrer" content="no-referrer">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Ironlog</title>
@@ -171,6 +171,10 @@ html.kb-open .tabbar{display:none}
 .search input{flex:1;border:none;background:none;height:100%;font-size:16px;color:var(--ink)}
 .search input:focus{outline:none}
 .search svg{width:19px;height:19px;color:var(--ink-3)}
+/* Library search with the keyboard up: the title and the count line step aside so more results fit above
+   the keyboard (owner, v0.76.0). The count stays readable to VoiceOver (clipped, not display:none). */
+html.kb-open .libsec:has(#libSearch:focus) .view-title{display:none}
+html.kb-open .libsec:has(#libSearch:focus) .libcount{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);margin:0}
 
 /* Exercise rows */
 .ex-row{display:flex;align-items:center;gap:13px;padding:13px 15px;border-bottom:1px solid var(--line)}
@@ -456,8 +460,8 @@ html.kb-open .tabbar{display:none}
 </div>
 
 <script>
-/* Ironlog v0.75.3 · site build */
-var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.75.3",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
+/* Ironlog v0.76.0 · site build */
+var IL=globalThis.IL||(globalThis.IL={});IL.config={BUILD:"site",DEMO:false,VERSION:"0.76.0",DROPBOX_APP_KEY:"4b1tcv45ogtjwom"};
 
 /* ===== src/data/exercises.js ===== */
 (function(){'use strict';
@@ -2752,6 +2756,8 @@ function cleanSettings(o){if(!o||typeof o!=='object')return null;
   const steps=idMap(o.steps,x=>{if(!x||typeof x!=='object')return null;const r={};['lb','kg'].forEach(u=>{const n=sNum(x[u]);if(n>0&&n<=50)r[u]=n;});return Object.keys(r).length?r:null;});
   if(steps)s.steps=steps;
   const setup=idMap(o.setup,x=>typeof x==='string'&&x.trim()?sStr(x.trim(),120):null);if(setup)s.setup=setup;
+  // machine lifts marked plate-loaded {exId:true} — the weight box then takes all the plates, both sides (v0.76.0)
+  const plates=idMap(o.plates,x=>x===true?true:null);if(plates)s.plates=plates;
   // "Your record" picks {exId:track: {score,tie}} (batch 1 — stored once instead of re-stamping old workouts)
   const records=idMap(o.records,x=>{if(!x||typeof x!=='object')return null;const sc=+x.score,ti=+x.tie;return Number.isFinite(sc)?{score:sc,tie:Number.isFinite(ti)?ti:0}:null;});if(records)s.records=records;
   return s;
@@ -3317,6 +3323,13 @@ function relDayMid(ts){const r=relDay(ts);return /^(Today|Yesterday)$/.test(r)?r
 function fmtDate(ts){return new Date(ts).toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'});}
 function relDay(ts){const t=startOfDay(Date.now()),d=startOfDay(ts);const diff=Math.round((t-d)/DAY);
   if(diff===0)return'Today';if(diff===1)return'Yesterday';if(diff<7)return diff+' days ago';return fmtDate(ts);}
+// What one "side" of a lift is, in plain words: a leg for leg moves, a side for core work, else an arm.
+// The ⇆ chip, the reps header and record text say "Both arms" / "One arm at a time" / "× 12/arm" —
+// "⇆ Both sides" on a machine read like an instruction about the weight (owner, v0.76.0).
+function limbOf(id){if(!EX[id])return 'side';const g=EX[id].group;return D.LOWER_GROUPS.indexOf(g)>=0?'leg':g==='Core'?'side':'arm';}
+// A machine lift marked plate-loaded (settings.plates, per exercise, synced). Only a label: the box takes
+// ALL the plates on it, both sides, not the machine's own weight — so its history needs no new track.
+const plateLoaded=id=>!!(state.settings.plates&&state.settings.plates[id]);
 const volOf=s=>P.sessionVolume(s,bw());
 const setsOf=s=>P.sessionSets(s);
 // A "Volume" stat label, tappable for a one-line explainer (the number itself, e.g. "12,480 lb", has
@@ -3344,38 +3357,44 @@ let _confirmReturn=null;
 function showConfirm(title,msg,okLabel,cb,kind){
   $('#cdTitle').textContent=title;$('#cdMsg').textContent=msg;
   const ok=$('#cdOk');ok.textContent=okLabel;ok.className='btn '+(kind==='primary'?'primary':'danger');
-  _confirmCb=cb;const d=$('#cdialog');d.classList.add('on');d.setAttribute('aria-hidden','false');$('#cscrim').classList.add('on');
+  _confirmCb=cb;const d=$('#cdialog');d.classList.add('on');d.setAttribute('aria-hidden','false');$('#cscrim').classList.add('on');fitOverlays();
   _confirmReturn=document.activeElement;focusQuiet($('#cdCancel'));   // VoiceOver lands IN the dialog; Cancel is the safe default
 }
 function closeConfirm(){const d=$('#cdialog');d.classList.remove('on');d.setAttribute('aria-hidden','true');$('#cscrim').classList.remove('on');_confirmCb=null;
   const r=_confirmReturn;_confirmReturn=null;if(r&&document.contains(r)&&r!==document.body&&!/^(INPUT|TEXTAREA)$/.test(r.tagName))focusQuiet(r);}
-/* scrollTop=0: a reused sheet must open at its top (search bar), not wherever the last one was scrolled.
-   The blur + scroll-to-top is the fix for "I tapped Add exercise and nothing happened": the sheet is
-   position:fixed, i.e. anchored to the LAYOUT viewport, and iOS does not shrink that viewport for the
-   keyboard — it scrolls the visual viewport up over it. So opening a sheet while a weight/name field
-   still held focus painted it below the visible area, above the band the keyboard occupies. Dropping
-   focus first lets iOS restore the viewport before the sheet slides up. Deliberately touches nothing
-   in the tab-bar / safe-area model (--deficit, --screen-h) — see the invariant note in styles.css. */
-let _sheetReturnY=null,_sheetReturnFocus=null;   // background scroll position stashed when a sheet had to scroll the page to top; the element that opened it
+/* Panels on iOS. The sheet is position:fixed, i.e. pinned to the LAYOUT viewport — but what you can SEE is
+   the visual viewport, which the keyboard shrinks and which iOS can leave scrolled away from the layout
+   one after the keyboard closes. Either way the panel opened out of sight: "I tapped Add exercise and
+   nothing happened — it was up there when I scrolled up" (v0.49.0 blurred + scrolled to top for this;
+   the owner still hit it at v0.75.3). So while a panel is open, fitOverlays pins it to what is visible —
+   bottom edge on the visible bottom (the keyboard's top), no taller than the visible height — on every
+   visualViewport resize/scroll. When the two viewports agree the inline styles are cleared, so the CSS,
+   including the --deficit launch fix, is exactly as before. Deliberately touches nothing in the tab-bar
+   / safe-area model (--deficit, --screen-h) — see the invariant note in styles.css. */
+let _sheetReturnFocus=null;   // the element that opened the sheet
+function fitOverlays(){
+  const vv=window.visualViewport,sh=$('#sheet'),cd=$('#cdialog');if(!sh)return;
+  const open=sh.classList.contains('on')||(cd&&cd.classList.contains('on'));
+  let top=0,h=0,off=0,shifted=false;
+  if(vv&&open&&Math.abs((vv.scale||1)-1)<0.01){top=Math.max(0,Math.round(vv.offsetTop));h=Math.round(vv.height);off=Math.round(innerHeight-(top+h));shifted=off>2||top>2;}
+  const px=v=>shifted?v+'px':'';
+  sh.style.bottom=px(off);sh.style.maxHeight=px(h-12);
+  ['#scrim','#cscrim'].forEach(s=>{const el=$(s);if(el){el.style.top=px(top);el.style.bottom=px(off);}});
+  if(cd)cd.style.top=px(top+Math.round(h/2));
+}
 function focusQuiet(el){try{if(el)el.focus({preventScroll:true});}catch(e){}}
 function openSheet(title,body){
-  // Only when a field actually had focus — blurring/scrolling unconditionally would throw away the
-  // reader's scroll position every time they tap a PR row or an exercise from a scrolled list. When we
-  // DO scroll to top (the iOS keyboard fix), remember where they were so closeSheet can put them back —
-  // otherwise opening a Note or the ⓘ mid-set dumped them at the top of a long workout.
-  try{const ae=document.activeElement;
-    if(ae&&/^(INPUT|TEXTAREA)$/.test(ae.tagName)){ae.blur();
-      if(window.scrollY){if(_sheetReturnY==null)_sheetReturnY=window.scrollY;window.scrollTo(0,0);}}
-  }catch(e){}
+  // Drop the keyboard first (only when a field has focus — never move the reader's scroll position).
+  try{const ae=document.activeElement;if(ae&&/^(INPUT|TEXTAREA)$/.test(ae.tagName))ae.blur();}catch(e){}
   const sh=$('#sheet');if(!sh.classList.contains('on'))_sheetReturnFocus=document.activeElement;
   $('#sheetTitle').textContent=title;const b=$('#sheetBody');b.innerHTML=body;b.scrollTop=0;sh.classList.add('on');sh.setAttribute('aria-hidden','false');$('#scrim').classList.add('on');a11yScan(b);
+  fitOverlays();
   focusQuiet($('#sheetTitle'));   // announce the panel; a sheet that wants a field focused (notes) does so right after
 }
 function closeSheet(){const sh=$('#sheet'),sc=$('#scrim');
   sh.style.transition='';sh.style.transform='';if(sc)sc.style.opacity='';   // drop any leftover swipe-drag inline styles so the CSS slide-out runs
   sh.classList.remove('on');sh.setAttribute('aria-hidden','true');sc.classList.remove('on');
   const rf=_sheetReturnFocus;_sheetReturnFocus=null;if(rf&&document.contains(rf)&&rf!==document.body&&!/^(INPUT|TEXTAREA)$/.test(rf.tagName))focusQuiet(rf);   // back to the button that opened it (not a field: that would pop the keyboard)
-  if(_sheetReturnY!=null){const y=_sheetReturnY;_sheetReturnY=null;try{window.scrollTo(0,y);}catch(e){}}   // restore the pre-sheet scroll position
 }
 // Swipe-down-to-dismiss for the bottom sheet (the grab bar promised this). Drag from the grab bar/header,
 // or from the body when it's scrolled to the top; a horizontal swipe (chip rows) or a drag on a text
@@ -3488,6 +3507,17 @@ function render(){
       +'<button class="btn primary" id="ilReload" style="display:inline-block">Reload</button></div>';
     const rb=v.querySelector('#ilReload');if(rb)rb.onclick=()=>location.reload();   // JS handler (no inline on* — CSP-safe)
   }
+}
+// Re-render, keeping the control you tapped on the same spot on screen. iOS Safari has no scroll
+// anchoring, so a line appearing above it (the ★ PR banner on a tick) shoved the rows under your thumb.
+// A set field still focused is blurred first, so the keyboard closes the ordinary way instead of by the
+// field vanishing from under it (owner, v0.76.0: "ticking a set sometimes jumped the page").
+function renderKeeping(sel){
+  try{const ae=document.activeElement;if(ae&&/^(INPUT|TEXTAREA)$/.test(ae.tagName)&&$('#view').contains(ae))ae.blur();}catch(e){}
+  const a=$(sel),y0=a?a.getBoundingClientRect().top:null;
+  render();
+  const b=y0==null?null:$(sel);if(!b)return;
+  const d=b.getBoundingClientRect().top-y0;if(Math.abs(d)>1)try{window.scrollBy(0,d);}catch(e){}
 }
 /* Derived-stat memo (P2). Every expensive read — Progress-tab analytics, a card's all-time PR — is a
    full scan of state.sessions. They're pure in (sessions, bodyweight, unit, day), so we cache the
@@ -3829,14 +3859,22 @@ function startSession(spec){
 // The choice is stored only when it differs from the exercise's native equipment, so data stays clean.
 function openModePicker(ei){
   const t=cur();if(!t||!t.exercises[ei])return;const ex=t.exercises[ei];const native=EX[ex.id]?EQUIP_MODE[EX[ex.id].equip]:'barbell';const curMode=modeOf(ex);
+  // Machine comes in two rows — pin/stack or plate-loaded (v0.76.0). Plate-loaded is a per-exercise label
+  // (settings.plates), not a mode: same history, the box just says to enter all the plates.
+  const opts=[].concat(...MODE_ORDER.map(m=>m==='machine'
+    ?[{m,pl:false,label:'Machine · pin / weight stack',sub:'Enter the number on the pin'},{m,pl:true,label:'Machine · plate-loaded',sub:'Enter all the plates, both sides — not the machine itself'}]
+    :[{m,pl:false,label:MODES[m].label,sub:MODES[m].perHand?'Enter the weight of one dumbbell':MODES[m].e1rm?'Free-weight loading':'Stack / cable — shown as load, not a 1RM'}]));
+  const isOn=o=>o.m===curMode&&(o.m!=='machine'||o.pl===plateLoaded(ex.id));
   openSheet('How did you do it?',`<div class="dim" style="font-size:13px;margin:-4px 2px 14px">Progress and PRs are tracked separately for each — a Smith press won’t be compared to dumbbells.</div>
-    <div class="modelist">${MODE_ORDER.map(m=>`<button class="ex-row modeopt ${m===curMode?'on':''}" data-pickmode="${m}">
-      <div style="flex:1;min-width:0"><div class="ex-name">${esc(MODES[m].label)}${m===native?' <span class="dim" style="font-weight:400;font-size:11px">· default</span>':''}</div>
-      <div class="ex-sub">${MODES[m].perHand?'Enter the weight of one dumbbell':MODES[m].e1rm?'Free-weight loading':'Stack / cable — shown as load, not a 1RM'}</div></div>
-      ${m===curMode?'<span style="color:var(--accent);font-size:18px">✓</span>':''}</button>`).join('')}</div>`);
+    <div class="modelist">${opts.map(o=>`<button class="ex-row modeopt ${isOn(o)?'on':''}" data-pickmode="${o.m}" data-pl="${o.pl?1:0}">
+      <div style="flex:1;min-width:0"><div class="ex-name">${esc(o.label)}${o.m===native&&!o.pl?' <span class="dim" style="font-weight:400;font-size:11px">· default</span>':''}</div>
+      <div class="ex-sub">${esc(o.sub)}</div></div>
+      ${isOn(o)?'<span style="color:var(--accent);font-size:18px">✓</span>':''}</button>`).join('')}</div>`);
   $('#sheetBody').querySelectorAll('[data-pickmode]').forEach(b=>b.addEventListener('click',()=>{
-    const m=b.dataset.pickmode,x=liveExercise(t,ex,ei);if(!x){closeSheet();staleToast();return;}if(m===native)delete x.mode;else x.mode=m;
-    persistCur();closeSheet();render();toast(MODES[m].label);}));
+    const m=b.dataset.pickmode,pl=b.dataset.pl==='1',x=liveExercise(t,ex,ei);if(!x){closeSheet();staleToast();return;}if(m===native)delete x.mode;else x.mode=m;
+    if(m==='machine'&&pl!==plateLoaded(x.id)){const o=Object.assign({},state.settings.plates);if(pl)o[x.id]=true;else delete o[x.id];
+      if(Object.keys(o).length)state.settings.plates=o;else delete state.settings.plates;S.saveSettingsCloud();}
+    persistCur();closeSheet();render();toast(m==='machine'?(pl?'Plate-loaded — enter all the plates, both sides':'Machine — the number on the pin'):MODES[m].label);}));
 }
 // A free-text note on an exercise in THIS session — timestamped by the session, saved with it, synced
 // with it. Surfaced next time you do the lift ("shoulder was hurting", a form cue) so a number that
@@ -3877,13 +3915,20 @@ let plateDraft=null;
 function plateOutHtml(){
   const u=U(),r=P.platesPerSide(plateDraft.weight,plateDraft.bar,u),n=r.plates.reduce((a,p)=>a+p.count,0);
   const chips=r.plates.length?r.plates.map(p=>Array(p.count).fill(0).map(()=>`<span class="plate p${String(p.plate).replace('.','_')}">${p.plate}</span>`).join('')).join('')
-    :`<div class="dim" style="padding:12px 2px">${r.belowBar?'That’s less than the empty bar.':'Just the empty bar — no plates.'}</div>`;
+    :`<div class="dim" style="padding:12px 2px">${plateDraft.mode==='plates'?'Type the total of all the plates above.':r.belowBar?'That’s less than the empty bar.':'Just the empty bar — no plates.'}</div>`;
   return `<div class="eyebrow" style="margin:18px 2px 10px">Each side${n?` · ${n} plate${n!==1?'s':''}`:''}</div>
     <div class="plates">${chips}</div>
     ${r.leftover>0?`<div class="dim" style="font-size:12px;margin-top:10px">+${r.leftover}${u} per side left over — no standard plate fits it.</div>`:''}`;
 }
 function plateSheetBody(){
   const mode=plateDraft.mode,u=U(),smith=mode==='smith';
+  // a plate-loaded machine: the logged number is all the plates (both sides), so there's no bar to take off
+  if(mode==='plates')return `<div class="dim" style="font-size:13px;margin:-4px 2px 16px">How to load each side of the machine. Type the total of all the plates, or tap ±.</div>
+    <div class="platewt">
+      <button class="platestep" data-plw="-1" aria-label="Less">−</button>
+      <div class="platewt-in"><input id="plWeight" inputmode="decimal" value="${plateDraft.weight}" aria-label="All the plates, both sides"><span class="u">${u}</span></div>
+      <button class="platestep" data-plw="1" aria-label="More">＋</button></div>
+    <div id="plateOut">${plateOutHtml()}</div>`;
   return `<div class="dim" style="font-size:13px;margin:-4px 2px 16px">How to load each side of the ${smith?'Smith bar':'bar'}. Type a weight or tap ±.</div>
     <div class="platewt">
       <button class="platestep" data-plw="-1" aria-label="Less">−</button>
@@ -3905,7 +3950,7 @@ function bindPlateSheet(){
   $('#sheetBody').querySelectorAll('[data-plbar]').forEach(b=>b.addEventListener('click',()=>{plateDraft.bar=Math.max(0,+(plateDraft.bar+(+b.dataset.plbar)*step).toFixed(2));setBarWeight(mode,plateDraft.bar);if(bIn)bIn.value=plateDraft.bar;sync();}));
 }
 function openPlateSheet(weight,mode){
-  mode=mode==='smith'?'smith':'barbell';const bar=barWeight(mode),w=Math.round(+weight||0);
+  mode=mode==='smith'||mode==='plates'?mode:'barbell';const bar=mode==='plates'?0:barWeight(mode),w=Math.round(+weight||0);
   plateDraft={mode,bar,weight:w||bar};
   openSheet('Plate loader',plateSheetBody());bindPlateSheet();
 }
@@ -4100,7 +4145,7 @@ function topSuggestionHTML(){
 }
 // How a PR set reads, for any kind of lift (live banner + finish summary).
 function prText(e,st,kind){
-  const w=+st.w||0,r=+st.r||0,u=U(),ea=P.holdsOf(e)===2?'/ea':'',side=P.sidesOf(e)===2?'/side':'';
+  const w=+st.w||0,r=+st.r||0,u=U(),ea=P.holdsOf(e)===2?'/ea':'',side=P.sidesOf(e)===2?'/'+limbOf(e.id):'';
   if(kind==='time')return (w?w+u+ea+' · ':'')+r+'s hold'+side;
   if(kind==='resist'||kind==='assist')return (w?w+u+' assist':'unassisted')+' × '+r+side;
   if(kind==='reps')return r+' reps'+side;
@@ -4145,8 +4190,9 @@ function logExercise(s,e,ei,mode){
   // Headers say exactly what to type: "Lb ea" = weight of ONE dumbbell / one stack; "/ side" = one side's reps
   // A bodyweight move's weight box is EXTRA load (vest, plate, belt) — blank reads "BW", just you. An
   // assist machine's number is the HELP, so its header says so. (Owner: "what goes in the lb column?")
-  const bwMove=emode==='bodyweight',assistMove=D.isAssist(e.id);
-  const whdr=(bwMove?'Added ':assistMove?'Assist ':'')+(U()==='kg'?'Kg':'Lb')+(holds===2?' ea':''),rhdr=(D.TIME_METRIC.has(e.id)?'Sec':'Reps')+(sides===2?' / side':'');
+  // A plate-loaded machine's box is ALL the plates, both sides — not the machine's own weight (v0.76.0)
+  const bwMove=emode==='bodyweight',assistMove=D.isAssist(e.id),plateMove=emode==='machine'&&plateLoaded(e.id);
+  const whdr=(bwMove?'Added ':assistMove?'Assist ':plateMove?'Plates ':'')+(U()==='kg'?'Kg':'Lb')+(holds===2?' ea':''),rhdr=(D.TIME_METRIC.has(e.id)?'Sec':'Reps')+(sides===2?' / '+limbOf(e.id):'');
   // "⇆ Each side" only where doing it one-sided is realistic and changes the math
   const sideOK=(emode==='cable'||emode==='dumbbell'||emode==='machine')&&!D.isAssist(e.id)&&!D.TIME_METRIC.has(e.id);
   return `<div class="card log-ex" data-ei="${ei}">
@@ -4156,8 +4202,8 @@ function logExercise(s,e,ei,mode){
         <div class="ex-sub">${ex?ex.muscles.join(' · '):''} · target ${ex?ex.rr[0]+'–'+ex.rr[1]:'8–12'} ${D.TIME_METRIC.has(e.id)?'sec':'reps'}</div></button>
       <button class="sheet-x" data-exmenu="${ei}" aria-label="Exercise options: replace, move, setup, note, remove">⋯</button>
     </div>
-    <div class="chiprow"><button class="modechip" data-mode="${ei}" aria-label="Change equipment">${esc(MODES[emode]?MODES[emode].label:emode)} ▾</button>
-      ${sideOK?`<button class="modechip${sides===2?' on':''}" data-side="${ei}" aria-pressed="${sides===2}" aria-label="One side at a time">⇆ ${sides===2?'Each side':'Both sides'}</button>`:''}</div>
+    <div class="chiprow"><button class="modechip" data-mode="${ei}" aria-label="Change equipment">${esc(plateMove?'Plate-loaded':MODES[emode]?MODES[emode].label:emode)} ▾</button>
+      ${sideOK?`<button class="modechip${sides===2?' on':''}" data-side="${ei}" aria-pressed="${sides===2}" aria-label="One ${limbOf(e.id)} at a time">⇆ ${sides===2?'One '+limbOf(e.id)+' at a time':'Both '+limbOf(e.id)+'s'}</button>`:''}</div>
     ${exSetup(e.id)?`<button class="sugg match" data-exsetup="${ei}" style="width:calc(100% - 24px);text-align:left;color:var(--ink-2)"><span>📌 ${esc(exSetup(e.id))}</span></button>`:''}
     ${prLine}${sugg}${noteLine}
     <div class="setgrid">
@@ -4165,12 +4211,13 @@ function logExercise(s,e,ei,mode){
       ${e.sets.map((st,si)=>setRow(st,ei,si,e.sets.slice(0,si).filter(x=>!x.warm).length+1,bwMove)).join('')}
     </div>
     ${bwMove&&mode!=='view'&&!e.sets.some(st=>+st.w>0)?'<div class="hint bwhint">BW = just your bodyweight, so leave it blank. Wearing a vest or holding a plate? Enter only the extra weight.</div>':''}
+    ${plateMove&&mode!=='view'&&!e.sets.some(st=>+st.w>0)?'<div class="hint platehint">Add up all the plates on the machine, both sides. Don’t count the machine itself.</div>':''}
     <div class="set-actions">
       <button class="linkbtn" data-addset="${ei}">＋ Add set</button>
       ${mode!=='view'&&!e.sets.some(st=>st.warm)?`<button class="linkbtn dim" data-addwarm="${ei}">＋ Warm-up</button>`:''}
       ${e.sets.length>1?`<button class="linkbtn" data-delset="${ei}">－ Remove set</button>`:''}
       ${D.TIME_METRIC.has(e.id)&&todayScreen==='active'?`<button class="linkbtn" data-stopwatch="${ei}">⏱ Stopwatch</button>`:''}
-      ${(emode==='barbell'||emode==='smith')?`<button class="linkbtn" data-plates="${ei}">🏋 Plates</button>`:''}
+      ${(emode==='barbell'||emode==='smith'||plateMove)?`<button class="linkbtn" data-plates="${ei}">🏋 Plates</button>`:''}
     </div>
     ${ei===0&&state.sessions.length<3?'<div class="hint">Tip: tap a set number to mark it a warm-up (kept out of PRs and volume).</div>':''}
   </div>`;
@@ -4237,7 +4284,7 @@ function sessCard(s){
     <div class="sess-ex">${s.exercises.slice(0,4).map(e=>{const work=e.sets.filter(st=>P.isWorking(st)&&!st.warm);
       // (batch 5) "3 sets · top 185lb × 5" from ONE set — it used to pair the first set's reps with the heaviest weight
       const inv=D.isAssist(e.id),top=work.reduce((a,x)=>!a?x:(inv?(+x.w||0)<(+a.w||0):(+x.w||0)>(+a.w||0)||((+x.w||0)===(+a.w||0)&&(+x.r||0)>(+a.r||0)))?x:a,null);
-      const f={time:D.TIME_METRIC.has(e.id),assist:inv,bodyweight:(EX[e.id]||{}).equip==='Bodyweight',holds:P.holdsOf(e),sides:P.sidesOf(e)};
+      const f={id:e.id,time:D.TIME_METRIC.has(e.id),assist:inv,bodyweight:(EX[e.id]||{}).equip==='Bodyweight',holds:P.holdsOf(e),sides:P.sidesOf(e)};
       return `<div><span>${esc(EX[e.id]?EX[e.id].name:e.name)}</span><span class="s">${work.length}× · ${top?esc(liftSetText(f,{w:+top.w||0,r:+top.r||0})):'—'}</span></div>`;}).join('')}
       ${s.exercises.length>4?`<div class="dim" style="font-size:12px">+${s.exercises.length-4} more</div>`:''}</div>
     ${s.note?`<div class="sess-note" style="margin-top:9px;padding-top:9px;border-top:1px solid var(--line);font-size:12.5px;color:var(--ink-2);line-height:1.4">📝 ${esc(s.note)}</div>`:''}
@@ -4250,11 +4297,11 @@ function sessCard(s){
 function libResultsHtml(){
   let res=SR.searchEx(libQuery);
   if(libGroup!=='All')res=res.filter(e=>e.group===libGroup||e.muscles.includes(libGroup));
-  return `<div class="dim" style="font-size:12.5px;margin:8px 2px 10px" aria-live="polite">${res.length} exercise${res.length!==1?'s':''}</div>
+  return `<div class="dim libcount" style="font-size:12.5px;margin:8px 2px 10px" aria-live="polite">${res.length} exercise${res.length!==1?'s':''}</div>
     <div class="card list">${res.length?res.map(e=>libRow(e)).join(''):(/tread|run|jog|walk|bike|cycl|spin|ellip|stair|cardio|swim/i.test(libQuery)?'<div style="padding:20px;text-align:center"><div class="dim" style="margin-bottom:10px">Cardio is logged on its own — time, type and distance.</div><button class="btn primary sm" data-action="cardioOpen" style="display:inline-flex">Log cardio</button></div>':'<div style="padding:24px;text-align:center" class="dim">No match. Try a simpler word like “press” or “curl”.</div>')}</div>`;
 }
 function viewLibrary(){
-  return `<div class="section">
+  return `<div class="section libsec">
     <div class="view-title" style="margin:0 2px 14px;font-size:22px">Exercise Library</div>
     <div class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
       <input id="libSearch" type="search" aria-label="Search exercises" placeholder="Describe or name an exercise…" value="${esc(libQuery)}"></div>
@@ -4342,9 +4389,9 @@ function prTip(){
 }
 const CHEV_R='<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color:var(--ink-3)"><path d="M9 6l6 6-6 6"/></svg>';
 // A record's set, written the way the record reads: "Bodyweight +10lb × 8", "45lb/ea × 10", "60s",
-// "/side" when each side is counted. One copy for the PR list and the PR-adjust card.
+// "/arm" (or /leg, /side) when each side is counted. One copy for the PR list and the PR-adjust card.
 // (batch 5) the same writer as Your lifts — the PR list said "40kg × 8" for an assist machine and "× 40s" for a carry
-function prSetText(p,w,r){return liftSetText({time:p.time,assist:p.inverted,bodyweight:p.bodyweight,holds:p.holds,sides:p.sides},{w,r});}
+function prSetText(p,w,r){return liftSetText({id:p.id,time:p.time,assist:p.inverted,bodyweight:p.bodyweight,holds:p.holds,sides:p.sides},{w,r});}
 let recordsAll=false;
 function prList(){
   const all=memoStat('prAll',()=>A.personalRecords(state.sessions,bw(),999)),arr=recordsAll?all:all.slice(0,8);
@@ -4353,9 +4400,9 @@ function prList(){
   // show the modality only when it isn't the exercise's native equipment (so a Smith/cable variant
   // is distinguishable from the default; ordinary PRs stay uncluttered)
   const pill=t=>` <span class="pill" style="font-size:10px;padding:1px 7px">${esc(t)}</span>`;
-  // …and tag a lift done the non-default way round ("Each side" / "Both sides"), since it keeps its own record
+  // …and tag a lift done the non-default way round ("One arm" / "Both arms"), since it keeps its own record
   const modeTag=p=>{const ex=EX[p.id];const native=ex&&EQUIP_MODE[ex.equip];
-    return (p.mode&&p.mode!==native?pill(MODES[p.mode].label):'')+(p.track&&p.track.indexOf('|')>=0?pill(p.sides===2?'Each side':'Both sides'):'');};
+    return (p.mode&&p.mode!==native?pill(MODES[p.mode].label):'')+(p.track&&p.track.indexOf('|')>=0?pill(p.sides===2?'One '+limbOf(p.id):'Both '+limbOf(p.id)+'s'):'');};
   return arr.map(p=>`<div class="ex-row" data-openex="${p.id}" data-track="${esc(p.track)}" style="cursor:pointer"><div style="flex:1;min-width:0"><div class="ex-name">${esc(p.name)}${modeTag(p)}</div>
     <div class="ex-sub">Record ${setStr(p)}</div>${p.adjusted?`<div class="ex-sub">Your pick · best logged ${setStr({...p,w:p.adjusted.w,r:p.adjusted.r})}</div>`:''}</div>
     <span class="dim" style="font-size:12px;flex-shrink:0">${fmtDate(p.date).replace(/^\w+, /,'')}</span>${CHEV_R}</div>`).join('')   // the date, not an "e1RM" nobody lifted (batch 5)
@@ -4394,7 +4441,7 @@ function collapsible(key,title,summary,body,margin,closedByDefault){
 let liftsAll=false;   // "Show all" on Your lifts (screen state, not saved)
 const LIFT_BADGE={pr:['★','New PR','var(--accent)'],up:['▲','Improving','var(--good)'],stuck:['⏸','Stuck','var(--warn)'],down:['↘','Below your best','var(--ink-3)'],hold:['→','Holding','var(--ink-3)'],new:['•','First time','var(--ink-3)']};
 // A lift's set, written the way it reads everywhere else: "155lb × 8", "60s", "30lb assist × 8", "Bodyweight × 12".
-function liftSetText(l,st){const u=U(),side=l.sides===2?'/side':'';
+function liftSetText(l,st){const u=U(),side=l.sides===2?'/'+limbOf(l.id):'';
   if(l.time)return (st.w?st.w+u+(l.holds===2?'/ea':'')+' · ':'')+st.r+'s'+side;
   if(l.assist)return (st.w?st.w+u+' assist':'unassisted')+' × '+st.r+side;
   if(l.bodyweight)return (st.w?'Bodyweight +'+st.w+u:'Bodyweight')+' × '+st.r+side;
@@ -4403,7 +4450,7 @@ function liftRow(l){
   const b=LIFT_BADGE[l.status],ex=EX[l.id],native=ex&&EQUIP_MODE[ex.equip];
   const pill=t=>` <span class="pill" style="font-size:10px;padding:1px 7px">${esc(t)}</span>`;
   // tag BOTH the equipment and the side, so two versions of one lift can be told apart (batch 5)
-  const tag=(l.mode&&l.mode!==native&&MODES[l.mode]?pill(MODES[l.mode].label):'')+(l.track&&l.track.indexOf('|')>=0?pill(l.sides===2?'Each side':'Both sides'):'');
+  const tag=(l.mode&&l.mode!==native&&MODES[l.mode]?pill(MODES[l.mode].label):'')+(l.track&&l.track.indexOf('|')>=0?pill(l.sides===2?'One '+limbOf(l.id):'Both '+limbOf(l.id)+'s'):'');
   const sub=l.status==='stuck'?`${liftSetText(l,l.to)} · no gain in 2+ weeks`
     :l.status==='down'?`${liftSetText(l,l.to)} <span class="dim">· best ${esc(liftSetText(l,l.best))}</span>`
     :l.from?`${liftSetText(l,l.to)} <span class="dim">· was ${esc(liftSetText(l,l.from))}</span>`:`Best ${liftSetText(l,l.best)}`;
@@ -4539,7 +4586,7 @@ function trendCard(id,track){
   const asst=metric==='assist';   // shown as the assist itself; progress = LESS of it
   const arrow=delta>0?'▲ stronger':delta<0?'▼ below your best':'— same';
   const lastPt=series[series.length-1],ex0=EX[id]||{};
-  const shown=esc(liftSetText({time:D.TIME_METRIC.has(id),assist:D.isAssist(id),bodyweight:ex0.equip==='Bodyweight',holds:1,sides:String(dmode).indexOf('|1side')>=0?2:1},{w:lastPt.w,r:lastPt.r}));
+  const shown=esc(liftSetText({id,time:D.TIME_METRIC.has(id),assist:D.isAssist(id),bodyweight:ex0.equip==='Bodyweight',holds:1,sides:String(dmode).indexOf('|1side')>=0?2:1},{w:lastPt.w,r:lastPt.r}));
   return `<div class="card" style="padding:14px 15px;margin:0 0 12px">
     <div class="row-between" style="margin-bottom:9px"><span class="eyebrow">${label}</span>
       <span class="mono" style="font-weight:700;color:${col}">${shown} <span style="font-size:12px">${arrow}</span></span></div>
@@ -4559,7 +4606,7 @@ function prFor(id,track){const all=A.personalRecords(state.sessions,bw(),999).fi
   return all.find(x=>x.track===t)||all[0];}
 // How to write a set of this lift (seconds, assist, bodyweight, per-dumbbell, per-side) — from its record.
 function recFlags(id,p){const ex=EX[id]||{};
-  return {time:D.TIME_METRIC.has(id),assist:D.isAssist(id),bodyweight:p?!!p.bodyweight:ex.equip==='Bodyweight',holds:p?p.holds:1,sides:p?p.sides:1};}
+  return {id,time:D.TIME_METRIC.has(id),assist:D.isAssist(id),bodyweight:p?!!p.bodyweight:ex.equip==='Bodyweight',holds:p?p.holds:1,sides:p?p.sides:1};}
 function recordCard(id,track){
   const p=prFor(id,track);if(!p)return '';
   const f=recFlags(id,p),txt=(w,r)=>esc(liftSetText(f,{w,r}));
@@ -4630,8 +4677,8 @@ function addListHtml(target){const rec=recentExerciseIds(target,8),row=e=>libRow
 function openAddExercise(){
   const target=cur();
   const sugg=target&&target.exercises.length?B.complementSuggestions(target.exercises.map(e=>e.id),3):[];
-  const suggHTML=sugg.length?`<div class="eyebrow" style="margin:0 2px 8px;display:flex;align-items:center;gap:6px"><span style="color:var(--accent)">✦</span> Smart picks to complement your workout</div>
-    <div class="card list" id="addSuggest" style="margin-bottom:16px">${sugg.map(s=>`<div class="ex-row" data-quickadd="${s.id}"><div class="ex-ic">${exIcon(EX[s.id].group)}</div><div style="flex:1;min-width:0"><div class="ex-name">${esc(EX[s.id].name)}</div><div class="ex-sub" style="color:var(--accent)">${esc(s.why)}</div></div><div class="ex-add">＋</div></div>`).join('')}</div>`:'';
+  const suggHTML=sugg.length?`<div id="addPicks"><div class="eyebrow" style="margin:0 2px 8px;display:flex;align-items:center;gap:6px"><span style="color:var(--accent)">✦</span> Smart picks to complement your workout</div>
+    <div class="card list" id="addSuggest" style="margin-bottom:16px">${sugg.map(s=>`<div class="ex-row" data-quickadd="${s.id}"><div class="ex-ic">${exIcon(EX[s.id].group)}</div><div style="flex:1;min-width:0"><div class="ex-name">${esc(EX[s.id].name)}</div><div class="ex-sub" style="color:var(--accent)">${esc(s.why)}</div></div><div class="ex-add">＋</div></div>`).join('')}</div></div>`:'';
   openSheet('Add exercise',`${suggHTML}<div class="search" style="margin-bottom:12px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
     <input id="addSearch" placeholder="Search or describe an exercise…"></div>
     <div class="chips hscroll" id="addGroups" style="margin-bottom:12px">${['All',...GROUPS].map(g=>`<button class="chip ${g==='All'?'on':''}" data-ag="${g}">${g}</button>`).join('')}</div>
@@ -4644,6 +4691,11 @@ function openAddExercise(){
     let r=SR.searchEx(inp.value);if(ag!=='All')r=r.filter(e=>e.group===ag||e.muscles.includes(ag));
     $('#addResults').innerHTML=r.length?r.map(e=>libRow(e,'data-quickadd="'+e.id+'"')).join(''):'<div style="padding:20px;text-align:center" class="dim">No match.</div>';};
   inp.addEventListener('input',refresh);
+  // Searching: the smart picks go, so the results sit right under the box — with them above it, the
+  // keyboard covered the results (owner, v0.76.0). Gone for the rest of this panel: bringing them back
+  // on blur would shift the list under the finger mid-tap.
+  const hidePicks=()=>{const pk=$('#addPicks');if(pk&&!pk.hidden){pk.hidden=true;$('#sheetBody').scrollTop=0;}};
+  inp.addEventListener('focus',hidePicks);inp.addEventListener('input',hidePicks);
   $('#addGroups').addEventListener('click',ev=>{const b=ev.target.closest('[data-ag]');if(!b)return;ag=b.dataset.ag;$('#addGroups').querySelectorAll('.chip').forEach(c=>c.classList.toggle('on',c===b));refresh();});
 }
 function openNameSheet(title,defaultName,cb){
@@ -4695,7 +4747,7 @@ function viewportDiag(){
     const b=Math.round(parseFloat(cs.paddingBottom)||0), t=Math.round(parseFloat(cs.paddingTop)||0);
     probe.remove();
     const vv=window.visualViewport;
-    return `screen ${screen.width}×${screen.height} · inner ${innerWidth}×${innerHeight}`+(vv?` · visual ${Math.round(vv.height)}`:'')+` · inset top ${t} bottom ${b} · deficit ${viewportDeficit()}`;
+    return `screen ${screen.width}×${screen.height} · inner ${innerWidth}×${innerHeight}`+(vv?` · visual ${Math.round(vv.height)}`+(vv.offsetTop>=1?` @${Math.round(vv.offsetTop)}`:''):'')+` · inset top ${t} bottom ${b} · deficit ${viewportDeficit()}`;
   }catch(e){return '';}
 }
 /* The launch-time viewport bug, handled deterministically. In an installed (standalone) iOS web app
@@ -4770,7 +4822,8 @@ function watchViewport(){
   ['resize','orientationchange','pageshow','focus','scroll'].forEach(ev=>addEventListener(ev,syncViewportDeficit,{passive:true}));
   document.addEventListener('visibilitychange',syncViewportDeficit);
   if(window.visualViewport){visualViewport.addEventListener('resize',syncViewportDeficit);
-    visualViewport.addEventListener('resize',syncKeyboard);visualViewport.addEventListener('scroll',syncKeyboard);}
+    visualViewport.addEventListener('resize',syncKeyboard);visualViewport.addEventListener('scroll',syncKeyboard);
+    visualViewport.addEventListener('resize',fitOverlays);visualViewport.addEventListener('scroll',fitOverlays);}   // an open panel follows the visible area (keyboard up/down)
   addEventListener('focusout',()=>setTimeout(syncKeyboard,50),{passive:true});   // catch the keyboard dismissing
   // Re-arm the settle poll after events whose final layout can lag the event itself (iOS fires
   // orientationchange before innerWidth/Height update; returning from background can re-trigger a correction).
@@ -5514,20 +5567,20 @@ function bindLog(root){
       // seconds later keeps its true time, instead of jumping to "now" and skewing the rest medians).
       if(st.done&&!(+st.at>0))st.at=todayScreen==='edit'?pastTickTime(t):Date.now();   // a set ticked while editing an old workout belongs to THAT day, not today (batch 4)
       if(st.done&&todayScreen==='active'&&state.settings.rest.auto&&!st.warm&&!(swState&&swState.phase==='run'))startRest(restSecondsFor(t.exercises[ei].id));   // a hold in progress isn't cancelled by ticking another set (batch 4)
-      persistCur();render();return;}
-    const wm=e.target.closest('[data-warm]');if(wm){const ei=+wm.dataset.warm,si=+wm.dataset.s;const st=t.exercises[ei].sets[si];st.warm=!st.warm;persistCur();render();toast(st.warm?'Marked as warm-up':'Counted as a working set');return;}
+      persistCur();renderKeeping(`[data-check="${ei}"][data-s="${si}"]`);return;}
+    const wm=e.target.closest('[data-warm]');if(wm){const ei=+wm.dataset.warm,si=+wm.dataset.s;const st=t.exercises[ei].sets[si];st.warm=!st.warm;persistCur();renderKeeping(`[data-warm="${ei}"][data-s="${si}"]`);toast(st.warm?'Marked as warm-up':'Counted as a working set');return;}
     const step=e.target.closest('[data-step]');if(step){if(heldRepeat){heldRepeat=false;return;}   // the click after a hold is not one more step
       stepSet(+step.dataset.ei,+step.dataset.s,step.dataset.step,+step.dataset.d);return;}
     const aw=e.target.closest('[data-addwarm]');if(aw){const ex=t.exercises[+aw.dataset.addwarm];if(!ex)return;const first=ex.sets.find(s=>!s.warm)||{};const step=inc(EX[ex.id]);
       // ~50% of your first working set, on your weight step; inserted after any existing warm-ups (batch 4)
       const w=+first.w>0?Math.max(step,Math.round((+first.w*0.5)/step)*step):'';const at=ex.sets.filter(s=>s.warm).length;
-      ex.sets.splice(at,0,{w,r:Math.max(8,+first.r||8),warm:true,done:false});persistCur();render();toast('Warm-up added — it’ll be remembered next time');return;}
-    const add=e.target.closest('[data-addset]');if(add){const ei=+add.dataset.addset;const sets=t.exercises[ei].sets;const last=sets[sets.length-1]||{w:'',r:''};sets.push({w:last.w,r:last.r,done:false});persistCur();render();return;}
+      ex.sets.splice(at,0,{w,r:Math.max(8,+first.r||8),warm:true,done:false});persistCur();renderKeeping(`[data-addset="${+aw.dataset.addwarm}"]`);toast('Warm-up added — it’ll be remembered next time');return;}
+    const add=e.target.closest('[data-addset]');if(add){const ei=+add.dataset.addset;const sets=t.exercises[ei].sets;const last=sets[sets.length-1]||{w:'',r:''};sets.push({w:last.w,r:last.r,done:false});persistCur();renderKeeping(`[data-addset="${ei}"]`);return;}
     const sw=e.target.closest('[data-stopwatch]');if(sw){startStopwatch(+sw.dataset.stopwatch);return;}
-    const pl=e.target.closest('[data-plates]');if(pl){const ex=t.exercises[+pl.dataset.plates],m=P.modeOf(ex);const nxt=ex.sets.find(s=>!s.done&&+s.w>0);const top=nxt?+nxt.w:Math.max(0,...ex.sets.filter(s=>!s.warm).map(s=>+s.w||0));openPlateSheet(top||barWeight(m),m);return;}   // the set you're about to load (warm-ups included), not the heaviest (batch 4)   // heaviest entered work set (not just ticked ones — you load the bar before lifting)
+    const pl=e.target.closest('[data-plates]');if(pl){const ex=t.exercises[+pl.dataset.plates],m=P.modeOf(ex);const nxt=ex.sets.find(s=>!s.done&&+s.w>0);const top=nxt?+nxt.w:Math.max(0,...ex.sets.filter(s=>!s.warm).map(s=>+s.w||0));const pm=m==='machine'&&plateLoaded(ex.id)?'plates':m;openPlateSheet(top||(pm==='plates'?0:barWeight(m)),pm);return;}   // the set you're about to load (warm-ups included), not the heaviest (batch 4)   // heaviest entered work set (not just ticked ones — you load the bar before lifting)
     const rem=e.target.closest('[data-delset]');if(rem){const ei=+rem.dataset.delset,ex=t.exercises[ei];const sets=ex.sets;if(sets.length<=1)return;
       const idx=sets.length-1;
-      const doRemove=()=>{const removed=sets.splice(idx,1)[0];persistCur();render();
+      const doRemove=()=>{const removed=sets.splice(idx,1)[0];persistCur();renderKeeping(`[data-addset="${ei}"]`);
         toast('Set removed',{label:'Undo',fn:()=>{const x=liveExercise(t,ex,ei);if(!x){staleToast();return;}x.sets.splice(Math.min(idx,x.sets.length),0,removed);persistCur();render();}});};   // by identity: after a reorder, index ei is a DIFFERENT exercise
       if(sets[idx].done)showConfirm('Remove last set?','That set is marked done — remove it anyway?','Remove',doRemove);else doRemove();return;}
     const em=e.target.closest('[data-exmenu]');if(em){openExMenu(+em.dataset.exmenu);return;}
@@ -5553,7 +5606,7 @@ function bindLog(root){
       // refill the rows you haven't ticked from THIS version's history (the numbers used to stay, now meaning per side — batch 4)
       const lp=P.lastPerf(state.sessions,ex.id,{mode:P.trackOf(ex),clean:true,excludeId:t.id,beforeTs:todayScreen==='edit'?t.date:undefined});
       if(lp){let k=0;ex.sets.forEach(st=>{if(st.done||st.warm)return;const n=lp.sets[Math.min(k++,lp.sets.length-1)];st.w=n.w;st.r=n.r;});}
-      persistCur();render();toast(next?'One side at a time — reps per side':'Both sides at once');return;}
+      const lb=limbOf(ex.id);persistCur();render();toast(next?'One '+lb+' at a time — reps per '+lb:'Both '+lb+'s together');return;}
     const nt=e.target.closest('[data-note]');if(nt){openNote(+nt.dataset.note);return;}
     const oe=e.target.closest('[data-openex]');if(oe){if(EX[oe.dataset.openex])openSheet(EX[oe.dataset.openex].name,exerciseDetail(oe.dataset.openex,oe.dataset.track));return;}
   });
@@ -5693,7 +5746,7 @@ function boot(){
   applyTheme();watchViewport();initSheetGestures();setTab('today');S.initCloud();
   if(state.justSeeded)setTimeout(()=>toast('Sample data loaded — explore every tab'),600);
 }
-IL.ui={toast,render,setTab,openSettings,boot};
+IL.ui={toast,render,setTab,openSettings,boot,fitOverlays};
 // Last-resort guards: a runtime error in an event handler or a rejected promise should degrade
 // quietly, never blank the screen or surface a raw stack to the user.
 try{

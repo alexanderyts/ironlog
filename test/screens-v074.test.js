@@ -58,8 +58,8 @@ test('UI: each version of a lift opens its OWN record',()=>{
     h.S.upsertSession({id:'b',schema:1,date:now-1*DAY,updatedAt:1,completed:true,exercises:[{id:'dumbbell-curl',side:true,sets:[{w:25,r:12,done:true}]}]},false);
     h.click('.tab[data-tab="progress"]');
     const rows=h.$$('#liftCard [data-openex]').filter(r=>r.dataset.openex==='dumbbell-curl');
-    assert.equal(rows.length,2);assert.ok(rows.some(r=>/Each side/.test(r.textContent)),'tagged');
-    const both=rows.find(r=>!/Each side/.test(r.textContent));h.click(both);
+    assert.equal(rows.length,2);assert.ok(rows.some(r=>/One arm/.test(r.textContent)),'tagged');
+    const both=rows.find(r=>!/One arm/.test(r.textContent));h.click(both);
     assert.match(h.text('#sheetBody'),/Your record 30lb\/ea × 11/,'the both-hands row opens the both-hands record');
   }finally{h.teardown();}
 });

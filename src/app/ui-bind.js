@@ -511,20 +511,20 @@ function bindLog(root){
       // seconds later keeps its true time, instead of jumping to "now" and skewing the rest medians).
       if(st.done&&!(+st.at>0))st.at=todayScreen==='edit'?pastTickTime(t):Date.now();   // a set ticked while editing an old workout belongs to THAT day, not today (batch 4)
       if(st.done&&todayScreen==='active'&&state.settings.rest.auto&&!st.warm&&!(swState&&swState.phase==='run'))startRest(restSecondsFor(t.exercises[ei].id));   // a hold in progress isn't cancelled by ticking another set (batch 4)
-      persistCur();render();return;}
-    const wm=e.target.closest('[data-warm]');if(wm){const ei=+wm.dataset.warm,si=+wm.dataset.s;const st=t.exercises[ei].sets[si];st.warm=!st.warm;persistCur();render();toast(st.warm?'Marked as warm-up':'Counted as a working set');return;}
+      persistCur();renderKeeping(`[data-check="${ei}"][data-s="${si}"]`);return;}
+    const wm=e.target.closest('[data-warm]');if(wm){const ei=+wm.dataset.warm,si=+wm.dataset.s;const st=t.exercises[ei].sets[si];st.warm=!st.warm;persistCur();renderKeeping(`[data-warm="${ei}"][data-s="${si}"]`);toast(st.warm?'Marked as warm-up':'Counted as a working set');return;}
     const step=e.target.closest('[data-step]');if(step){if(heldRepeat){heldRepeat=false;return;}   // the click after a hold is not one more step
       stepSet(+step.dataset.ei,+step.dataset.s,step.dataset.step,+step.dataset.d);return;}
     const aw=e.target.closest('[data-addwarm]');if(aw){const ex=t.exercises[+aw.dataset.addwarm];if(!ex)return;const first=ex.sets.find(s=>!s.warm)||{};const step=inc(EX[ex.id]);
       // ~50% of your first working set, on your weight step; inserted after any existing warm-ups (batch 4)
       const w=+first.w>0?Math.max(step,Math.round((+first.w*0.5)/step)*step):'';const at=ex.sets.filter(s=>s.warm).length;
-      ex.sets.splice(at,0,{w,r:Math.max(8,+first.r||8),warm:true,done:false});persistCur();render();toast('Warm-up added — it’ll be remembered next time');return;}
-    const add=e.target.closest('[data-addset]');if(add){const ei=+add.dataset.addset;const sets=t.exercises[ei].sets;const last=sets[sets.length-1]||{w:'',r:''};sets.push({w:last.w,r:last.r,done:false});persistCur();render();return;}
+      ex.sets.splice(at,0,{w,r:Math.max(8,+first.r||8),warm:true,done:false});persistCur();renderKeeping(`[data-addset="${+aw.dataset.addwarm}"]`);toast('Warm-up added — it’ll be remembered next time');return;}
+    const add=e.target.closest('[data-addset]');if(add){const ei=+add.dataset.addset;const sets=t.exercises[ei].sets;const last=sets[sets.length-1]||{w:'',r:''};sets.push({w:last.w,r:last.r,done:false});persistCur();renderKeeping(`[data-addset="${ei}"]`);return;}
     const sw=e.target.closest('[data-stopwatch]');if(sw){startStopwatch(+sw.dataset.stopwatch);return;}
-    const pl=e.target.closest('[data-plates]');if(pl){const ex=t.exercises[+pl.dataset.plates],m=P.modeOf(ex);const nxt=ex.sets.find(s=>!s.done&&+s.w>0);const top=nxt?+nxt.w:Math.max(0,...ex.sets.filter(s=>!s.warm).map(s=>+s.w||0));openPlateSheet(top||barWeight(m),m);return;}   // the set you're about to load (warm-ups included), not the heaviest (batch 4)   // heaviest entered work set (not just ticked ones — you load the bar before lifting)
+    const pl=e.target.closest('[data-plates]');if(pl){const ex=t.exercises[+pl.dataset.plates],m=P.modeOf(ex);const nxt=ex.sets.find(s=>!s.done&&+s.w>0);const top=nxt?+nxt.w:Math.max(0,...ex.sets.filter(s=>!s.warm).map(s=>+s.w||0));const pm=m==='machine'&&plateLoaded(ex.id)?'plates':m;openPlateSheet(top||(pm==='plates'?0:barWeight(m)),pm);return;}   // the set you're about to load (warm-ups included), not the heaviest (batch 4)   // heaviest entered work set (not just ticked ones — you load the bar before lifting)
     const rem=e.target.closest('[data-delset]');if(rem){const ei=+rem.dataset.delset,ex=t.exercises[ei];const sets=ex.sets;if(sets.length<=1)return;
       const idx=sets.length-1;
-      const doRemove=()=>{const removed=sets.splice(idx,1)[0];persistCur();render();
+      const doRemove=()=>{const removed=sets.splice(idx,1)[0];persistCur();renderKeeping(`[data-addset="${ei}"]`);
         toast('Set removed',{label:'Undo',fn:()=>{const x=liveExercise(t,ex,ei);if(!x){staleToast();return;}x.sets.splice(Math.min(idx,x.sets.length),0,removed);persistCur();render();}});};   // by identity: after a reorder, index ei is a DIFFERENT exercise
       if(sets[idx].done)showConfirm('Remove last set?','That set is marked done — remove it anyway?','Remove',doRemove);else doRemove();return;}
     const em=e.target.closest('[data-exmenu]');if(em){openExMenu(+em.dataset.exmenu);return;}
@@ -550,7 +550,7 @@ function bindLog(root){
       // refill the rows you haven't ticked from THIS version's history (the numbers used to stay, now meaning per side — batch 4)
       const lp=P.lastPerf(state.sessions,ex.id,{mode:P.trackOf(ex),clean:true,excludeId:t.id,beforeTs:todayScreen==='edit'?t.date:undefined});
       if(lp){let k=0;ex.sets.forEach(st=>{if(st.done||st.warm)return;const n=lp.sets[Math.min(k++,lp.sets.length-1)];st.w=n.w;st.r=n.r;});}
-      persistCur();render();toast(next?'One side at a time — reps per side':'Both sides at once');return;}
+      const lb=limbOf(ex.id);persistCur();render();toast(next?'One '+lb+' at a time — reps per '+lb:'Both '+lb+'s together');return;}
     const nt=e.target.closest('[data-note]');if(nt){openNote(+nt.dataset.note);return;}
     const oe=e.target.closest('[data-openex]');if(oe){if(EX[oe.dataset.openex])openSheet(EX[oe.dataset.openex].name,exerciseDetail(oe.dataset.openex,oe.dataset.track));return;}
   });
@@ -690,7 +690,7 @@ function boot(){
   applyTheme();watchViewport();initSheetGestures();setTab('today');S.initCloud();
   if(state.justSeeded)setTimeout(()=>toast('Sample data loaded — explore every tab'),600);
 }
-IL.ui={toast,render,setTab,openSettings,boot};
+IL.ui={toast,render,setTab,openSettings,boot,fitOverlays};
 // Last-resort guards: a runtime error in an event handler or a rejected promise should degrade
 // quietly, never blank the screen or surface a raw stack to the user.
 try{

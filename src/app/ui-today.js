@@ -302,14 +302,22 @@ function startSession(spec){
 // The choice is stored only when it differs from the exercise's native equipment, so data stays clean.
 function openModePicker(ei){
   const t=cur();if(!t||!t.exercises[ei])return;const ex=t.exercises[ei];const native=EX[ex.id]?EQUIP_MODE[EX[ex.id].equip]:'barbell';const curMode=modeOf(ex);
+  // Machine comes in two rows — pin/stack or plate-loaded (v0.76.0). Plate-loaded is a per-exercise label
+  // (settings.plates), not a mode: same history, the box just says to enter all the plates.
+  const opts=[].concat(...MODE_ORDER.map(m=>m==='machine'
+    ?[{m,pl:false,label:'Machine · pin / weight stack',sub:'Enter the number on the pin'},{m,pl:true,label:'Machine · plate-loaded',sub:'Enter all the plates, both sides — not the machine itself'}]
+    :[{m,pl:false,label:MODES[m].label,sub:MODES[m].perHand?'Enter the weight of one dumbbell':MODES[m].e1rm?'Free-weight loading':'Stack / cable — shown as load, not a 1RM'}]));
+  const isOn=o=>o.m===curMode&&(o.m!=='machine'||o.pl===plateLoaded(ex.id));
   openSheet('How did you do it?',`<div class="dim" style="font-size:13px;margin:-4px 2px 14px">Progress and PRs are tracked separately for each — a Smith press won’t be compared to dumbbells.</div>
-    <div class="modelist">${MODE_ORDER.map(m=>`<button class="ex-row modeopt ${m===curMode?'on':''}" data-pickmode="${m}">
-      <div style="flex:1;min-width:0"><div class="ex-name">${esc(MODES[m].label)}${m===native?' <span class="dim" style="font-weight:400;font-size:11px">· default</span>':''}</div>
-      <div class="ex-sub">${MODES[m].perHand?'Enter the weight of one dumbbell':MODES[m].e1rm?'Free-weight loading':'Stack / cable — shown as load, not a 1RM'}</div></div>
-      ${m===curMode?'<span style="color:var(--accent);font-size:18px">✓</span>':''}</button>`).join('')}</div>`);
+    <div class="modelist">${opts.map(o=>`<button class="ex-row modeopt ${isOn(o)?'on':''}" data-pickmode="${o.m}" data-pl="${o.pl?1:0}">
+      <div style="flex:1;min-width:0"><div class="ex-name">${esc(o.label)}${o.m===native&&!o.pl?' <span class="dim" style="font-weight:400;font-size:11px">· default</span>':''}</div>
+      <div class="ex-sub">${esc(o.sub)}</div></div>
+      ${isOn(o)?'<span style="color:var(--accent);font-size:18px">✓</span>':''}</button>`).join('')}</div>`);
   $('#sheetBody').querySelectorAll('[data-pickmode]').forEach(b=>b.addEventListener('click',()=>{
-    const m=b.dataset.pickmode,x=liveExercise(t,ex,ei);if(!x){closeSheet();staleToast();return;}if(m===native)delete x.mode;else x.mode=m;
-    persistCur();closeSheet();render();toast(MODES[m].label);}));
+    const m=b.dataset.pickmode,pl=b.dataset.pl==='1',x=liveExercise(t,ex,ei);if(!x){closeSheet();staleToast();return;}if(m===native)delete x.mode;else x.mode=m;
+    if(m==='machine'&&pl!==plateLoaded(x.id)){const o=Object.assign({},state.settings.plates);if(pl)o[x.id]=true;else delete o[x.id];
+      if(Object.keys(o).length)state.settings.plates=o;else delete state.settings.plates;S.saveSettingsCloud();}
+    persistCur();closeSheet();render();toast(m==='machine'?(pl?'Plate-loaded — enter all the plates, both sides':'Machine — the number on the pin'):MODES[m].label);}));
 }
 // A free-text note on an exercise in THIS session — timestamped by the session, saved with it, synced
 // with it. Surfaced next time you do the lift ("shoulder was hurting", a form cue) so a number that
@@ -350,13 +358,20 @@ let plateDraft=null;
 function plateOutHtml(){
   const u=U(),r=P.platesPerSide(plateDraft.weight,plateDraft.bar,u),n=r.plates.reduce((a,p)=>a+p.count,0);
   const chips=r.plates.length?r.plates.map(p=>Array(p.count).fill(0).map(()=>`<span class="plate p${String(p.plate).replace('.','_')}">${p.plate}</span>`).join('')).join('')
-    :`<div class="dim" style="padding:12px 2px">${r.belowBar?'That’s less than the empty bar.':'Just the empty bar — no plates.'}</div>`;
+    :`<div class="dim" style="padding:12px 2px">${plateDraft.mode==='plates'?'Type the total of all the plates above.':r.belowBar?'That’s less than the empty bar.':'Just the empty bar — no plates.'}</div>`;
   return `<div class="eyebrow" style="margin:18px 2px 10px">Each side${n?` · ${n} plate${n!==1?'s':''}`:''}</div>
     <div class="plates">${chips}</div>
     ${r.leftover>0?`<div class="dim" style="font-size:12px;margin-top:10px">+${r.leftover}${u} per side left over — no standard plate fits it.</div>`:''}`;
 }
 function plateSheetBody(){
   const mode=plateDraft.mode,u=U(),smith=mode==='smith';
+  // a plate-loaded machine: the logged number is all the plates (both sides), so there's no bar to take off
+  if(mode==='plates')return `<div class="dim" style="font-size:13px;margin:-4px 2px 16px">How to load each side of the machine. Type the total of all the plates, or tap ±.</div>
+    <div class="platewt">
+      <button class="platestep" data-plw="-1" aria-label="Less">−</button>
+      <div class="platewt-in"><input id="plWeight" inputmode="decimal" value="${plateDraft.weight}" aria-label="All the plates, both sides"><span class="u">${u}</span></div>
+      <button class="platestep" data-plw="1" aria-label="More">＋</button></div>
+    <div id="plateOut">${plateOutHtml()}</div>`;
   return `<div class="dim" style="font-size:13px;margin:-4px 2px 16px">How to load each side of the ${smith?'Smith bar':'bar'}. Type a weight or tap ±.</div>
     <div class="platewt">
       <button class="platestep" data-plw="-1" aria-label="Less">−</button>
@@ -378,7 +393,7 @@ function bindPlateSheet(){
   $('#sheetBody').querySelectorAll('[data-plbar]').forEach(b=>b.addEventListener('click',()=>{plateDraft.bar=Math.max(0,+(plateDraft.bar+(+b.dataset.plbar)*step).toFixed(2));setBarWeight(mode,plateDraft.bar);if(bIn)bIn.value=plateDraft.bar;sync();}));
 }
 function openPlateSheet(weight,mode){
-  mode=mode==='smith'?'smith':'barbell';const bar=barWeight(mode),w=Math.round(+weight||0);
+  mode=mode==='smith'||mode==='plates'?mode:'barbell';const bar=mode==='plates'?0:barWeight(mode),w=Math.round(+weight||0);
   plateDraft={mode,bar,weight:w||bar};
   openSheet('Plate loader',plateSheetBody());bindPlateSheet();
 }
@@ -573,7 +588,7 @@ function topSuggestionHTML(){
 }
 // How a PR set reads, for any kind of lift (live banner + finish summary).
 function prText(e,st,kind){
-  const w=+st.w||0,r=+st.r||0,u=U(),ea=P.holdsOf(e)===2?'/ea':'',side=P.sidesOf(e)===2?'/side':'';
+  const w=+st.w||0,r=+st.r||0,u=U(),ea=P.holdsOf(e)===2?'/ea':'',side=P.sidesOf(e)===2?'/'+limbOf(e.id):'';
   if(kind==='time')return (w?w+u+ea+' · ':'')+r+'s hold'+side;
   if(kind==='resist'||kind==='assist')return (w?w+u+' assist':'unassisted')+' × '+r+side;
   if(kind==='reps')return r+' reps'+side;
@@ -618,8 +633,9 @@ function logExercise(s,e,ei,mode){
   // Headers say exactly what to type: "Lb ea" = weight of ONE dumbbell / one stack; "/ side" = one side's reps
   // A bodyweight move's weight box is EXTRA load (vest, plate, belt) — blank reads "BW", just you. An
   // assist machine's number is the HELP, so its header says so. (Owner: "what goes in the lb column?")
-  const bwMove=emode==='bodyweight',assistMove=D.isAssist(e.id);
-  const whdr=(bwMove?'Added ':assistMove?'Assist ':'')+(U()==='kg'?'Kg':'Lb')+(holds===2?' ea':''),rhdr=(D.TIME_METRIC.has(e.id)?'Sec':'Reps')+(sides===2?' / side':'');
+  // A plate-loaded machine's box is ALL the plates, both sides — not the machine's own weight (v0.76.0)
+  const bwMove=emode==='bodyweight',assistMove=D.isAssist(e.id),plateMove=emode==='machine'&&plateLoaded(e.id);
+  const whdr=(bwMove?'Added ':assistMove?'Assist ':plateMove?'Plates ':'')+(U()==='kg'?'Kg':'Lb')+(holds===2?' ea':''),rhdr=(D.TIME_METRIC.has(e.id)?'Sec':'Reps')+(sides===2?' / '+limbOf(e.id):'');
   // "⇆ Each side" only where doing it one-sided is realistic and changes the math
   const sideOK=(emode==='cable'||emode==='dumbbell'||emode==='machine')&&!D.isAssist(e.id)&&!D.TIME_METRIC.has(e.id);
   return `<div class="card log-ex" data-ei="${ei}">
@@ -629,8 +645,8 @@ function logExercise(s,e,ei,mode){
         <div class="ex-sub">${ex?ex.muscles.join(' · '):''} · target ${ex?ex.rr[0]+'–'+ex.rr[1]:'8–12'} ${D.TIME_METRIC.has(e.id)?'sec':'reps'}</div></button>
       <button class="sheet-x" data-exmenu="${ei}" aria-label="Exercise options: replace, move, setup, note, remove">⋯</button>
     </div>
-    <div class="chiprow"><button class="modechip" data-mode="${ei}" aria-label="Change equipment">${esc(MODES[emode]?MODES[emode].label:emode)} ▾</button>
-      ${sideOK?`<button class="modechip${sides===2?' on':''}" data-side="${ei}" aria-pressed="${sides===2}" aria-label="One side at a time">⇆ ${sides===2?'Each side':'Both sides'}</button>`:''}</div>
+    <div class="chiprow"><button class="modechip" data-mode="${ei}" aria-label="Change equipment">${esc(plateMove?'Plate-loaded':MODES[emode]?MODES[emode].label:emode)} ▾</button>
+      ${sideOK?`<button class="modechip${sides===2?' on':''}" data-side="${ei}" aria-pressed="${sides===2}" aria-label="One ${limbOf(e.id)} at a time">⇆ ${sides===2?'One '+limbOf(e.id)+' at a time':'Both '+limbOf(e.id)+'s'}</button>`:''}</div>
     ${exSetup(e.id)?`<button class="sugg match" data-exsetup="${ei}" style="width:calc(100% - 24px);text-align:left;color:var(--ink-2)"><span>📌 ${esc(exSetup(e.id))}</span></button>`:''}
     ${prLine}${sugg}${noteLine}
     <div class="setgrid">
@@ -638,12 +654,13 @@ function logExercise(s,e,ei,mode){
       ${e.sets.map((st,si)=>setRow(st,ei,si,e.sets.slice(0,si).filter(x=>!x.warm).length+1,bwMove)).join('')}
     </div>
     ${bwMove&&mode!=='view'&&!e.sets.some(st=>+st.w>0)?'<div class="hint bwhint">BW = just your bodyweight, so leave it blank. Wearing a vest or holding a plate? Enter only the extra weight.</div>':''}
+    ${plateMove&&mode!=='view'&&!e.sets.some(st=>+st.w>0)?'<div class="hint platehint">Add up all the plates on the machine, both sides. Don’t count the machine itself.</div>':''}
     <div class="set-actions">
       <button class="linkbtn" data-addset="${ei}">＋ Add set</button>
       ${mode!=='view'&&!e.sets.some(st=>st.warm)?`<button class="linkbtn dim" data-addwarm="${ei}">＋ Warm-up</button>`:''}
       ${e.sets.length>1?`<button class="linkbtn" data-delset="${ei}">－ Remove set</button>`:''}
       ${D.TIME_METRIC.has(e.id)&&todayScreen==='active'?`<button class="linkbtn" data-stopwatch="${ei}">⏱ Stopwatch</button>`:''}
-      ${(emode==='barbell'||emode==='smith')?`<button class="linkbtn" data-plates="${ei}">🏋 Plates</button>`:''}
+      ${(emode==='barbell'||emode==='smith'||plateMove)?`<button class="linkbtn" data-plates="${ei}">🏋 Plates</button>`:''}
     </div>
     ${ei===0&&state.sessions.length<3?'<div class="hint">Tip: tap a set number to mark it a warm-up (kept out of PRs and volume).</div>':''}
   </div>`;

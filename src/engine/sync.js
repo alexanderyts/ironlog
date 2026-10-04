@@ -131,6 +131,8 @@ function cleanSettings(o){if(!o||typeof o!=='object')return null;
   const steps=idMap(o.steps,x=>{if(!x||typeof x!=='object')return null;const r={};['lb','kg'].forEach(u=>{const n=sNum(x[u]);if(n>0&&n<=50)r[u]=n;});return Object.keys(r).length?r:null;});
   if(steps)s.steps=steps;
   const setup=idMap(o.setup,x=>typeof x==='string'&&x.trim()?sStr(x.trim(),120):null);if(setup)s.setup=setup;
+  // machine lifts marked plate-loaded {exId:true} — the weight box then takes all the plates, both sides (v0.76.0)
+  const plates=idMap(o.plates,x=>x===true?true:null);if(plates)s.plates=plates;
   // "Your record" picks {exId:track: {score,tie}} (batch 1 — stored once instead of re-stamping old workouts)
   const records=idMap(o.records,x=>{if(!x||typeof x!=='object')return null;const sc=+x.score,ti=+x.tie;return Number.isFinite(sc)?{score:sc,tie:Number.isFinite(ti)?ti:0}:null;});if(records)s.records=records;
   return s;

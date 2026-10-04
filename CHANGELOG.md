@@ -2,6 +2,14 @@
 
 Versioning: `MAJOR.MINOR.PATCH`. Each published version is labeled in the Artifact version history too.
 
+## v0.76.0 — 2026-10-03 · Machine weights made plain, and fixes from a real workout
+- **Plate-loaded machines.** Tap **Machine ▾** on a lift and pick **Machine · plate-loaded**. The box then says **Plates lb**: add up every plate you loaded, both sides, and don't count the machine itself (two 45s each side = 180). **🏋 Plates** shows what goes on each side. Remembered for that exercise, and its history and records stay as they were. Every machine starts as **pin / weight stack**: enter the number on the pin.
+- **"⇆ Both sides" now says what it means:** **Both arms** or **Both legs**. Tap it for **One arm at a time**, with reps counted per arm. It was never about the weight.
+- **Fixed: "Add exercise" opening out of sight.** On iPhone, a panel could open above the visible screen after typing a weight, so it looked like nothing happened. Panels now follow the part of the screen you can see, and sit on top of the keyboard when it's up.
+- **Searching for an exercise: results above the keyboard.** In Add exercise, the smart picks step aside once you start typing, so results sit right under the search box. In the Library tab, the title steps aside while you type.
+- **Ticking a set keeps your place.** The ✓ you tapped stays under your thumb, even when a ★ PR line appears above it. A weight box you were typing in is closed first, the normal way.
+- Not verified on-device. The iPhone keyboard behaviour especially can't be reproduced on a computer; checked in automated tests and the browser pane at phone size.
+
 ## v0.75.3 — 2026-10-03 · Jump Squat and Burpee
 - **New exercises: Jump Squat and Burpee.** Search "jump squat" or "burpee". Both are tracked by reps, like push-ups, so beating your best reps counts as a record. They sit under Quads in the library.
 - **The builder won't pick them for you.** Add them yourself. Once you've done them, "Repeat" and continued plans keep them in.

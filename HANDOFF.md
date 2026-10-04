@@ -1,6 +1,6 @@
 # Ironlog — Handoff
 
-Last updated: 2026-10-03 · App version: **v0.75.3** (pushed to `main`; see `git log`) · Tests: **458 passing**
+Last updated: 2026-10-03 · App version: **v0.76.0** (pushed to `main`; see `git log`) · Tests: **463 passing**
 
 ## Project
 
@@ -57,8 +57,15 @@ The owner is not a developer, so explain changes in plain language: what changed
   - The builder won't make a rep-only bodyweight move a *new* main lift when something loadable fits. Core is exempt.
   - Lifts switched to "Bodyweight" mode tick and save with no weight.
 - **v0.75.3:** new **Jump Squat** and **Burpee** (Quads, Bodyweight, tier 3, `squat` pattern), scored by reps. Both are in `HARD_BW`, so the builder never picks them fresh. Once logged, continued plans keep them. Searching, logging with blank weight and Finish were checked in the browser pane.
+- **v0.76.0** (from the owner's real workout, 2026-10-03):
+  - **Plate-loaded machines:** "Machine · plate-loaded" in the Machine ▾ menu; "Plates lb" header, hint, 🏋 loader with no bar (`settings.plates`).
+  - The ⇆ chip says **Both arms / One arm at a time** (legs, or sides for Core); records read "× 12/arm".
+  - Panels follow the visible screen on iOS (`fitOverlays`); Add exercise hides its smart picks once you search; the Library title steps aside while typing.
+  - Ticking a set keeps the ✓ in place (`renderKeeping`) and blurs a focused set field first.
+  - Checked in the browser pane at phone size: picker, plate card, plate loader (180 = 2 × 45 per side), Add-exercise search, tick, Library CSS.
 
 **Partly done / known gaps:**
+- **v0.76.0 iPhone keyboard fixes are unverified.** The three keyboard reports (panel out of sight, page jumping on a tick, keyboard covering results) can't be reproduced off-device. The fixes remove the likely causes. If the owner still sees a jump, ask exactly when, and read the Settings diagnostics line (it now shows `@N` when iOS leaves the visible area shifted).
 - **On-device (2026-10-03):** the owner checked the four v0.75.x items on the iPhone, and all worked: Home gym card, push-up "Added lb"/BW, Bodyweight Squat, and the calendar reminder from the installed PWA (iOS .ics works). Other v0.70–v0.74 changes have had no targeted on-device check. CHANGELOG entries still say "Not verified on-device."
 - **Lifts switched to Bodyweight mode** (e.g. a walking lunge) save, but at 0 weight they produce **no record**. `scoreSet` in `src/engine/progression.js` judges by exercise id, not mode.
 - **Calendar reminder and export do nothing in the public demo.** The demo artifact has no `downloads` capability, and the publish tool warns about it each time.
@@ -73,6 +80,7 @@ The owner is not a developer, so explain changes in plain language: what changed
 
 ## Next steps
 
+0. **Ask the owner to try v0.76.0 on the iPhone:** mark the leg press plate-loaded; type a weight then tap Add exercise; search while the keyboard is up; tick sets while typing.
 1. ~~Ask the owner for an on-device check of v0.75.x.~~ **Done 2026-10-03:** all four items passed.
 2. ~~Get the owner's answer on no-equipment moves.~~ **Done 2026-10-03:** the owner does jump squats and burpees only, and both shipped in v0.75.3. Lunges and calf raises were not added.
    - To add another, put a row in `RAW` plus a `META` entry in `src/data/exercises.js`.
@@ -113,6 +121,12 @@ The owner is not a developer, so explain changes in plain language: what changed
   - Burpee is filed under **Quads**: the app has no full-body group.
   - Both use the `squat` pattern, not `iso`. As `iso` they'd win a home gym's quad-isolation slot.
   - Both are in `HARD_BW` (the builder's copy and the `tools/builder-audit.js` copy). They're high-impact and a poor main lift, so a no-equipment leg day still leads with Bodyweight Squat.
+- **Machine weights (v0.76.0, owner's choices 2026-10-03):**
+  - A plate-loaded machine takes **all the plates, both sides**, not the machine's own weight. Rejected: one side only, which is half of what was pushed.
+  - Marked per exercise from the **Machine ▾** menu ("pin / weight stack" or "plate-loaded"), stored in `settings.plates` (synced). Every machine starts as pin/stack. Rejected: presetting leg press, hack squat, T-bar and belt squat as plate-loaded; asking the first time.
+  - It's a label, not a mode, so history and records are unchanged. The card shows "Plate-loaded ▾", a "Plates lb" header, a one-line hint while the box is empty, and the 🏋 plate loader with no bar.
+  - The ⇆ chip says **Both arms / One arm at a time** ("legs" for leg groups, "sides" for Core). "Both sides" read like an instruction about the weight.
+- **Panels on iOS (v0.76.0):** an open sheet or confirm is pinned to the visual viewport (`fitOverlays` in ui-core.js). This replaces v0.49.0's blur + scroll-to-top + restore, which the owner still hit at v0.75.3. When the two viewports agree, the inline styles are cleared, so the `--deficit` / tab-bar model is untouched.
 - **iOS layout saga (v0.8.0–v0.8.10) is closed.**
   - Fix: standalone `html{min-height:screen.height}` and a constant-anchored tab bar.
   - Don't reopen it with positioning guesses. If a new layout bug appears, add on-screen diagnostics first.
@@ -182,7 +196,7 @@ The owner is not a developer, so explain changes in plain language: what changed
 **Build, tests and tools**
 - [build.js](build.js) — builds `dist/app.html`, `dist/demo.html` and `docs/`. Normalises CRLF to LF and computes the CSP hashes.
 - [server.js](server.js) — dev server on :4321 serving `docs/`; `/demo` serves `dist/demo.html`.
-- [test/](test/) — 50 files. [test/ui-harness.js](test/ui-harness.js) is the jsdom harness (`launch({fakeClock})`).
+- [test/](test/) — 51 files. [test/ui-harness.js](test/ui-harness.js) is the jsdom harness (`launch({fakeClock})`).
 - [tools/builder-audit.js](tools/builder-audit.js) — runs the builder over many choices; every problem row must stay 0.
 - [tools/review.js](tools/review.js) — what the builder and coach would do for a backup file. Used by the snapshot test.
 - [.githooks/pre-commit](.githooks/pre-commit) — runs the full suite; enable per clone with `npm run hooks`.
@@ -222,6 +236,7 @@ node server.js                    # dev server http://localhost:4321 (or the "ir
 - **Browser pane:**
   - Screenshots time out when the pane is hidden. Drive it with `javascript_tool` instead.
   - Use `http://127.0.0.1:4321` to get fresh, empty storage that's separate from `localhost`.
+  - `el.focus()` from `javascript_tool` fires no `focus` event and doesn't match `:focus` while the pane itself isn't focused. Click the field with the `computer` tool first (seen 2026-10-03).
 - **Artifact sandbox:** no `confirm` / `alert` / `window.open`, and no external images. Use the in-app confirm dialog and `<a target=_blank>`.
 - **Caching:**
   - The Claude iOS app caches artifact content.
