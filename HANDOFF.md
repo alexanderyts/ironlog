@@ -210,7 +210,7 @@ The owner is not a developer, so explain changes in plain language: what changed
 
 **Links**
 - Live PWA: https://alexanderyts.github.io/ironlog/ · repo: https://github.com/alexanderyts/ironlog
-- App artifact (private): https://claude.ai/artifact/WPBJP4GX3XDiLkqi6mRcXN (v94 = app v0.75.3) · demo artifact (public): https://claude.ai/artifact/MBrq8xsCzHXvgSEsVeb7ro (v88 = app v0.75.3)
+- App artifact (private): https://claude.ai/artifact/WPBJP4GX3XDiLkqi6mRcXN (v95 = app v0.76.0) · demo artifact (public): https://claude.ai/artifact/MBrq8xsCzHXvgSEsVeb7ro (v89 = app v0.76.0)
 - Landing page artifact: https://claude.ai/artifact/S5eQsNjP1Hp8dyJqWzQ8EG. Its source was in a temporary scratchpad and may be gone (unverified); read it back with the Artifact tool's `read` action.
 - Night review report (2026-09-23): https://claude.ai/artifact/9BcB4sVDfsqfcCxLLWRT3t
 
